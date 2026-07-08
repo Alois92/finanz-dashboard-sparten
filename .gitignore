@@ -47,6 +47,9 @@ build/
 *.local
 secrets.*
 
+# --- Maschinen-lokale Konfiguration (pro Rechner eigener DB-Speicherort) ---
+/instance/
+
 # --- IDE / Betriebssystem ---
 .vscode/
 .idea/

@@ -17,7 +17,8 @@
 -- ============================================================================
 
 PRAGMA foreign_keys = ON;
-PRAGMA journal_mode = WAL;
+-- Kein WAL: Standard-Journal (DELETE) funktioniert auch auf Netzlaufwerken (SMB).
+-- Einzelnutzer-Betrieb, daher kein WAL noetig.
 
 -- ---------------------------------------------------------------------------
 -- Stammdaten: Sparten, Gruppen, Kategorien

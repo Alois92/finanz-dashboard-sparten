@@ -13,8 +13,29 @@ manuelle Buchungserfassung mit Split, Umbuchungen und einem Dashboard.
 - **Frontend:** statisches HTML/JS ohne Build-Schritt (`static/`)
 
 Alle Geldbetraege werden als Ganzzahl in **Cent** gespeichert. Die Datenbank
-liegt lokal unter `%LOCALAPPDATA%\finanz-dashboard\finanz.db` (nicht im Repo,
-nicht in Git) und wird beim ersten Start automatisch aus Schema + Seed erzeugt.
+wird beim ersten Start automatisch aus Schema + Seed erzeugt.
+
+### Wo liegt die Datenbank? (pro Rechner konfigurierbar)
+
+Der Speicherort wird in dieser Reihenfolge bestimmt:
+
+1. Umgebungsvariable `FINANZ_DB` (voller Pfad zur `.db`-Datei)
+2. Datei `instance/db_location.txt` (eine Zeile mit dem Pfad; liegt lokal, **nicht** in Git)
+3. Fallback: eine **temporaere** DB im Temp-Ordner - nur zum Testen, **keine dauerhaften Daten**
+
+So bleibt ein Arbeits-/Entwicklungsrechner bewusst datenfrei. Am produktiven
+Rechner (z. B. Heim-PC) den echten, privaten Speicherort setzen, z. B.:
+
+```powershell
+# Variante A: Config-Datei anlegen
+"D:\Privat\Finanzen\finanz.db" | Out-File -Encoding utf8 instance\db_location.txt
+
+# Variante B: Umgebungsvariable
+$env:FINANZ_DB = "D:\Privat\Finanzen\finanz.db"
+```
+
+Die DB nutzt bewusst **kein WAL**, damit der Speicherort auch auf einem
+Netzlaufwerk (SMB/NAS) zuverlaessig funktioniert.
 
 ## Einrichten (einmalig, je PC)
 
