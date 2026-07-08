@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Finanz-Dashboard Sparten</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header>
+    <h1>Finanz-Dashboard <span class="muted">Sparten</span></h1>
+    <div class="global-filter">
+      <label>Sparte
+        <select id="f-sparte"><option value="">Alle Sparten</option></select>
+      </label>
+      <label>von <input type="date" id="f-von"></label>
+      <label>bis <input type="date" id="f-bis"></label>
+      <button id="f-apply">Anwenden</button>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab active" data-tab="dashboard">Dashboard</button>
+    <button class="tab" data-tab="erfassen">Buchung erfassen</button>
+    <button class="tab" data-tab="liste">Buchungen</button>
+    <button class="tab" data-tab="kategorien">Kategorien</button>
+  </nav>
+
+  <main>
+    <!-- Dashboard -->
+    <section id="tab-dashboard" class="tab-panel active">
+      <div class="cards">
+        <div class="card einnahme"><div class="card-label">Einnahmen</div><div class="card-value" id="kpi-ein">–</div></div>
+        <div class="card ausgabe"><div class="card-label">Ausgaben</div><div class="card-value" id="kpi-aus">–</div></div>
+        <div class="card saldo"><div class="card-label">Saldo</div><div class="card-value" id="kpi-saldo">–</div></div>
+      </div>
+      <p class="hint">Umbuchungen (Transfers zwischen eigenen Konten) sind hier bewusst ausgeblendet.</p>
+      <div class="grid2">
+        <div>
+          <h3>Nach Sparte</h3>
+          <table id="tbl-sparte"><thead><tr><th>Sparte</th><th class="num">Einnahmen</th><th class="num">Ausgaben</th><th class="num">Saldo</th></tr></thead><tbody></tbody></table>
+        </div>
+        <div>
+          <h3>Top-Kategorien</h3>
+          <table id="tbl-kat"><thead><tr><th>Kategorie</th><th>Typ</th><th class="num">Betrag</th></tr></thead><tbody></tbody></table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Buchung erfassen -->
+    <section id="tab-erfassen" class="tab-panel">
+      <h2>Neue Buchung</h2>
+      <form id="form-buchung" class="form">
+        <div class="row">
+          <label>Sparte<select id="b-sparte" required></select></label>
+          <label>Datum<input type="date" id="b-datum" required></label>
+          <label>Typ
+            <select id="b-typ">
+              <option value="ausgabe">Ausgabe</option>
+              <option value="einnahme">Einnahme</option>
+              <option value="umbuchung">Umbuchung</option>
+            </select>
+          </label>
+          <label>Zahlungsart
+            <select id="b-zahlungsart">
+              <option value="bank">Bank</option>
+              <option value="bar">Bar</option>
+              <option value="karte">Karte</option>
+              <option value="sonstiges">Sonstiges</option>
+            </select>
+          </label>
+        </div>
+        <label>Text / Beschreibung<input type="text" id="b-text" placeholder="z. B. Tierarzt Rechnung Maerz"></label>
+
+        <h3>Zeilen (Kategorie + Betrag)</h3>
+        <div id="zeilen"></div>
+        <button type="button" id="add-zeile" class="ghost">+ Zeile (Split)</button>
+
+        <div class="form-footer">
+          <span id="zeilen-summe" class="summe">Summe: 0,00 €</span>
+          <button type="submit">Buchung speichern</button>
+        </div>
+        <p id="b-msg" class="msg"></p>
+      </form>
+    </section>
+
+    <!-- Buchungen -->
+    <section id="tab-liste" class="tab-panel">
+      <h2>Buchungen</h2>
+      <table id="tbl-buchungen">
+        <thead><tr><th>Datum</th><th>Sparte</th><th>Typ</th><th>Text</th><th>Kategorien</th><th class="num">Betrag</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <p id="liste-leer" class="hint" hidden>Keine Buchungen im gewaehlten Filter.</p>
+    </section>
+
+    <!-- Kategorien -->
+    <section id="tab-kategorien" class="tab-panel">
+      <h2>Kategorien pflegen</h2>
+      <form id="form-kategorie" class="form inline">
+        <label>Sparte<select id="k-sparte" required></select></label>
+        <label>Name<input type="text" id="k-name" required placeholder="z. B. Tierarzt"></label>
+        <label>Richtung
+          <select id="k-richtung">
+            <option value="ausgabe">Ausgabe</option>
+            <option value="einnahme">Einnahme</option>
+            <option value="beides">Beides</option>
+          </select>
+        </label>
+        <label>Ueberkategorie<select id="k-parent"><option value="">– keine –</option></select></label>
+        <button type="submit">Anlegen</button>
+      </form>
+      <p id="k-msg" class="msg"></p>
+      <table id="tbl-kategorien"><thead><tr><th>Name</th><th>Richtung</th><th>Ueberkategorie</th></tr></thead><tbody></tbody></table>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>
