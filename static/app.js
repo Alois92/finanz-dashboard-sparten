@@ -77,6 +77,7 @@ function activateTab(name) {
   $$(".tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
   $$(".tab-panel").forEach((p) => p.classList.toggle("active", p.id === "tab-" + name));
   if (name === "dashboard") ladeDashboard();
+  if (name === "jahre") ladeJahresvergleich();
   if (name === "liste") ladeBuchungen();
   if (name === "kategorien") ladeKategorienTabelle();
   if (name === "belege") ladeBelege();
@@ -95,6 +96,7 @@ function filterQuery() {
 $("#f-apply").addEventListener("click", () => {
   const active = $(".tab.active").dataset.tab;
   if (active === "dashboard") ladeDashboard();
+  else if (active === "jahre") ladeJahresvergleich();
   else if (active === "liste") ladeBuchungen();
 });
 
@@ -161,6 +163,7 @@ async function init() {
   $("#k-sparte").innerHTML = optionen;
   $("#beleg-sparte").insertAdjacentHTML("beforeend", optionen);
   $("#beleg-filter-sparte").insertAdjacentHTML("beforeend", optionen);
+  $("#konto-sparte").insertAdjacentHTML("beforeend", optionen);
   $("#b-datum").value = todayISO();
   await erneuereZeilenKategorien();
   addZeile();
@@ -185,6 +188,36 @@ async function ladeDashboard() {
     `<tr><td>${escapeHtml(r.kategorie)}</td><td><span class="badge ${r.typ}">${r.typ}</span></td>
      <td class="num">${centToEuro(r.betrag_cent)}</td></tr>`).join("")
     || `<tr><td colspan="3" class="hint">Keine Daten.</td></tr>`;
+}
+
+// ---------- Jahresvergleich ----------
+async function ladeJahresvergleich() {
+  const data = await api("/jahresvergleich?" + filterQuery());
+
+  $("#tbl-jahre tbody").innerHTML = data.gesamt.map((g) =>
+    `<tr><td>${g.jahr}</td>
+     <td class="num">${centToEuro(g.einnahmen_cent)}</td>
+     <td class="num">${centToEuro(g.ausgaben_cent)}</td>
+     <td class="num" style="color:${g.saldo_cent < 0 ? "var(--aus)" : "var(--ein)"}">${centToEuro(g.saldo_cent)}</td></tr>`).join("")
+    || `<tr><td colspan="4" class="hint">Keine Daten.</td></tr>`;
+
+  // Matrix Sparte x Jahr (Saldo)
+  const jahre = data.jahre;
+  const thead = $("#tbl-jahre-sparte thead");
+  const tbody = $("#tbl-jahre-sparte tbody");
+  if (!jahre.length) {
+    thead.innerHTML = "";
+    tbody.innerHTML = `<tr><td class="hint">Keine Daten.</td></tr>`;
+    return;
+  }
+  thead.innerHTML = "<tr><th>Sparte</th>" +
+    jahre.map((j) => `<th class="num">${j}</th>`).join("") + "</tr>";
+  tbody.innerHTML = data.per_sparte.map((r) =>
+    `<tr><td>${escapeHtml(r.sparte)}</td>` +
+    jahre.map((j) => {
+      const v = r.werte[j];
+      return `<td class="num"${v != null && v < 0 ? ' style="color:var(--aus)"' : ""}>${v != null ? centToEuro(v) : "–"}</td>`;
+    }).join("") + "</tr>").join("");
 }
 
 // ---------- Buchung erfassen ----------
@@ -382,6 +415,35 @@ async function initBankimport() {
   if (bankkonten.length) ladeUmsaetze();
 }
 $("#umsatz-konto").addEventListener("change", ladeUmsaetze);
+
+// Konto anlegen -> bestehendes Backend POST /api/bankkonten, danach Dropdowns auffrischen.
+$("#form-konto").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const msg = $("#konto-msg");
+  const name = $("#konto-name").value.trim();
+  if (!name) { msg.className = "msg err"; msg.textContent = "Bitte einen Namen angeben."; return; }
+  const body = {
+    name,
+    iban: $("#konto-iban").value.trim() || null,
+    bank: $("#konto-bank").value.trim() || null,
+    sparte_id: $("#konto-sparte").value ? parseInt($("#konto-sparte").value, 10) : null,
+  };
+  try {
+    const konto = await api("/bankkonten", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    });
+    msg.className = "msg ok"; msg.textContent = `Konto "${konto.name}" angelegt.`;
+    $("#konto-name").value = ""; $("#konto-iban").value = "";
+    $("#konto-bank").value = ""; $("#konto-sparte").value = "";
+    bankkonten = null;              // Cache verwerfen, damit die Dropdowns neu laden
+    await initBankimport();
+    $("#import-konto").value = String(konto.id);   // neues Konto gleich vorwaehlen
+    $("#umsatz-konto").value = String(konto.id);
+    ladeUmsaetze();
+  } catch (err) {
+    msg.className = "msg err"; msg.textContent = "Fehler: " + err.message;
+  }
+});
 $("#form-import").addEventListener("submit", async (e) => {
   e.preventDefault();
   const msg = $("#import-msg");

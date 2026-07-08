@@ -47,6 +47,7 @@
 
   <nav class="tabs">
     <button class="tab active" data-tab="dashboard">Dashboard</button>
+    <button class="tab" data-tab="jahre">Jahresvergleich</button>
     <button class="tab" data-tab="erfassen">Buchung erfassen</button>
     <button class="tab" data-tab="liste">Buchungen</button>
     <button class="tab" data-tab="kategorien">Kategorien</button>
@@ -71,6 +72,25 @@
         <div class="block">
           <h3>Top-Kategorien</h3>
           <table id="tbl-kat"><thead><tr><th>Kategorie</th><th>Typ</th><th class="num">Betrag</th></tr></thead><tbody></tbody></table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Jahresvergleich -->
+    <section id="tab-jahre" class="tab-panel">
+      <h2>Jahresvergleich</h2>
+      <p class="hint">Vergleich der Kalenderjahre. Nutzt den globalen Sparten-/Zeitraumfilter oben. Umbuchungen sind ausgeblendet.</p>
+      <div class="block">
+        <h3>Gesamt je Jahr</h3>
+        <table id="tbl-jahre">
+          <thead><tr><th>Jahr</th><th class="num">Einnahmen</th><th class="num">Ausgaben</th><th class="num">Saldo</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="block">
+        <h3>Saldo je Sparte und Jahr</h3>
+        <div class="table-wrap">
+          <table id="tbl-jahre-sparte"><thead></thead><tbody></tbody></table>
         </div>
       </div>
     </section>
@@ -174,6 +194,20 @@
     <!-- Bankimport -->
     <section id="tab-bankimport" class="tab-panel">
       <h2>Bankimport</h2>
+
+      <h3>Konto anlegen</h3>
+      <form id="form-konto" class="form inline">
+        <label>Name<input type="text" id="konto-name" required placeholder="z. B. Raiffeisen Giro"></label>
+        <label>IBAN (optional)<input type="text" id="konto-iban" placeholder="AT.."></label>
+        <label>Bank (optional)<input type="text" id="konto-bank" placeholder="z. B. Raiffeisen"></label>
+        <label>Sparte (optional)
+          <select id="konto-sparte"><option value="">– keine –</option></select>
+        </label>
+        <button type="submit">Konto anlegen</button>
+      </form>
+      <p id="konto-msg" class="msg"></p>
+
+      <h3>CSV importieren</h3>
       <form id="form-import" class="form inline">
         <label>Bankkonto
           <select id="import-konto" required></select>
