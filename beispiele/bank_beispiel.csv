@@ -1,0 +1,6 @@
+Buchungstag;Valutadatum;Betrag;Verwendungszweck;Saldo;Beguenstigter/Zahlungspflichtiger;IBAN
+02.01.2026;02.01.2026;2.500,00;Gehalt Januar;3.500,00;Muster GmbH;DE12500105170648489890
+05.01.2026;05.01.2026;-850,00;Miete Wohnung Januar;2.650,00;Hausverwaltung Meier;DE22500105170123456789
+10.01.2026;10.01.2026;-123,45;Wocheneinkauf Supermarkt;2.526,55;REWE Markt;DE33500105170987654321
+15.01.2026;15.01.2026;-67,80;Tankstelle Diesel;2.458,75;Aral Station;DE44500105170555666777
+28.01.2026;28.01.2026;12,34;Habenzinsen Q4;2.471,09;Meine Bank;DE55500105170000111222

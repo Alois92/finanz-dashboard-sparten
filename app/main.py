@@ -6,7 +6,8 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from .db import init_db
-from .routers import belege, buchungen, dashboard, schnellerfassung, stammdaten
+from .routers import (belege, buchungen, dashboard, import_bank,
+                      schnellerfassung, stammdaten)
 
 STATIC_DIR = pathlib.Path(__file__).resolve().parent.parent / "static"
 
@@ -24,6 +25,7 @@ app.include_router(buchungen.router, prefix="/api")
 app.include_router(dashboard.router, prefix="/api")
 app.include_router(schnellerfassung.router, prefix="/api")
 app.include_router(belege.router, prefix="/api")
+app.include_router(import_bank.router, prefix="/api")
 
 
 @app.get("/api/health")
