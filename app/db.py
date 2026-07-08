@@ -49,7 +49,12 @@ def get_connection() -> sqlite3.Connection:
             "instance/db_location.txt setzen.", DB_PATH)
         _warned = True
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    con = sqlite3.connect(DB_PATH)
+    # check_same_thread=False: FastAPI reicht sync-Requests durch einen Threadpool,
+    # wobei Dependency (Verbindungsaufbau) und Endpoint auf verschiedenen Threads
+    # laufen koennen. Jeder Request bekommt weiterhin eine eigene, kurzlebige
+    # Verbindung (db_dep) und schliesst sie wieder - es wird also nie EINE
+    # Verbindung gleichzeitig aus mehreren Threads benutzt.
+    con = sqlite3.connect(DB_PATH, check_same_thread=False)
     con.row_factory = sqlite3.Row
     con.execute("PRAGMA foreign_keys = ON")
     return con
