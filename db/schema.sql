@@ -189,7 +189,9 @@ CREATE TABLE buchungszeile (
 
 CREATE TABLE beleg (
     id                INTEGER PRIMARY KEY,
-    sparte_id         INTEGER NOT NULL REFERENCES sparte(id),
+    -- sparte_id optional: ein Beleg kann zuerst ohne Sparte im Eingangskorb
+    -- landen und spaeter zugeordnet werden.
+    sparte_id         INTEGER REFERENCES sparte(id),
     kontakt_id        INTEGER REFERENCES kontakt(id),  -- erkannter Lieferant
     dateiname         TEXT    NOT NULL,
     pfad              TEXT    NOT NULL,
