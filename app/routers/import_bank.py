@@ -1,0 +1,358 @@
+"""Bank-CSV-Import mit Dublettenschutz und Kontostand-Abgleich.
+
+Verarbeitet deutsche Bank-Export-CSVs (Trennzeichen ';', Zahlen '1.234,56',
+Datum 'TT.MM.JJJJ'). Betraege werden durchgaengig in Cent gespeichert.
+
+Endpunkte:
+  GET  /api/bankkonten          - aktive Konten auflisten
+  POST /api/bankkonten          - Konto anlegen
+  POST /api/import/csv          - CSV importieren (multipart)
+  GET  /api/bankumsaetze        - Umsaetze filtern/auflisten
+"""
+import csv
+import hashlib
+import io
+import sqlite3
+from typing import Optional
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from pydantic import BaseModel
+
+from ..db import db_dep
+
+router = APIRouter(tags=["import"])
+
+
+# ---------------------------------------------------------------------------
+# Spaltenerkennung (Header case-insensitiv, Umlaute/Einheiten tolerant)
+# ---------------------------------------------------------------------------
+
+# Schluesselwoerter je Zielspalte. Reihenfolge = Prioritaet.
+SPALTEN_DATUM = ("buchungstag", "buchungsdatum", "datum", "belegdatum")
+SPALTEN_VALUTA = ("valutadatum", "valuta", "wertstellung")
+SPALTEN_BETRAG = ("betrag", "umsatz", "soll/haben")
+SPALTEN_TEXT = ("verwendungszweck", "buchungstext", "vorgang", "beschreibung",
+                "text")
+SPALTEN_SALDO = ("saldo", "kontostand")
+SPALTEN_GEGENPARTEI = ("beguenstigter", "begünstigter", "zahlungspflichtiger",
+                       "auftraggeber", "empfaenger", "empfänger",
+                       "zahlungsbeteiligter", "gegenpartei", "name")
+SPALTEN_IBAN = ("iban", "kontonummer")
+
+
+def _norm(kopf: str) -> str:
+    """Header normalisieren: Kleinbuchstaben, ohne Rand-Leerzeichen/BOM."""
+    return kopf.strip().lstrip("﻿").lower()
+
+
+def _finde_spalte(kopf_norm: list[str], kandidaten: tuple[str, ...]) -> Optional[int]:
+    """Index der ersten passenden Spalte (erst exakt, dann Teilstring)."""
+    for kand in kandidaten:
+        for i, k in enumerate(kopf_norm):
+            if k == kand:
+                return i
+    for kand in kandidaten:
+        for i, k in enumerate(kopf_norm):
+            if kand in k:
+                return i
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Wertkonvertierung (deutsches Format -> Cent / ISO-Datum)
+# ---------------------------------------------------------------------------
+
+def _betrag_zu_cent(text: str) -> int:
+    """'1.234,56' / '-1.234,56' / '1234,56-' -> Cent (int, vorzeichenbehaftet)."""
+    s = text.strip().replace(" ", "").replace(" ", "")
+    s = s.replace("EUR", "").replace("€", "")
+    if not s:
+        raise ValueError("leerer Betrag")
+    negativ = False
+    if s.startswith("+"):
+        s = s[1:]
+    if s.startswith("-"):
+        negativ = True
+        s = s[1:]
+    if s.endswith("-"):
+        negativ = True
+        s = s[:-1]
+    # Deutsches Format: Tausenderpunkt entfernen, Dezimalkomma -> Punkt.
+    s = s.replace(".", "").replace(",", ".")
+    cent = round(float(s) * 100)
+    return -cent if negativ else cent
+
+
+def _datum_zu_iso(text: str) -> str:
+    """'TT.MM.JJJJ' (auch JJ) -> 'YYYY-MM-DD'. ISO-Eingabe wird durchgereicht."""
+    s = text.strip()
+    if "." in s:
+        teile = s.split(".")
+        if len(teile) != 3 or not all(teile):
+            raise ValueError(f"ungueltiges Datum: {text!r}")
+        tag, monat, jahr = teile
+        if len(jahr) == 2:
+            jahr = "20" + jahr
+        return f"{int(jahr):04d}-{int(monat):02d}-{int(tag):02d}"
+    if "-" in s and len(s) >= 8:  # bereits ISO
+        return s
+    raise ValueError(f"ungueltiges Datum: {text!r}")
+
+
+def _dekodiere(rohdaten: bytes) -> str:
+    """CSV-Bytes dekodieren: erst UTF-8 (mit BOM), sonst cp1252 (Windows/dt. Banken)."""
+    for kodierung in ("utf-8-sig", "cp1252", "latin-1"):
+        try:
+            return rohdaten.decode(kodierung)
+        except UnicodeDecodeError:
+            continue
+    return rohdaten.decode("utf-8", errors="replace")
+
+
+# ---------------------------------------------------------------------------
+# Pydantic-Modelle
+# ---------------------------------------------------------------------------
+
+class BankkontoIn(BaseModel):
+    name: str
+    sparte_id: Optional[int] = None
+    iban: Optional[str] = None
+    bank: Optional[str] = None
+    inhaber: Optional[str] = None
+
+
+# ---------------------------------------------------------------------------
+# Bankkonten
+# ---------------------------------------------------------------------------
+
+@router.get("/bankkonten")
+def list_bankkonten(con: sqlite3.Connection = Depends(db_dep)):
+    rows = con.execute(
+        "SELECT id, sparte_id, inhaber, name, iban, bank, aktiv "
+        "FROM bankkonto WHERE aktiv = 1 ORDER BY name"
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+@router.post("/bankkonten", status_code=201)
+def create_bankkonto(k: BankkontoIn, con: sqlite3.Connection = Depends(db_dep)):
+    name = k.name.strip()
+    if not name:
+        raise HTTPException(400, "Name darf nicht leer sein")
+    if k.sparte_id is not None and not con.execute(
+            "SELECT 1 FROM sparte WHERE id = ?", (k.sparte_id,)).fetchone():
+        raise HTTPException(404, "Sparte nicht gefunden")
+    cur = con.execute(
+        "INSERT INTO bankkonto(sparte_id, inhaber, name, iban, bank) "
+        "VALUES(?,?,?,?,?)",
+        (k.sparte_id, k.inhaber, name, k.iban, k.bank),
+    )
+    con.commit()
+    row = con.execute(
+        "SELECT id, sparte_id, inhaber, name, iban, bank, aktiv "
+        "FROM bankkonto WHERE id = ?", (cur.lastrowid,)
+    ).fetchone()
+    return dict(row)
+
+
+# ---------------------------------------------------------------------------
+# CSV-Import
+# ---------------------------------------------------------------------------
+
+@router.post("/import/csv")
+def import_csv(
+    bankkonto_id: int = Form(...),
+    datei: UploadFile = File(...),
+    con: sqlite3.Connection = Depends(db_dep),
+):
+    # Sync-Endpoint (wie die uebrigen Router): sqlite-Verbindung und Handler
+    # laufen im selben Threadpool-Thread. Datei daher synchron ueber .file lesen.
+    if not con.execute("SELECT 1 FROM bankkonto WHERE id = ?",
+                       (bankkonto_id,)).fetchone():
+        raise HTTPException(404, "Bankkonto nicht gefunden")
+
+    rohdaten = datei.file.read()
+    if not rohdaten:
+        raise HTTPException(400, "Datei ist leer")
+    text = _dekodiere(rohdaten)
+
+    leser = csv.reader(io.StringIO(text), delimiter=";")
+    zeilen = [z for z in leser if any(feld.strip() for feld in z)]
+    if not zeilen:
+        raise HTTPException(400, "CSV enthaelt keine Daten")
+
+    kopf = zeilen[0]
+    kopf_norm = [_norm(feld) for feld in kopf]
+
+    idx_datum = _finde_spalte(kopf_norm, SPALTEN_DATUM)
+    idx_betrag = _finde_spalte(kopf_norm, SPALTEN_BETRAG)
+    idx_text = _finde_spalte(kopf_norm, SPALTEN_TEXT)
+    idx_valuta = _finde_spalte(kopf_norm, SPALTEN_VALUTA)
+    idx_saldo = _finde_spalte(kopf_norm, SPALTEN_SALDO)
+    idx_gegen = _finde_spalte(kopf_norm, SPALTEN_GEGENPARTEI)
+    idx_iban = _finde_spalte(kopf_norm, SPALTEN_IBAN)
+
+    fehlend = []
+    if idx_datum is None:
+        fehlend.append("Datum")
+    if idx_betrag is None:
+        fehlend.append("Betrag")
+    if idx_text is None:
+        fehlend.append("Text/Verwendungszweck")
+    if fehlend:
+        raise HTTPException(
+            400,
+            "Pflichtspalte(n) nicht gefunden: " + ", ".join(fehlend)
+            + f". Gefundene Spalten: {kopf}",
+        )
+
+    def _feld(zeile: list[str], idx: Optional[int]) -> Optional[str]:
+        if idx is None or idx >= len(zeile):
+            return None
+        wert = zeile[idx].strip()
+        return wert or None
+
+    # Datenzeilen parsen (Zeilennummer merken fuer Fehlermeldungen).
+    posten = []  # dicts mit den Feldern + csv_zeile
+    for nr, zeile in enumerate(zeilen[1:], start=2):
+        datum_roh = _feld(zeile, idx_datum)
+        betrag_roh = _feld(zeile, idx_betrag)
+        if datum_roh is None or betrag_roh is None:
+            # Zeile ohne Datum/Betrag (z. B. Saldo-Fusszeile) ueberspringen.
+            continue
+        try:
+            datum = _datum_zu_iso(datum_roh)
+            betrag_cent = _betrag_zu_cent(betrag_roh)
+        except ValueError as e:
+            raise HTTPException(400, f"Zeile {nr}: {e}")
+        saldo_roh = _feld(zeile, idx_saldo)
+        saldo_cent = None
+        if saldo_roh is not None:
+            try:
+                saldo_cent = _betrag_zu_cent(saldo_roh)
+            except ValueError as e:
+                raise HTTPException(400, f"Zeile {nr} (Saldo): {e}")
+        umsatztext = _feld(zeile, idx_text) or ""
+        posten.append({
+            "csv_zeile": nr,
+            "datum": datum,
+            "valuta": _feld(zeile, idx_valuta),
+            "betrag_cent": betrag_cent,
+            "saldo_cent": saldo_cent,
+            "text": umsatztext,
+            "gegenpartei": _feld(zeile, idx_gegen),
+            "iban_gegenpartei": _feld(zeile, idx_iban),
+        })
+
+    if not posten:
+        raise HTTPException(400, "Keine gueltigen Umsatzzeilen gefunden")
+
+    # Kontostand-Abgleich: saldo[n] - saldo[n-1] == betrag[n] (in Datei-Reihenfolge).
+    saldo_ok, saldo_hinweis = _saldo_pruefen(posten, idx_saldo is not None)
+
+    # import_batch anlegen (Zaehler spaeter aktualisieren).
+    cur = con.execute(
+        "INSERT INTO import_batch(bankkonto_id, dateiname, anzahl_zeilen, quelle) "
+        "VALUES(?,?,?,?)",
+        (bankkonto_id, datei.filename, len(posten), "csv"),
+    )
+    batch_id = cur.lastrowid
+
+    neu = 0
+    dubletten = 0
+    for p in posten:
+        import_hash = hashlib.sha256(
+            f"{bankkonto_id}|{p['datum']}|{p['betrag_cent']}|{p['text']}".encode("utf-8")
+        ).hexdigest()
+        # INSERT OR IGNORE: verstoesst gegen UNIQUE(bankkonto_id, import_hash) -> uebersprungen.
+        c = con.execute(
+            "INSERT OR IGNORE INTO bankumsatz("
+            "bankkonto_id, import_batch_id, datum, valuta, betrag_cent, "
+            "saldo_nachher_cent, text, gegenpartei, iban_gegenpartei, import_hash) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?)",
+            (bankkonto_id, batch_id, p["datum"], p["valuta"], p["betrag_cent"],
+             p["saldo_cent"], p["text"], p["gegenpartei"], p["iban_gegenpartei"],
+             import_hash),
+        )
+        if c.rowcount == 1:
+            neu += 1
+        else:
+            dubletten += 1
+
+    con.execute(
+        "UPDATE import_batch SET anzahl_neu = ?, anzahl_dubletten = ? WHERE id = ?",
+        (neu, dubletten, batch_id),
+    )
+    con.commit()
+
+    return {
+        "batch_id": batch_id,
+        "neu": neu,
+        "dubletten": dubletten,
+        "gesamt": len(posten),
+        "saldo_ok": saldo_ok,
+        "saldo_hinweis": saldo_hinweis,
+    }
+
+
+def _saldo_pruefen(posten: list[dict], hat_saldo: bool):
+    """Prueft die Saldo-Kette. Rueckgabe (saldo_ok, hinweis).
+
+    Ohne Saldo-Spalte: (None, None). Passt saldo[n]-saldo[n-1] nicht zu
+    betrag[n], deutet das auf einen fehlenden oder doppelten Umsatz hin.
+    """
+    if not hat_saldo:
+        return None, None
+    mit_saldo = [p for p in posten if p["saldo_cent"] is not None]
+    if len(mit_saldo) < 2:
+        return None, "Zu wenige Saldo-Werte fuer einen Abgleich"
+    for i in range(1, len(mit_saldo)):
+        vorher = mit_saldo[i - 1]["saldo_cent"]
+        nachher = mit_saldo[i]["saldo_cent"]
+        erwartet = mit_saldo[i]["betrag_cent"]
+        differenz = nachher - vorher
+        if differenz != erwartet:
+            luecke = (differenz - erwartet) / 100
+            return False, (
+                f"Saldo-Sprung in CSV-Zeile {mit_saldo[i]['csv_zeile']}: "
+                f"Saldo aendert sich um {differenz / 100:.2f} EUR, "
+                f"der Umsatz betraegt aber {erwartet / 100:.2f} EUR "
+                f"(Differenz {luecke:.2f} EUR). "
+                "Hinweis auf einen fehlenden oder doppelten Umsatz."
+            )
+    return True, None
+
+
+# ---------------------------------------------------------------------------
+# Umsaetze auflisten
+# ---------------------------------------------------------------------------
+
+@router.get("/bankumsaetze")
+def list_bankumsaetze(
+    bankkonto_id: Optional[int] = None,
+    von: Optional[str] = None,
+    bis: Optional[str] = None,
+    status: Optional[str] = None,
+    con: sqlite3.Connection = Depends(db_dep),
+):
+    sql = (
+        "SELECT id, bankkonto_id, import_batch_id, datum, valuta, betrag_cent, "
+        "saldo_nachher_cent, text, gegenpartei, iban_gegenpartei, importstatus "
+        "FROM bankumsatz WHERE 1=1"
+    )
+    params: list = []
+    if bankkonto_id is not None:
+        sql += " AND bankkonto_id = ?"
+        params.append(bankkonto_id)
+    if von:
+        sql += " AND datum >= ?"
+        params.append(von)
+    if bis:
+        sql += " AND datum <= ?"
+        params.append(bis)
+    if status:
+        sql += " AND importstatus = ?"
+        params.append(status)
+    sql += " ORDER BY datum DESC, id DESC"
+    rows = con.execute(sql, params).fetchall()
+    return [dict(r) for r in rows]
