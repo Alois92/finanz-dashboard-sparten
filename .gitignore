@@ -50,6 +50,9 @@ secrets.*
 # --- Maschinen-lokale Konfiguration (pro Rechner eigener DB-Speicherort) ---
 /instance/
 
+# --- Git-Worktrees der Agenten (nicht ins Repo) ---
+/.claude/worktrees/
+
 # --- IDE / Betriebssystem ---
 .vscode/
 .idea/
