@@ -5,25 +5,53 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Finanz-Dashboard Sparten</title>
   <link rel="stylesheet" href="/style.css">
+  <script>
+    // Theme moeglichst frueh setzen (verhindert Aufblitzen des falschen Modus).
+    (function () {
+      try {
+        var t = localStorage.getItem("theme");
+        if (t === "dark" || t === "light") document.documentElement.setAttribute("data-theme", t);
+      } catch (e) {}
+    })();
+  </script>
 </head>
 <body>
   <header>
-    <h1>Finanz-Dashboard <span class="muted">Sparten</span></h1>
-    <div class="global-filter">
-      <label>Sparte
-        <select id="f-sparte"><option value="">Alle Sparten</option></select>
-      </label>
-      <label>von <input type="date" id="f-von"></label>
-      <label>bis <input type="date" id="f-bis"></label>
-      <button id="f-apply">Anwenden</button>
+    <div class="brand">
+      <span class="logo">€</span>
+      <h1>Finanz-Dashboard <span class="muted">Sparten</span></h1>
+    </div>
+    <div class="header-right">
+      <div class="global-filter">
+        <label>Sparte
+          <select id="f-sparte"><option value="">Alle Sparten</option></select>
+        </label>
+        <label>von <input type="date" id="f-von"></label>
+        <label>bis <input type="date" id="f-bis"></label>
+        <button id="f-apply">Anwenden</button>
+      </div>
+      <button id="theme-toggle" class="icon-btn" title="Hell-/Dunkelmodus umschalten" aria-label="Hell-/Dunkelmodus umschalten">
+        <span class="theme-icon"></span>
+      </button>
     </div>
   </header>
+
+  <!-- Schnellerfassungsleiste -->
+  <div class="quickbar">
+    <span class="quick-icon">⚡</span>
+    <input type="text" id="quick-input" autocomplete="off"
+           placeholder="Schnell erfassen – z. B. „gestern Diesel 82,30 Hof“ und Enter">
+    <button id="quick-btn">Vorschlag</button>
+    <span id="quick-msg" class="quick-msg"></span>
+  </div>
 
   <nav class="tabs">
     <button class="tab active" data-tab="dashboard">Dashboard</button>
     <button class="tab" data-tab="erfassen">Buchung erfassen</button>
     <button class="tab" data-tab="liste">Buchungen</button>
     <button class="tab" data-tab="kategorien">Kategorien</button>
+    <button class="tab" data-tab="belege">Belege</button>
+    <button class="tab" data-tab="bankimport">Bankimport</button>
   </nav>
 
   <main>
@@ -36,11 +64,11 @@
       </div>
       <p class="hint">Umbuchungen (Transfers zwischen eigenen Konten) sind hier bewusst ausgeblendet.</p>
       <div class="grid2">
-        <div>
+        <div class="block">
           <h3>Nach Sparte</h3>
           <table id="tbl-sparte"><thead><tr><th>Sparte</th><th class="num">Einnahmen</th><th class="num">Ausgaben</th><th class="num">Saldo</th></tr></thead><tbody></tbody></table>
         </div>
-        <div>
+        <div class="block">
           <h3>Top-Kategorien</h3>
           <table id="tbl-kat"><thead><tr><th>Kategorie</th><th>Typ</th><th class="num">Betrag</th></tr></thead><tbody></tbody></table>
         </div>
@@ -87,10 +115,12 @@
     <!-- Buchungen -->
     <section id="tab-liste" class="tab-panel">
       <h2>Buchungen</h2>
-      <table id="tbl-buchungen">
-        <thead><tr><th>Datum</th><th>Sparte</th><th>Typ</th><th>Text</th><th>Kategorien</th><th class="num">Betrag</th><th></th></tr></thead>
-        <tbody></tbody>
-      </table>
+      <div class="table-wrap">
+        <table id="tbl-buchungen">
+          <thead><tr><th>Datum</th><th>Sparte</th><th>Typ</th><th>Text</th><th>Kategorien</th><th class="num">Betrag</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
       <p id="liste-leer" class="hint" hidden>Keine Buchungen im gewaehlten Filter.</p>
     </section>
 
@@ -111,7 +141,64 @@
         <button type="submit">Anlegen</button>
       </form>
       <p id="k-msg" class="msg"></p>
-      <table id="tbl-kategorien"><thead><tr><th>Name</th><th>Richtung</th><th>Ueberkategorie</th></tr></thead><tbody></tbody></table>
+      <div class="table-wrap">
+        <table id="tbl-kategorien"><thead><tr><th>Name</th><th>Richtung</th><th>Ueberkategorie</th></tr></thead><tbody></tbody></table>
+      </div>
+    </section>
+
+    <!-- Belege -->
+    <section id="tab-belege" class="tab-panel">
+      <h2>Belege</h2>
+      <form id="form-beleg" class="form inline">
+        <label>Datei<input type="file" id="beleg-datei" required></label>
+        <label>Sparte (optional)
+          <select id="beleg-sparte"><option value="">– keine –</option></select>
+        </label>
+        <button type="submit">Hochladen</button>
+      </form>
+      <p id="beleg-msg" class="msg"></p>
+      <div class="filterbar">
+        <label>Sparte filtern
+          <select id="beleg-filter-sparte"><option value="">Alle Sparten</option></select>
+        </label>
+      </div>
+      <div class="table-wrap">
+        <table id="tbl-belege">
+          <thead><tr><th>Datei</th><th>Sparte</th><th>Belegdatum</th><th class="num">Betrag</th><th>Notiz</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <p id="belege-leer" class="hint" hidden>Noch keine Belege.</p>
+    </section>
+
+    <!-- Bankimport -->
+    <section id="tab-bankimport" class="tab-panel">
+      <h2>Bankimport</h2>
+      <form id="form-import" class="form inline">
+        <label>Bankkonto
+          <select id="import-konto" required></select>
+        </label>
+        <label>CSV-Datei<input type="file" id="import-datei" accept=".csv,text/csv" required></label>
+        <button type="submit">CSV importieren</button>
+      </form>
+      <p id="import-msg" class="msg"></p>
+      <div id="import-ergebnis" class="import-result" hidden>
+        <div class="stat"><span class="stat-value" id="imp-neu">0</span><span class="stat-label">neu</span></div>
+        <div class="stat"><span class="stat-value" id="imp-dub">0</span><span class="stat-label">Dubletten</span></div>
+        <div class="stat"><span class="stat-value" id="imp-ges">0</span><span class="stat-label">gesamt</span></div>
+      </div>
+      <div class="filterbar">
+        <label>Umsaetze fuer Konto
+          <select id="umsatz-konto"></select>
+        </label>
+      </div>
+      <div class="table-wrap">
+        <table id="tbl-umsaetze">
+          <thead><tr><th>Datum</th><th>Text</th><th>Gegenpartei</th><th class="num">Betrag</th><th>Status</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <p id="umsaetze-leer" class="hint" hidden>Keine Umsaetze.</p>
     </section>
   </main>
 
