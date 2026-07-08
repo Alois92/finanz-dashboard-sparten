@@ -1,0 +1,57 @@
+# ============================================================================
+# WICHTIG (Finanzprojekt): echte Finanzdaten NIEMALS ins Remote pushen.
+# Versioniert werden nur Code, Konzept und DB-Schema/Seed (db/*.sql).
+# ============================================================================
+
+# --- Lokale Datenbank mit echten Buchungen ---
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# --- Sensible Datenordner (Belege, Bankimporte, Exporte, Backups) ---
+/daten/
+/belege/
+/imports/
+/exports/
+/backups/
+*.csv
+*.camt.xml
+
+# (Falls einzelne CSV-Beispiele bewusst versioniert werden sollen,
+#  in /beispiele/ ablegen und dort mit '!' wieder freigeben.)
+
+# --- Python ---
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- Node / Frontend ---
+node_modules/
+dist/
+build/
+.vite/
+
+# --- Secrets / Konfiguration ---
+.env
+.env.*
+!.env.example
+*.local
+secrets.*
+
+# --- IDE / Betriebssystem ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*~
