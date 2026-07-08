@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from .db import init_db
-from .routers import buchungen, dashboard, stammdaten
+from .routers import buchungen, dashboard, schnellerfassung, stammdaten
 
 STATIC_DIR = pathlib.Path(__file__).resolve().parent.parent / "static"
 
@@ -22,6 +22,7 @@ app = FastAPI(title="Finanz-Dashboard Sparten", version="0.1.0", lifespan=lifesp
 app.include_router(stammdaten.router, prefix="/api")
 app.include_router(buchungen.router, prefix="/api")
 app.include_router(dashboard.router, prefix="/api")
+app.include_router(schnellerfassung.router, prefix="/api")
 
 
 @app.get("/api/health")
