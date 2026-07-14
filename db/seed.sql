@@ -6,14 +6,14 @@
 -- Ausfuehren NACH schema.sql.
 -- ============================================================================
 
--- Sparten (Verein = geschuetzt)
-INSERT INTO sparte (name, kuerzel, typ, geschuetzt, sortierung) VALUES
-  ('Privatvermietung',      'PV',  'vermietung', 0, 10),
-  ('Zimmervermietung Hof',  'ZVH', 'vermietung', 0, 20),
-  ('Bauernhof',             'HOF', 'hof',        0, 30),
-  ('Verein',                'VER', 'verein',     1, 40),
-  ('Alois privat',          'AL',  'privat',     0, 50),
-  ('Frau privat',           'FR',  'privat',     0, 60);
+-- Sparten (Verein = geschuetzt); Farben = feste Kennfarben der Oberflaechen
+INSERT INTO sparte (name, kuerzel, typ, geschuetzt, sortierung, farbe) VALUES
+  ('Privatvermietung',      'PV',  'vermietung', 0, 10, '#6AA9FF'),
+  ('Zimmervermietung Hof',  'ZVH', 'vermietung', 0, 20, '#2DD4BF'),
+  ('Bauernhof',             'HOF', 'hof',        0, 30, '#C084FC'),
+  ('Verein',                'VER', 'verein',     1, 40, '#F472B6'),
+  ('Alois privat',          'AL',  'privat',     0, 50, '#FB923C'),
+  ('Frau privat',           'FR',  'privat',     0, 60, '#818CF8');
 
 -- Globale Kategoriegruppen (spartenuebergreifend)
 INSERT INTO globale_kategoriegruppe (name) VALUES

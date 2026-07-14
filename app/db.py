@@ -60,6 +60,14 @@ def get_connection() -> sqlite3.Connection:
     return con
 
 
+# Feste Kennfarben je Sparte (Kuerzel -> Hex). Neue DBs bekommen sie ueber
+# seed.sql; bestehende DBs werden in init_db() einmalig nachgeruestet.
+SPARTEN_FARBEN = {
+    "PV": "#6AA9FF", "ZVH": "#2DD4BF", "HOF": "#C084FC",
+    "VER": "#F472B6", "AL": "#FB923C", "FR": "#818CF8",
+}
+
+
 def init_db() -> None:
     """Legt Schema + Seed an, falls die Datenbank noch leer ist."""
     con = get_connection()
@@ -70,6 +78,16 @@ def init_db() -> None:
         if not exists:
             con.executescript(SCHEMA.read_text(encoding="utf-8"))
             con.executescript(SEED.read_text(encoding="utf-8"))
+            con.commit()
+        else:
+            # Nachruestung: fehlende Sparten-Farben setzen (idempotent, greift
+            # nur bei NULL/leer - selbst gewaehlte Farben bleiben unberuehrt).
+            for kuerzel, farbe in SPARTEN_FARBEN.items():
+                con.execute(
+                    "UPDATE sparte SET farbe = ? "
+                    "WHERE kuerzel = ? AND (farbe IS NULL OR farbe = '')",
+                    (farbe, kuerzel),
+                )
             con.commit()
     finally:
         con.close()

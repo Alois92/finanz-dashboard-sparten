@@ -47,6 +47,7 @@ let sparten = [];
 let bankkonten = null;
 let kategorienCache = {};
 let buchungenCache = [];
+let editId = null;         // Buchung im Bearbeiten-Modus (null = neu anlegen)
 let periode = "alles";     // jahr | vorjahr | 12m | alles
 let spCur = "";            // Sparten-Filter ("" = alle)
 let verlaufModus = "monat"; // monat | jahr
@@ -412,12 +413,17 @@ function renderBuchungen() {
       <td><span class="badge ${escapeHtml(b.typ)}">${escapeHtml(b.typ)}</span></td>
       <td>${escapeHtml(b.text || "")}</td><td>${kats}</td>
       <td class="num">${centToEuro(b.betrag_cent)}</td>
-      <td><button class="link" data-del="${b.id}">löschen</button></td></tr>`;
+      <td class="row-actions"><button class="link" data-edit="${b.id}">bearbeiten</button>
+      <button class="link" data-del="${b.id}">löschen</button></td></tr>`;
   }).join("");
   $$("#tbl-buchungen [data-del]").forEach((btn) => btn.addEventListener("click", async () => {
     if (!confirm("Buchung wirklich löschen?")) return;
     await api("/buchungen/" + btn.dataset.del, { method: "DELETE" });
     ladeBuchungen();
+  }));
+  $$("#tbl-buchungen [data-edit]").forEach((btn) => btn.addEventListener("click", () => {
+    const b = buchungenCache.find((x) => String(x.id) === btn.dataset.edit);
+    if (b) starteBearbeitung(b);
   }));
 }
 $("#l-typ").addEventListener("change", renderBuchungen);
@@ -510,6 +516,45 @@ function updateSumme() {
 $("#add-zeile").addEventListener("click", addZeile);
 $("#b-sparte").addEventListener("change", () => { erneuereZeilenKategorien(); });
 
+// ---- Bearbeiten-Modus ----
+async function starteBearbeitung(b) {
+  activatePage("erfassen");
+  editId = b.id;
+  $("#erfassen-titel").textContent = `Buchung vom ${b.datum} bearbeiten`;
+  $("#b-submit").textContent = "Änderungen speichern";
+  $("#b-cancel").hidden = false;
+  $("#b-msg").textContent = "";
+  $("#b-sparte").value = String(b.sparte_id);
+  $("#b-datum").value = b.datum;
+  $("#b-typ").value = b.typ;
+  $("#b-zahlungsart").value = b.zahlungsart || "bank";
+  $("#b-text").value = b.text || "";
+  await erneuereZeilenKategorien();
+  $("#zeilen").innerHTML = "";
+  (b.zeilen || []).forEach((z) => {
+    addZeile();
+    const zeile = $("#zeilen .zeile:last-child");
+    const sel = zeile.querySelector(".z-kat");
+    if ([...sel.options].some((o) => o.value === String(z.kategorie_id))) {
+      sel.value = String(z.kategorie_id);
+    }
+    zeile.querySelector(".z-betrag").value = centToInput(z.betrag_cent);
+  });
+  if (!(b.zeilen || []).length) addZeile();
+  updateSumme();
+}
+function beendeBearbeitung() {
+  editId = null;
+  $("#erfassen-titel").textContent = "Buchung erfassen";
+  $("#b-submit").textContent = "Buchung speichern";
+  $("#b-cancel").hidden = true;
+  $("#b-text").value = "";
+  $("#b-datum").value = todayISO();
+  $("#zeilen").innerHTML = "";
+  addZeile();
+}
+$("#b-cancel").addEventListener("click", () => { beendeBearbeitung(); $("#b-msg").textContent = ""; });
+
 $("#form-buchung").addEventListener("submit", async (e) => {
   e.preventDefault();
   const msg = $("#b-msg");
@@ -527,14 +572,15 @@ $("#form-buchung").addEventListener("submit", async (e) => {
     zeilen,
   };
   try {
-    const created = await api("/buchungen", {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    const pfad = editId ? "/buchungen/" + editId : "/buchungen";
+    const created = await api(pfad, {
+      method: editId ? "PUT" : "POST",
+      headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
     });
     msg.className = "msg ok";
-    msg.textContent = `Gespeichert: ${centToEuro(created.betrag_cent)} (${created.typ}).`;
-    $("#b-text").value = "";
-    $("#zeilen").innerHTML = "";
-    addZeile();
+    msg.textContent = (editId ? "Geändert: " : "Gespeichert: ")
+      + `${centToEuro(created.betrag_cent)} (${created.typ}).`;
+    beendeBearbeitung();
   } catch (err) {
     msg.className = "msg err";
     msg.textContent = "Fehler: " + err.message;
@@ -698,31 +744,131 @@ $("#form-import").addEventListener("submit", async (e) => {
     msg.className = "msg err"; msg.textContent = "Fehler: " + err.message;
   }
 });
+let umsaetzeCache = [];
 async function ladeUmsaetze() {
   const kontoId = $("#umsatz-konto").value;
   const tbody = $("#tbl-umsaetze tbody");
   if (!kontoId) { tbody.innerHTML = ""; $("#umsaetze-leer").hidden = false; return; }
+  const status = $("#umsatz-status").value;
   let rows;
   try {
-    rows = await api("/bankumsaetze?bankkonto_id=" + kontoId);
+    rows = await api("/bankumsaetze?bankkonto_id=" + kontoId + (status ? "&status=" + status : ""));
   } catch (err) {
     tbody.innerHTML = "";
     $("#umsaetze-leer").hidden = false;
     $("#umsaetze-leer").textContent = "Bankumsätze-API nicht verfügbar (" + err.message + ").";
     return;
   }
+  umsaetzeCache = rows;
   $("#umsaetze-leer").hidden = rows.length > 0;
   $("#umsaetze-leer").textContent = "Keine Umsätze.";
   tbody.innerHTML = rows.map((u) => {
     const neg = (u.betrag_cent || 0) < 0;
-    return `<tr>
+    const st = u.importstatus || "offen";
+    let aktionen = "";
+    if (st === "offen") {
+      aktionen = `<button class="link" data-uebernehmen="${u.id}">Übernehmen</button>
+        <button class="link" data-ignorieren="${u.id}">ignorieren</button>`;
+    } else if (st === "ignoriert") {
+      aktionen = `<button class="link" data-oeffnen="${u.id}">wieder öffnen</button>`;
+    }
+    return `<tr data-uid="${u.id}">
       <td>${escapeHtml(u.datum || "")}</td>
       <td>${escapeHtml(u.text || "")}</td>
       <td>${escapeHtml(u.gegenpartei || "")}</td>
       <td class="num ${neg ? "neg" : "pos"}">${centToEuro(u.betrag_cent || 0)}</td>
-      <td><span class="badge ${escapeHtml(u.importstatus || "offen")}">${escapeHtml(u.importstatus || "offen")}</span></td>
+      <td><span class="badge ${escapeHtml(st)}">${escapeHtml(st)}</span></td>
+      <td class="row-actions">${aktionen}</td>
     </tr>`;
   }).join("");
+  $$("#tbl-umsaetze [data-uebernehmen]").forEach((b) => b.addEventListener("click", () =>
+    oeffneUmsatzEditor(parseInt(b.dataset.uebernehmen, 10))));
+  $$("#tbl-umsaetze [data-ignorieren]").forEach((b) => b.addEventListener("click", () =>
+    setzeUmsatzStatus(parseInt(b.dataset.ignorieren, 10), "ignoriert")));
+  $$("#tbl-umsaetze [data-oeffnen]").forEach((b) => b.addEventListener("click", () =>
+    setzeUmsatzStatus(parseInt(b.dataset.oeffnen, 10), "offen")));
+}
+$("#umsatz-status").addEventListener("change", ladeUmsaetze);
+
+async function setzeUmsatzStatus(id, status) {
+  try {
+    await api("/bankumsaetze/" + id, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ importstatus: status }),
+    });
+    ladeUmsaetze();
+  } catch (err) {
+    $("#import-msg").className = "msg err";
+    $("#import-msg").textContent = "Fehler: " + err.message;
+  }
+}
+
+// Inline-Editor: Umsatz einer Sparte/Kategorie zuordnen und verbuchen.
+async function oeffneUmsatzEditor(id) {
+  const u = umsaetzeCache.find((x) => x.id === id);
+  if (!u) return;
+  // Nur ein Editor gleichzeitig
+  $$("#tbl-umsaetze .umsatz-editor").forEach((tr) => tr.remove());
+  const zeile = $(`#tbl-umsaetze tr[data-uid="${id}"]`);
+  const typ = (u.betrag_cent || 0) < 0 ? "ausgabe" : "einnahme";
+  const v = u.vorschlag || null;
+  const spartenOpts = sparten.map((s) =>
+    `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join("");
+  const tr = document.createElement("tr");
+  tr.className = "umsatz-editor";
+  tr.innerHTML = `<td colspan="6">
+    <div class="ue-form">
+      <span class="badge ${typ}">${typ}</span>
+      <label>Sparte <select class="ue-sparte">${spartenOpts}</select></label>
+      <label>Kategorie <select class="ue-kat"></select></label>
+      <label class="ue-check"><input type="checkbox" class="ue-regel"> Regel merken</label>
+      <button type="button" class="btn accent ue-save">Verbuchen</button>
+      <button type="button" class="btn ghost ue-cancel">Abbrechen</button>
+      <span class="hint ue-hint"></span>
+    </div>
+  </td>`;
+  zeile.after(tr);
+
+  const selSparte = tr.querySelector(".ue-sparte");
+  const selKat = tr.querySelector(".ue-kat");
+  const hint = tr.querySelector(".ue-hint");
+  async function fuelleKats() {
+    const kats = await ladeKategorien(selSparte.value);
+    const passend = kats.filter((k) => k.richtung === typ || k.richtung === "beides");
+    selKat.innerHTML = passend.map((k) =>
+      `<option value="${k.id}">${escapeHtml(k.name)}</option>`).join("")
+      || `<option value="">– keine passende Kategorie –</option>`;
+  }
+  selSparte.addEventListener("change", fuelleKats);
+  if (v) {
+    selSparte.value = String(v.sparte_id);
+    hint.textContent = v.quelle === "regel"
+      ? `Vorschlag aus Regel „${v.regel_name}“` : "Vorschlag aus früheren Buchungen";
+  }
+  await fuelleKats();
+  if (v && [...selKat.options].some((o) => o.value === String(v.kategorie_id))) {
+    selKat.value = String(v.kategorie_id);
+  }
+  tr.querySelector(".ue-cancel").addEventListener("click", () => tr.remove());
+  tr.querySelector(".ue-save").addEventListener("click", async () => {
+    if (!selKat.value) { hint.textContent = "Bitte zuerst eine passende Kategorie anlegen."; return; }
+    try {
+      const res = await api("/bankumsaetze/" + id + "/verbuchen", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sparte_id: parseInt(selSparte.value, 10),
+          kategorie_id: parseInt(selKat.value, 10),
+          regel_merken: tr.querySelector(".ue-regel").checked,
+        }),
+      });
+      $("#import-msg").className = "msg ok";
+      $("#import-msg").textContent = `Verbucht: ${centToEuro(res.betrag_cent)} (${res.typ})`
+        + (res.regel_angelegt ? " — Regel gemerkt." : ".");
+      ladeUmsaetze();
+    } catch (err) {
+      hint.textContent = "Fehler: " + err.message;
+    }
+  });
 }
 
 // ===========================================================================

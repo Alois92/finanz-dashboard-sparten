@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Hohenegg Finanzstudio</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231E6E4E'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-family='sans-serif' font-weight='700' font-size='17' fill='white'%3EH%3C/text%3E%3C/svg%3E">
-  <link rel="stylesheet" href="/studio/style.css?v=1">
+  <link rel="stylesheet" href="/studio/style.css?v=2">
   <script>
     // Theme so frueh wie moeglich setzen, damit nichts aufblitzt.
     (function () {
@@ -174,7 +174,7 @@
         </div>
 
         <div class="card">
-          <div class="card-head"><h2>Buchung erfassen</h2></div>
+          <div class="card-head"><h2 id="erfassen-titel">Buchung erfassen</h2></div>
           <form id="form-buchung">
             <div class="form-grid">
               <label>Sparte<select id="b-sparte"></select></label>
@@ -196,7 +196,8 @@
               <span id="zeilen-summe" class="num">Summe: 0,00 €</span>
             </div>
             <div class="form-foot">
-              <button type="submit" class="btn accent">Buchung speichern</button>
+              <button type="submit" class="btn accent" id="b-submit">Buchung speichern</button>
+              <button type="button" class="btn ghost" id="b-cancel" hidden>Bearbeiten abbrechen</button>
               <span class="msg" id="b-msg"></span>
             </div>
           </form>
@@ -291,10 +292,22 @@
           </div>
         </div>
         <div class="card">
-          <div class="card-head"><h2>Umsätze</h2><label class="inline">Konto <select id="umsatz-konto"></select></label></div>
+          <div class="card-head">
+            <h2>Umsätze</h2>
+            <div class="list-filter">
+              <label class="inline">Konto <select id="umsatz-konto"></select></label>
+              <select id="umsatz-status">
+                <option value="">Alle Status</option>
+                <option value="offen" selected>Offen</option>
+                <option value="verbucht">Verbucht</option>
+                <option value="ignoriert">Ignoriert</option>
+              </select>
+            </div>
+          </div>
+          <p class="hint">Offene Umsätze mit „Übernehmen“ als Buchung erfassen — Vorschläge kommen aus deinen Merkregeln.</p>
           <p class="hint" id="umsaetze-leer" hidden>Keine Umsätze.</p>
           <div class="table-wrap"><table id="tbl-umsaetze">
-            <thead><tr><th>Datum</th><th>Text</th><th>Gegenpartei</th><th class="num">Betrag</th><th>Status</th></tr></thead>
+            <thead><tr><th>Datum</th><th>Text</th><th>Gegenpartei</th><th class="num">Betrag</th><th>Status</th><th></th></tr></thead>
             <tbody></tbody></table></div>
         </div>
       </section>
@@ -320,7 +333,7 @@
   </div>
 </div>
 
-<script src="/studio/charts.js?v=1"></script>
-<script src="/studio/app.js?v=1"></script>
+<script src="/studio/charts.js?v=2"></script>
+<script src="/studio/app.js?v=2"></script>
 </body>
 </html>

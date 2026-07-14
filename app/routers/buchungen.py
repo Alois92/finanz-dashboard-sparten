@@ -1,4 +1,4 @@
-"""Buchungen: erfassen (Kopf + Zeilen), auflisten, loeschen."""
+"""Buchungen: erfassen (Kopf + Zeilen), auflisten, bearbeiten, loeschen."""
 import sqlite3
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -9,8 +9,7 @@ from ..schemas import BuchungIn
 router = APIRouter(tags=["buchungen"])
 
 
-@router.post("/buchungen", status_code=201)
-def create_buchung(b: BuchungIn, con: sqlite3.Connection = Depends(db_dep)):
+def _pruefe_sparte_und_zeilen(con: sqlite3.Connection, b: BuchungIn) -> None:
     if not con.execute("SELECT 1 FROM sparte WHERE id = ?", (b.sparte_id,)).fetchone():
         raise HTTPException(404, "Sparte nicht gefunden")
     for z in b.zeilen:
@@ -22,6 +21,11 @@ def create_buchung(b: BuchungIn, con: sqlite3.Connection = Depends(db_dep)):
             raise HTTPException(404, f"Kategorie {z.kategorie_id} nicht gefunden")
         if krow["sparte_id"] != b.sparte_id:
             raise HTTPException(400, "Kategorie gehoert nicht zur gewaehlten Sparte")
+
+
+@router.post("/buchungen", status_code=201)
+def create_buchung(b: BuchungIn, con: sqlite3.Connection = Depends(db_dep)):
+    _pruefe_sparte_und_zeilen(con, b)
 
     try:
         cur = con.execute(
@@ -85,11 +89,50 @@ def list_buchungen(sparte_id: int | None = None,
     return buchungen
 
 
-@router.delete("/buchungen/{buchung_id}", status_code=204)
-def delete_buchung(buchung_id: int, con: sqlite3.Connection = Depends(db_dep)):
+@router.put("/buchungen/{buchung_id}")
+def update_buchung(buchung_id: int, b: BuchungIn,
+                   con: sqlite3.Connection = Depends(db_dep)):
+    """Buchung ueberschreiben: Kopf-Felder aktualisieren, Zeilen ersetzen.
+
+    Verknuepfungen, die nicht im Formular stehen (bankumsatz_id, Belegstatus,
+    transfer_gruppe_id), bleiben unveraendert erhalten.
+    """
     if not con.execute("SELECT 1 FROM buchung WHERE id = ?", (buchung_id,)).fetchone():
         raise HTTPException(404, "Buchung nicht gefunden")
+    _pruefe_sparte_und_zeilen(con, b)
+    try:
+        con.execute(
+            "UPDATE buchung SET sparte_id = ?, datum = ?, typ = ?, zahlungsart = ?, "
+            "kontakt_id = ?, person_id = ?, text = ?, notiz = ? WHERE id = ?",
+            (b.sparte_id, b.datum, b.typ, b.zahlungsart, b.kontakt_id,
+             b.person_id, b.text, b.notiz, buchung_id),
+        )
+        con.execute("DELETE FROM buchungszeile WHERE buchung_id = ?", (buchung_id,))
+        for z in b.zeilen:
+            con.execute(
+                "INSERT INTO buchungszeile(buchung_id, kategorie_id, betrag_cent, notiz) "
+                "VALUES(?,?,?,?)",
+                (buchung_id, z.kategorie_id, z.betrag_cent, z.notiz),
+            )
+        con.commit()
+    except sqlite3.IntegrityError as e:
+        con.rollback()
+        raise HTTPException(400, f"Datenbankfehler: {e}")
+    return _buchung_detail(con, buchung_id)
+
+
+@router.delete("/buchungen/{buchung_id}", status_code=204)
+def delete_buchung(buchung_id: int, con: sqlite3.Connection = Depends(db_dep)):
+    row = con.execute("SELECT bankumsatz_id FROM buchung WHERE id = ?",
+                      (buchung_id,)).fetchone()
+    if not row:
+        raise HTTPException(404, "Buchung nicht gefunden")
     con.execute("DELETE FROM buchung WHERE id = ?", (buchung_id,))  # Zeilen via ON DELETE CASCADE
+    # War die Buchung aus einem Bankumsatz uebernommen, wird dieser wieder
+    # geoeffnet, damit er nicht unerledigt als "verbucht" haengen bleibt.
+    if row["bankumsatz_id"] is not None:
+        con.execute("UPDATE bankumsatz SET importstatus = 'offen' WHERE id = ?",
+                    (row["bankumsatz_id"],))
     con.commit()
 
 

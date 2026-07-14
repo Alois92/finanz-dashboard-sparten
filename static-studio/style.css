@@ -277,8 +277,20 @@ input[type="file"] { padding: 7px; background: transparent; }
 .quick-msg.ok { color: var(--ein); }
 .quick-msg.err { color: var(--aus); }
 
-.list-filter { display: flex; gap: 8px; }
+.list-filter { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .list-filter input[type="search"] { min-width: 180px; }
+.row-actions { white-space: nowrap; }
+.row-actions .link + .link { margin-left: 10px; }
+
+/* Inline-Editor unter einem Bankumsatz */
+.umsatz-editor td { background: var(--panel-2); }
+.ue-form { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 4px 0; }
+.ue-form label { display: inline-flex; align-items: center; gap: 6px; font-size: .82rem; color: var(--muted); }
+.ue-form .btn { min-height: 38px; padding: 7px 14px; }
+.ue-check { user-select: none; }
+.ue-check input { min-height: 0; width: 16px; height: 16px; }
+.badge.verbucht { background: color-mix(in srgb, var(--ein) 16%, transparent); color: var(--ein); }
+.badge.ignoriert { background: var(--panel-2); color: var(--muted); }
 
 /* ==========================================================================
    Mobil (< 900 px): Bottom-Navigation, Vollbreite, Sidebar aus

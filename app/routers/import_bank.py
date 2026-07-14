@@ -4,10 +4,12 @@ Verarbeitet deutsche Bank-Export-CSVs (Trennzeichen ';', Zahlen '1.234,56',
 Datum 'TT.MM.JJJJ'). Betraege werden durchgaengig in Cent gespeichert.
 
 Endpunkte:
-  GET  /api/bankkonten          - aktive Konten auflisten
-  POST /api/bankkonten          - Konto anlegen
-  POST /api/import/csv          - CSV importieren (multipart)
-  GET  /api/bankumsaetze        - Umsaetze filtern/auflisten
+  GET  /api/bankkonten                    - aktive Konten auflisten
+  POST /api/bankkonten                    - Konto anlegen
+  POST /api/import/csv                    - CSV importieren (multipart)
+  GET  /api/bankumsaetze                  - Umsaetze auflisten (offene mit Vorschlag)
+  POST /api/bankumsaetze/{id}/verbuchen   - Umsatz als Buchung uebernehmen
+  PATCH /api/bankumsaetze/{id}            - offen <-> ignoriert umschalten
 """
 import csv
 import hashlib
@@ -119,6 +121,17 @@ class BankkontoIn(BaseModel):
     iban: Optional[str] = None
     bank: Optional[str] = None
     inhaber: Optional[str] = None
+
+
+class UmsatzVerbuchenIn(BaseModel):
+    sparte_id: int
+    kategorie_id: int
+    text: Optional[str] = None       # ueberschreibt den Umsatztext der Buchung
+    regel_merken: bool = False       # Zuordnung als Regel fuer die Zukunft speichern
+
+
+class UmsatzStatusIn(BaseModel):
+    importstatus: str                # 'offen' oder 'ignoriert'
 
 
 # ---------------------------------------------------------------------------
@@ -354,5 +367,137 @@ def list_bankumsaetze(
         sql += " AND importstatus = ?"
         params.append(status)
     sql += " ORDER BY datum DESC, id DESC"
-    rows = con.execute(sql, params).fetchall()
-    return [dict(r) for r in rows]
+    rows = [dict(r) for r in con.execute(sql, params).fetchall()]
+
+    # Offenen Umsaetzen einen Zuordnungs-Vorschlag mitgeben (Regeln zuerst,
+    # sonst die juengste Buchung mit gleicher Gegenpartei).
+    offene = [r for r in rows if r["importstatus"] == "offen"]
+    if offene:
+        regeln = con.execute(
+            "SELECT r.*, k.sparte_id AS kat_sparte_id FROM regel r "
+            "LEFT JOIN kategorie k ON k.id = r.ziel_kategorie_id "
+            "WHERE r.aktiv = 1 ORDER BY r.prioritaet, r.id"
+        ).fetchall()
+        for u in offene:
+            u["vorschlag"] = _vorschlag_fuer_umsatz(con, u, regeln)
+    return rows
+
+
+def _vorschlag_fuer_umsatz(con, u: dict, regeln) -> Optional[dict]:
+    """Zuordnungs-Vorschlag: erst Regeln (Prioritaet), dann Verlauf."""
+    haystack = ((u["text"] or "") + " " + (u["gegenpartei"] or "")).lower()
+    for r in regeln:
+        if r["bankkonto_id"] is not None and r["bankkonto_id"] != u["bankkonto_id"]:
+            continue
+        if r["bedingung_text"] and r["bedingung_text"].lower() not in haystack:
+            continue
+        betrag = abs(u["betrag_cent"])
+        if r["bedingung_betrag_von_cent"] is not None and betrag < r["bedingung_betrag_von_cent"]:
+            continue
+        if r["bedingung_betrag_bis_cent"] is not None and betrag > r["bedingung_betrag_bis_cent"]:
+            continue
+        sparte_id = r["ziel_sparte_id"] or r["kat_sparte_id"]
+        if not sparte_id or not r["ziel_kategorie_id"]:
+            continue
+        return {"sparte_id": sparte_id, "kategorie_id": r["ziel_kategorie_id"],
+                "quelle": "regel", "regel_name": r["name"]}
+    # Verlauf: juengste uebernommene Buchung mit gleicher Gegenpartei
+    if u["gegenpartei"]:
+        row = con.execute(
+            "SELECT b.sparte_id, z.kategorie_id FROM buchung b "
+            "JOIN buchungszeile z ON z.buchung_id = b.id "
+            "JOIN bankumsatz bu ON bu.id = b.bankumsatz_id "
+            "WHERE bu.gegenpartei = ? ORDER BY b.datum DESC, b.id DESC LIMIT 1",
+            (u["gegenpartei"],),
+        ).fetchone()
+        if row:
+            return {"sparte_id": row["sparte_id"], "kategorie_id": row["kategorie_id"],
+                    "quelle": "verlauf", "regel_name": None}
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Umsatz uebernehmen / ignorieren
+# ---------------------------------------------------------------------------
+
+@router.post("/bankumsaetze/{umsatz_id}/verbuchen", status_code=201)
+def verbuche_umsatz(umsatz_id: int, body: UmsatzVerbuchenIn,
+                    con: sqlite3.Connection = Depends(db_dep)):
+    u = con.execute("SELECT * FROM bankumsatz WHERE id = ?", (umsatz_id,)).fetchone()
+    if not u:
+        raise HTTPException(404, "Umsatz nicht gefunden")
+    if u["importstatus"] == "verbucht":
+        raise HTTPException(400, "Umsatz ist bereits verbucht")
+    krow = con.execute(
+        "SELECT sparte_id FROM kategorie WHERE id = ? AND aktiv = 1",
+        (body.kategorie_id,),
+    ).fetchone()
+    if not krow:
+        raise HTTPException(404, "Kategorie nicht gefunden")
+    if krow["sparte_id"] != body.sparte_id:
+        raise HTTPException(400, "Kategorie gehoert nicht zur gewaehlten Sparte")
+
+    typ = "ausgabe" if u["betrag_cent"] < 0 else "einnahme"
+    betrag = abs(u["betrag_cent"])
+    if betrag == 0:
+        raise HTTPException(400, "Umsatz mit Betrag 0 kann nicht verbucht werden")
+    text = (body.text or u["text"] or u["gegenpartei"] or "").strip() or None
+
+    try:
+        cur = con.execute(
+            "INSERT INTO buchung(sparte_id, datum, typ, zahlungsart, bankkonto_id, "
+            "bankumsatz_id, buchungsstatus, text) VALUES(?,?,?,?,?,?, 'zugeordnet', ?)",
+            (body.sparte_id, u["datum"], typ, "bank", u["bankkonto_id"],
+             umsatz_id, text),
+        )
+        buchung_id = cur.lastrowid
+        con.execute(
+            "INSERT INTO buchungszeile(buchung_id, kategorie_id, betrag_cent) "
+            "VALUES(?,?,?)",
+            (buchung_id, body.kategorie_id, betrag),
+        )
+        con.execute(
+            "UPDATE bankumsatz SET importstatus = 'verbucht' WHERE id = ?",
+            (umsatz_id,),
+        )
+        regel_angelegt = False
+        if body.regel_merken:
+            muster = (u["gegenpartei"] or (u["text"] or "")[:40]).strip()
+            if muster:
+                # Nur anlegen, wenn es noch keine gleichlautende Regel gibt.
+                if not con.execute(
+                        "SELECT 1 FROM regel WHERE bedingung_text = ? "
+                        "AND ziel_kategorie_id = ? AND aktiv = 1",
+                        (muster, body.kategorie_id)).fetchone():
+                    con.execute(
+                        "INSERT INTO regel(name, bedingung_text, ziel_sparte_id, "
+                        "ziel_kategorie_id, ziel_typ) VALUES(?,?,?,?,?)",
+                        (f"Auto: {muster}", muster, body.sparte_id,
+                         body.kategorie_id, typ),
+                    )
+                    regel_angelegt = True
+        con.commit()
+    except sqlite3.IntegrityError as e:
+        con.rollback()
+        raise HTTPException(400, f"Datenbankfehler: {e}")
+
+    return {"buchung_id": buchung_id, "typ": typ, "betrag_cent": betrag,
+            "regel_angelegt": regel_angelegt}
+
+
+@router.patch("/bankumsaetze/{umsatz_id}")
+def setze_umsatzstatus(umsatz_id: int, body: UmsatzStatusIn,
+                       con: sqlite3.Connection = Depends(db_dep)):
+    if body.importstatus not in ("offen", "ignoriert"):
+        raise HTTPException(400, "importstatus muss 'offen' oder 'ignoriert' sein")
+    u = con.execute("SELECT importstatus FROM bankumsatz WHERE id = ?",
+                    (umsatz_id,)).fetchone()
+    if not u:
+        raise HTTPException(404, "Umsatz nicht gefunden")
+    if u["importstatus"] == "verbucht":
+        raise HTTPException(400, "Verbuchte Umsaetze zuerst ueber die Buchung loesen "
+                                 "(Buchung loeschen oeffnet den Umsatz wieder)")
+    con.execute("UPDATE bankumsatz SET importstatus = ? WHERE id = ?",
+                (body.importstatus, umsatz_id))
+    con.commit()
+    return {"id": umsatz_id, "importstatus": body.importstatus}
