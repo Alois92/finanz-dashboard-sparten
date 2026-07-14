@@ -11,6 +11,7 @@ from .routers import (belege, buchungen, dashboard, import_bank,
 
 STATIC_DIR = pathlib.Path(__file__).resolve().parent.parent / "static"
 COCKPIT_DIR = pathlib.Path(__file__).resolve().parent.parent / "static-cockpit"
+STUDIO_DIR = pathlib.Path(__file__).resolve().parent.parent / "static-studio"
 
 
 @asynccontextmanager
@@ -37,6 +38,9 @@ def health():
 # Neue "Cockpit"-Version parallel unter /cockpit (vor dem Root-Mount).
 # Bestehende Oberflaeche unter / bleibt unveraendert.
 app.mount("/cockpit", StaticFiles(directory=COCKPIT_DIR, html=True), name="cockpit")
+
+# Dritte Variante "Studio" parallel unter /studio (ebenfalls vor dem Root-Mount).
+app.mount("/studio", StaticFiles(directory=STUDIO_DIR, html=True), name="studio")
 
 # Statisches Frontend zuletzt mounten, damit /api Vorrang hat.
 app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")

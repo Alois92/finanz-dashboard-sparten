@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Hohenegg Finanzstudio</title>
+  <link rel="stylesheet" href="/studio/style.css?v=1">
+  <script>
+    // Theme so frueh wie moeglich setzen, damit nichts aufblitzt.
+    (function () {
+      try {
+        var t = localStorage.getItem("studio-theme");
+        if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+      } catch (e) {}
+    })();
+  </script>
+</head>
+<body>
+<div class="layout">
+
+  <!-- ================= Seitenleiste (Desktop) ================= -->
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">H</span>
+      <span class="brand-text"><strong>Hohenegg</strong><em>Finanzstudio</em></span>
+    </div>
+    <nav class="nav" aria-label="Hauptnavigation">
+      <button class="nav-item active" data-page="uebersicht"><span class="nav-ico" aria-hidden="true">◫</span>Übersicht</button>
+      <button class="nav-item" data-page="auswertungen"><span class="nav-ico" aria-hidden="true">▤</span>Auswertungen</button>
+      <button class="nav-item" data-page="buchungen"><span class="nav-ico" aria-hidden="true">≣</span>Buchungen</button>
+      <button class="nav-item" data-page="erfassen"><span class="nav-ico" aria-hidden="true">✎</span>Erfassen</button>
+      <button class="nav-item" data-page="kategorien"><span class="nav-ico" aria-hidden="true">⌘</span>Kategorien</button>
+      <button class="nav-item" data-page="belege"><span class="nav-ico" aria-hidden="true">🗎</span>Belege</button>
+      <button class="nav-item" data-page="bankimport"><span class="nav-ico" aria-hidden="true">⇄</span>Bankimport</button>
+    </nav>
+    <button id="theme-toggle" class="theme-toggle" type="button" title="Hell/Dunkel umschalten">
+      <span class="theme-icon" aria-hidden="true">🌙</span><span class="theme-label">Ansicht</span>
+    </button>
+  </aside>
+
+  <!-- ================= Inhalt ================= -->
+  <div class="content">
+
+    <!-- Mobile Kopfzeile -->
+    <header class="mobilehead">
+      <span class="brand-mark" aria-hidden="true">H</span>
+      <strong>Hohenegg</strong>
+      <button id="theme-toggle-m" class="theme-toggle-m" type="button" title="Hell/Dunkel umschalten"><span class="theme-icon" aria-hidden="true">🌙</span></button>
+    </header>
+
+    <!-- Filterleiste -->
+    <div class="topbar">
+      <div class="periode" id="periode" role="group" aria-label="Zeitraum">
+        <button class="pill" data-periode="jahr">Dieses Jahr</button>
+        <button class="pill" data-periode="vorjahr">Letztes Jahr</button>
+        <button class="pill" data-periode="12m">12 Monate</button>
+        <button class="pill active" data-periode="alles">Alles</button>
+      </div>
+      <div class="sp-pills" id="sp-pills" role="group" aria-label="Sparte"></div>
+    </div>
+
+    <main>
+
+      <!-- ============ Übersicht ============ -->
+      <section class="page active" id="page-uebersicht">
+        <div id="signals" class="signals"></div>
+
+        <div class="kpi-row">
+          <div class="kpi ein">
+            <span class="kpi-label">Einnahmen</span>
+            <div class="kpi-value" id="kpi-ein">–</div>
+            <div class="kpi-spark" id="spark-ein"></div>
+          </div>
+          <div class="kpi aus">
+            <span class="kpi-label">Ausgaben</span>
+            <div class="kpi-value" id="kpi-aus">–</div>
+            <div class="kpi-spark" id="spark-aus"></div>
+          </div>
+          <div class="kpi saldo">
+            <span class="kpi-label">Saldo</span>
+            <div class="kpi-value" id="kpi-saldo">–</div>
+            <div class="kpi-sub" id="kpi-saldo-sub"></div>
+            <div class="kpi-spark" id="spark-saldo"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h2>Verlauf</h2>
+            <div class="seg" role="group" aria-label="Verlauf-Ansicht">
+              <button class="seg-btn active" data-modus="monat">Monate</button>
+              <button class="seg-btn" data-modus="jahr">Jahre</button>
+            </div>
+          </div>
+          <div class="chart chart-lg" id="chart-verlauf"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h2>Sparten im Vergleich</h2>
+            <p class="hint">Ausgaben links, Einnahmen rechts · Saldo am Rand</p>
+          </div>
+          <div id="chart-sparten"></div>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-head"><h2>Top-Ausgaben</h2><p class="hint">Veränderung ggü. Vorjahr</p></div>
+            <div id="rank-aus"></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><h2>Top-Einnahmen</h2><p class="hint">Veränderung ggü. Vorjahr</p></div>
+            <div id="rank-ein"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ Auswertungen ============ -->
+      <section class="page" id="page-auswertungen">
+        <div class="card">
+          <div class="card-head"><h2>Einnahmen &amp; Ausgaben je Jahr</h2></div>
+          <div class="chart chart-lg" id="chart-jahre"></div>
+        </div>
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-head"><h2>Gesamt je Jahr</h2></div>
+            <div class="table-wrap"><table id="tbl-jahre">
+              <thead><tr><th>Jahr</th><th class="num">Einnahmen</th><th class="num">Ausgaben</th><th class="num">Saldo</th></tr></thead>
+              <tbody></tbody></table></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><h2>Saldo je Sparte und Jahr</h2></div>
+            <div class="table-wrap"><table id="tbl-jahre-sparte"><thead></thead><tbody></tbody></table></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Saldo je Kategorie und Jahr</h2><p class="hint">Einnahmen positiv, Ausgaben negativ · Farbe = Sparte</p></div>
+          <div class="table-wrap"><table id="tbl-jahre-kat"><thead></thead><tbody></tbody></table></div>
+        </div>
+      </section>
+
+      <!-- ============ Buchungen ============ -->
+      <section class="page" id="page-buchungen">
+        <div class="card">
+          <div class="card-head">
+            <h2>Buchungen</h2>
+            <div class="list-filter">
+              <select id="l-typ">
+                <option value="">Alle Typen</option>
+                <option value="einnahme">Einnahmen</option>
+                <option value="ausgabe">Ausgaben</option>
+                <option value="umbuchung">Umbuchungen</option>
+              </select>
+              <input type="search" id="l-suche" placeholder="Suchen …">
+            </div>
+          </div>
+          <p class="hint" id="liste-leer" hidden>Keine Buchungen im gewählten Zeitraum.</p>
+          <div class="table-wrap"><table id="tbl-buchungen">
+            <thead><tr><th>Datum</th><th>Sparte</th><th>Typ</th><th>Text</th><th>Kategorien</th><th class="num">Betrag</th><th></th></tr></thead>
+            <tbody></tbody></table></div>
+        </div>
+      </section>
+
+      <!-- ============ Erfassen ============ -->
+      <section class="page" id="page-erfassen">
+        <div class="card quick-card">
+          <div class="card-head"><h2>Schnell erfassen</h2><p class="hint">z. B. „gestern Diesel 82,30 Hof“ — Enter drückt Vorschlag</p></div>
+          <div class="quick-row">
+            <input type="text" id="quick-input" placeholder="Buchung in einem Satz …">
+            <button id="quick-btn" class="btn accent" type="button">Vorschlag</button>
+          </div>
+          <p class="quick-msg" id="quick-msg"></p>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h2>Buchung erfassen</h2></div>
+          <form id="form-buchung">
+            <div class="form-grid">
+              <label>Sparte<select id="b-sparte"></select></label>
+              <label>Datum<input type="date" id="b-datum" required></label>
+              <label>Typ<select id="b-typ">
+                <option value="ausgabe">Ausgabe</option>
+                <option value="einnahme">Einnahme</option>
+                <option value="umbuchung">Umbuchung</option>
+              </select></label>
+              <label>Zahlungsart<select id="b-zahlungsart">
+                <option value="bank">Bank</option>
+                <option value="bar">Bar</option>
+              </select></label>
+              <label class="wide">Text<input type="text" id="b-text" placeholder="wofür / von wem"></label>
+            </div>
+            <div id="zeilen"></div>
+            <div class="zeilen-foot">
+              <button type="button" id="add-zeile" class="btn ghost">+ Zeile</button>
+              <span id="zeilen-summe" class="num">Summe: 0,00 €</span>
+            </div>
+            <div class="form-foot">
+              <button type="submit" class="btn accent">Buchung speichern</button>
+              <span class="msg" id="b-msg"></span>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <!-- ============ Kategorien ============ -->
+      <section class="page" id="page-kategorien">
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-head"><h2>Kategorien</h2><label class="inline">Sparte <select id="k-sparte"></select></label></div>
+            <div class="table-wrap"><table id="tbl-kategorien">
+              <thead><tr><th>Name</th><th>Richtung</th><th>Übergeordnet</th></tr></thead>
+              <tbody></tbody></table></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><h2>Neue Kategorie</h2></div>
+            <form id="form-kategorie">
+              <div class="form-grid">
+                <label class="wide">Name<input type="text" id="k-name" required></label>
+                <label>Richtung<select id="k-richtung">
+                  <option value="ausgabe">Ausgabe</option>
+                  <option value="einnahme">Einnahme</option>
+                  <option value="beides">Beides</option>
+                </select></label>
+                <label>Übergeordnet<select id="k-parent"><option value="">– keine –</option></select></label>
+              </div>
+              <div class="form-foot">
+                <button type="submit" class="btn accent">Anlegen</button>
+                <span class="msg" id="k-msg"></span>
+              </div>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ Belege ============ -->
+      <section class="page" id="page-belege">
+        <div class="card">
+          <div class="card-head"><h2>Beleg hochladen</h2></div>
+          <form id="form-beleg">
+            <div class="form-grid">
+              <label class="wide">Datei<input type="file" id="beleg-datei"></label>
+              <label>Sparte<select id="beleg-sparte"><option value="">– keine –</option></select></label>
+            </div>
+            <div class="form-foot">
+              <button type="submit" class="btn accent">Hochladen</button>
+              <span class="msg" id="beleg-msg"></span>
+            </div>
+          </form>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Belege</h2><label class="inline">Sparte <select id="beleg-filter-sparte"><option value="">Alle</option></select></label></div>
+          <p class="hint" id="belege-leer" hidden>Noch keine Belege.</p>
+          <div class="table-wrap"><table id="tbl-belege">
+            <thead><tr><th>Datei</th><th>Sparte</th><th>Datum</th><th class="num">Betrag</th><th>Notiz</th><th></th></tr></thead>
+            <tbody></tbody></table></div>
+        </div>
+      </section>
+
+      <!-- ============ Bankimport ============ -->
+      <section class="page" id="page-bankimport">
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-head"><h2>Bankkonto anlegen</h2></div>
+            <form id="form-konto">
+              <div class="form-grid">
+                <label>Name<input type="text" id="konto-name" required></label>
+                <label>IBAN<input type="text" id="konto-iban"></label>
+                <label>Bank<input type="text" id="konto-bank"></label>
+                <label>Sparte<select id="konto-sparte"><option value="">– keine –</option></select></label>
+              </div>
+              <div class="form-foot">
+                <button type="submit" class="btn accent">Konto anlegen</button>
+                <span class="msg" id="konto-msg"></span>
+              </div>
+            </form>
+          </div>
+          <div class="card">
+            <div class="card-head"><h2>CSV importieren</h2></div>
+            <form id="form-import">
+              <div class="form-grid">
+                <label>Konto<select id="import-konto"></select></label>
+                <label class="wide">CSV-Datei<input type="file" id="import-datei" accept=".csv"></label>
+              </div>
+              <div class="form-foot">
+                <button type="submit" class="btn accent">Importieren</button>
+                <span class="msg" id="import-msg"></span>
+              </div>
+              <p id="import-ergebnis" hidden class="hint">Neu: <strong id="imp-neu">0</strong> · Dubletten: <strong id="imp-dub">0</strong> · Gesamt: <strong id="imp-ges">0</strong></p>
+            </form>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Umsätze</h2><label class="inline">Konto <select id="umsatz-konto"></select></label></div>
+          <p class="hint" id="umsaetze-leer" hidden>Keine Umsätze.</p>
+          <div class="table-wrap"><table id="tbl-umsaetze">
+            <thead><tr><th>Datum</th><th>Text</th><th>Gegenpartei</th><th class="num">Betrag</th><th>Status</th></tr></thead>
+            <tbody></tbody></table></div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+
+<!-- ================= Mobile Bottom-Navigation ================= -->
+<nav class="bottombar" aria-label="Navigation">
+  <button class="bb-item active" data-page="uebersicht"><span aria-hidden="true">◫</span>Übersicht</button>
+  <button class="bb-item" data-page="auswertungen"><span aria-hidden="true">▤</span>Berichte</button>
+  <button class="bb-item bb-erfassen" data-page="erfassen" title="Erfassen"><span aria-hidden="true">＋</span></button>
+  <button class="bb-item" data-page="buchungen"><span aria-hidden="true">≣</span>Buchungen</button>
+  <button class="bb-item" id="bb-mehr"><span aria-hidden="true">⋯</span>Mehr</button>
+</nav>
+<div class="sheet" id="mehr-sheet" hidden>
+  <div class="sheet-inner">
+    <button class="sheet-item" data-page="kategorien">Kategorien</button>
+    <button class="sheet-item" data-page="belege">Belege</button>
+    <button class="sheet-item" data-page="bankimport">Bankimport</button>
+    <button class="sheet-item sheet-close" id="mehr-close">Schließen</button>
+  </div>
+</div>
+
+<script src="/studio/charts.js?v=1"></script>
+<script src="/studio/app.js?v=1"></script>
+</body>
+</html>
