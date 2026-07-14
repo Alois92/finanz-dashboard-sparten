@@ -196,7 +196,7 @@ async function ladeUebersicht() {
     : "";
   Charts.sparkline($("#spark-ein"), monate.map((m) => m.einnahmen_cent), { color: "var(--ein)" });
   Charts.sparkline($("#spark-aus"), monate.map((m) => m.ausgaben_cent), { color: "var(--aus)" });
-  Charts.sparkline($("#spark-saldo"), monate.map((m) => m.saldo_cent), { color: "var(--accent)" });
+  Charts.sparkline($("#spark-saldo"), monate.map((m) => m.saldo_cent), { color: "var(--saldo)" });
 
   // Verlauf (Monate oder Jahre)
   if (verlaufModus === "jahr" && jahresdaten) {
@@ -206,7 +206,7 @@ async function ladeUebersicht() {
         { name: "Einnahmen", color: "var(--ein)", values: jahresdaten.gesamt.map((g) => g.einnahmen_cent) },
         { name: "Ausgaben", color: "var(--aus)", values: jahresdaten.gesamt.map((g) => g.ausgaben_cent) },
       ],
-      line: { name: "Saldo", color: "var(--accent)", values: jahresdaten.gesamt.map((g) => g.saldo_cent) },
+      line: { name: "Saldo", color: "var(--saldo)", values: jahresdaten.gesamt.map((g) => g.saldo_cent) },
       empty: "Noch keine Buchungen — leg unter „Erfassen“ los.",
     });
   } else {
@@ -216,7 +216,7 @@ async function ladeUebersicht() {
         { name: "Einnahmen", color: "var(--ein)", values: monate.map((m) => m.einnahmen_cent) },
         { name: "Ausgaben", color: "var(--aus)", values: monate.map((m) => m.ausgaben_cent) },
       ],
-      line: { name: "Saldo", color: "var(--accent)", values: monate.map((m) => m.saldo_cent) },
+      line: { name: "Saldo", color: "var(--saldo)", values: monate.map((m) => m.saldo_cent) },
       empty: "Noch keine Buchungen — leg unter „Erfassen“ los.",
     });
   }
@@ -227,34 +227,42 @@ async function ladeUebersicht() {
     ein: r.einnahmen_cent, aus: r.ausgaben_cent,
   })));
 
-  // Rankings mit Vorjahres-Delta
+  // Rankings mit Vorjahres-Delta (Zuordnung ueber Kategorie+Sparte, damit
+  // gleichnamige Kategorien in verschiedenen Sparten getrennt bleiben)
   const deltas = kategorieDeltas(jahresdaten);
-  const katSparte = {};
-  (jahresdaten && jahresdaten.per_kategorie || []).forEach((k) => { katSparte[k.kategorie] = k.sparte; });
   const rank = (typ, gut) => data.per_kategorie
     .filter((r) => r.typ === typ).slice(0, 5)
-    .map((r) => ({
-      label: r.kategorie,
-      color: colorForSparteName(katSparte[r.kategorie]),
-      value: r.betrag_cent,
-      deltaPct: deltas[r.kategorie] != null ? deltas[r.kategorie] : null,
-      gut,
-    }));
+    .map((r) => {
+      const key = r.kategorie + "|" + (r.sparte || "");
+      return {
+        label: r.kategorie,
+        sub: r.sparte ? (sparteKuerzelByName[r.sparte] || r.sparte) : "",
+        color: colorForSparteName(r.sparte),
+        value: r.betrag_cent,
+        deltaPct: deltas[key] != null ? deltas[key] : null,
+        gut,
+      };
+    });
   Charts.rankList($("#rank-aus"), rank("ausgabe", false), { emptyText: "Keine Ausgaben im Zeitraum." });
   Charts.rankList($("#rank-ein"), rank("einnahme", true), { emptyText: "Keine Einnahmen im Zeitraum." });
 }
 
-// Veränderung je Kategorie: aktuelles vs. voriges Kalenderjahr, in Prozent
-// des Absolutbetrags (funktioniert fuer Einnahme- und Ausgabe-Kategorien).
+// Veränderung je Kategorie: laufendes Jahr (aufs Gesamtjahr hochgerechnet)
+// gegen das Vorjahr, in Prozent des Absolutbetrags. Frueh im Jahr (< 3 Monate)
+// ist die Hochrechnung zu wackelig — dann kein Delta.
 function kategorieDeltas(jahresdaten) {
   const out = {};
   if (!jahresdaten || !jahresdaten.per_kategorie) return out;
-  const y = String(new Date().getFullYear());
-  const py = String(new Date().getFullYear() - 1);
+  const now = new Date();
+  const y = String(now.getFullYear());
+  const py = String(now.getFullYear() - 1);
+  const m = now.getMonth() + 1;
+  if (m < 3) return out;
   jahresdaten.per_kategorie.forEach((k) => {
     const cur = k.werte[y], prev = k.werte[py];
     if (cur == null || prev == null || prev === 0) return;
-    out[k.kategorie] = (Math.abs(cur) - Math.abs(prev)) / Math.abs(prev) * 100;
+    const hochgerechnet = Math.abs(cur) / m * 12;
+    out[k.kategorie + "|" + k.sparte] = (hochgerechnet - Math.abs(prev)) / Math.abs(prev) * 100;
   });
   return out;
 }
@@ -265,19 +273,21 @@ function renderSignale(jahresdaten, monate) {
   const y = String(new Date().getFullYear());
   const py = String(new Date().getFullYear() - 1);
 
-  if (jahresdaten && jahresdaten.per_kategorie) {
-    // Stärkster Kostenanstieg (nur Ausgabe-Kategorien: Saldo negativ)
+  const mNow = new Date().getMonth() + 1;
+  if (jahresdaten && jahresdaten.per_kategorie && mNow >= 3) {
+    // Stärkster Kostenanstieg (nur Ausgabe-Kategorien: Saldo negativ);
+    // laufendes Jahr aufs Gesamtjahr hochgerechnet, sonst hinkt der Vergleich.
     let worst = null;
     jahresdaten.per_kategorie.forEach((k) => {
       const cur = k.werte[y], prev = k.werte[py];
       if (cur == null || prev == null || cur >= 0 || prev >= 0) return;
-      const diff = Math.abs(cur) - Math.abs(prev);
+      const diff = Math.abs(cur) / mNow * 12 - Math.abs(prev);
       if (diff > 0 && (!worst || diff > worst.diff)) {
         worst = { name: k.kategorie, diff, pct: diff / Math.abs(prev) * 100 };
       }
     });
     if (worst) {
-      cards.push(`<div class="signal warn"><span class="s-label">Kostenanstieg</span><span class="s-text">${escapeHtml(worst.name)}: <strong>+${centToEuro(worst.diff)}</strong> ggü. Vorjahr (▲ ${worst.pct.toLocaleString("de-DE", { maximumFractionDigits: 0 })} %)</span></div>`);
+      cards.push(`<div class="signal warn"><span class="s-label">Kostenanstieg (hochgerechnet)</span><span class="s-text">${escapeHtml(worst.name)}: <strong>+${centToEuro(Math.round(worst.diff))}</strong> ggü. Vorjahr (▲ ${worst.pct.toLocaleString("de-DE", { maximumFractionDigits: 0 })} %)</span></div>`);
     }
     // Größte Einnahmequelle im aktuellen Jahr
     let best = null;
@@ -321,7 +331,7 @@ async function ladeAuswertungen() {
       { name: "Einnahmen", color: "var(--ein)", values: data.gesamt.map((g) => g.einnahmen_cent) },
       { name: "Ausgaben", color: "var(--aus)", values: data.gesamt.map((g) => g.ausgaben_cent) },
     ],
-    line: { name: "Saldo", color: "var(--accent)", values: data.gesamt.map((g) => g.saldo_cent) },
+    line: { name: "Saldo", color: "var(--saldo)", values: data.gesamt.map((g) => g.saldo_cent) },
     empty: "Noch keine Buchungen — sobald du erfasst, erscheint hier der Jahresvergleich.",
   });
 

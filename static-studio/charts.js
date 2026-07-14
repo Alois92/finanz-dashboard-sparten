@@ -150,9 +150,10 @@ const Charts = (() => {
         const arrow = up ? "▲" : "▼";
         delta = `<span class="rank-delta ${cls} ${moral}" title="Veränderung gegenüber Vorjahr">${arrow} ${Math.abs(r.deltaPct).toLocaleString("de-DE", { maximumFractionDigits: 0 })} %</span>`;
       }
+      const sub = r.sub ? ` <span class="kat-sp">${esc(r.sub)}</span>` : "";
       return `<div class="rank-row">
         <div class="rank-main">
-          <div class="rank-label"><span class="dot" style="background:${r.color}"></span><span>${esc(r.label)}</span></div>
+          <div class="rank-label"><span class="dot" style="background:${r.color}"></span><span>${esc(r.label)}${sub}</span></div>
           <div class="rank-bar" style="width:${(r.value / maxV * 100).toFixed(1)}%;background:${r.color}"></div>
         </div>
         <span class="rank-value">${euro(r.value)}</span>
