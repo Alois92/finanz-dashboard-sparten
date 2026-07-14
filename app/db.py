@@ -66,6 +66,9 @@ SPARTEN_FARBEN = {
     "PV": "#6AA9FF", "ZVH": "#2DD4BF", "HOF": "#C084FC",
     "VER": "#F472B6", "AL": "#FB923C", "FR": "#818CF8",
 }
+# Fallback-Palette fuer selbst angelegte/umbenannte Sparten (nach Sortierung).
+SPARTEN_PALETTE = ["#6AA9FF", "#2DD4BF", "#C084FC", "#F472B6", "#FB923C",
+                   "#818CF8", "#F59E0B", "#34D399"]
 
 
 def init_db() -> None:
@@ -88,6 +91,19 @@ def init_db() -> None:
                     "WHERE kuerzel = ? AND (farbe IS NULL OR farbe = '')",
                     (farbe, kuerzel),
                 )
+            # Selbst angelegte Sparten (unbekanntes Kuerzel): Palette nach
+            # Sortierung, moeglichst ohne bereits vergebene Farben.
+            vergeben = {r["farbe"] for r in con.execute(
+                "SELECT farbe FROM sparte WHERE farbe IS NOT NULL AND farbe != ''")}
+            frei = [f for f in SPARTEN_PALETTE if f not in vergeben]
+            offen = con.execute(
+                "SELECT id FROM sparte WHERE farbe IS NULL OR farbe = '' "
+                "ORDER BY sortierung, id").fetchall()
+            for i, row in enumerate(offen):
+                farbe = (frei[i] if i < len(frei)
+                         else SPARTEN_PALETTE[i % len(SPARTEN_PALETTE)])
+                con.execute("UPDATE sparte SET farbe = ? WHERE id = ?",
+                            (farbe, row["id"]))
             con.commit()
     finally:
         con.close()
