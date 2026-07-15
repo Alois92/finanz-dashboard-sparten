@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .backup import backup_schleife
 from .db import init_db
-from .routers import (belege, buchungen, dashboard, import_bank,
+from .routers import (belege, buchungen, dashboard, gruppen, import_bank,
                       import_excel, schnellerfassung, stammdaten)
 
 STUDIO_DIR = pathlib.Path(__file__).resolve().parent.parent / "static-studio"
@@ -27,6 +27,7 @@ app = FastAPI(title="Finanz-Dashboard Sparten", version="0.1.0", lifespan=lifesp
 app.include_router(stammdaten.router, prefix="/api")
 app.include_router(buchungen.router, prefix="/api")
 app.include_router(dashboard.router, prefix="/api")
+app.include_router(gruppen.router, prefix="/api")
 app.include_router(schnellerfassung.router, prefix="/api")
 app.include_router(belege.router, prefix="/api")
 app.include_router(import_bank.router, prefix="/api")

@@ -60,6 +60,9 @@
         <button class="pill active" data-periode="alles">Alles</button>
       </div>
       <div class="sp-pills" id="sp-pills" role="group" aria-label="Sparte"></div>
+      <label class="inline">Auswertung
+        <select id="dashboard-filter" aria-label="Sparte oder Gruppe"><option value="">Alle Sparten</option></select>
+      </label>
     </div>
 
     <main>
@@ -274,6 +277,30 @@
               <div class="form-foot">
                 <button type="submit" class="btn accent">Anlegen</button>
                 <span class="msg" id="k-msg"></span>
+              </div>
+            </form>
+          </div>
+        </div>
+        <div class="grid-2" style="margin-top:18px">
+          <div class="card">
+            <div class="card-head"><h2>Gruppen</h2><p class="hint">Kategorien sparten&uuml;bergreifend b&uuml;ndeln.</p></div>
+            <div class="table-wrap"><table id="tbl-globalgruppen">
+              <thead><tr><th>Name</th><th>Kategorien</th><th></th></tr></thead>
+              <tbody></tbody></table></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><h2 id="gg-form-titel">Neue Gruppe</h2></div>
+            <form id="form-globalgruppe">
+              <div class="form-grid">
+                <label class="wide">Name<input type="text" id="gg-name" required></label>
+                <label class="wide">Beschreibung<input type="text" id="gg-beschreibung"></label>
+              </div>
+              <p class="hint" style="margin:14px 0 8px">Kategorien nach Sparte</p>
+              <div id="gg-kategorien"></div>
+              <div class="form-foot">
+                <button type="submit" class="btn accent">Speichern</button>
+                <button type="button" class="btn ghost" id="gg-cancel" hidden>Abbrechen</button>
+                <span class="msg" id="gg-msg"></span>
               </div>
             </form>
           </div>

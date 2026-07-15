@@ -1,17 +1,25 @@
 """Dashboard: Kennzahlen auf Basis von v_einnahmen_ausgaben (Umbuchungen ausgeblendet)."""
 import sqlite3
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from ..db import db_dep
 
 router = APIRouter(tags=["dashboard"])
 
 
-def _where(sparte_id, von, bis):
+def _where(con, sparte_id, globalgruppe_id, von, bis):
     sql, params = " WHERE 1=1", []
     if sparte_id is not None:
         sql += " AND v.sparte_id = ?"; params.append(sparte_id)
+    if globalgruppe_id is not None:
+        if not con.execute(
+                "SELECT 1 FROM globale_kategoriegruppe WHERE id = ? AND aktiv = 1",
+                (globalgruppe_id,)).fetchone():
+            raise HTTPException(404, "Gruppe nicht gefunden")
+        sql += (" AND v.kategorie_id IN (SELECT kategorie_id "
+                "FROM kategorie_globalgruppe WHERE globalgruppe_id = ?)")
+        params.append(globalgruppe_id)
     if von:
         sql += " AND v.datum >= ?"; params.append(von)
     if bis:
@@ -21,10 +29,11 @@ def _where(sparte_id, von, bis):
 
 @router.get("/dashboard")
 def dashboard(sparte_id: int | None = None,
+              globalgruppe_id: int | None = None,
               von: str | None = None,
               bis: str | None = None,
               con: sqlite3.Connection = Depends(db_dep)):
-    where, params = _where(sparte_id, von, bis)
+    where, params = _where(con, sparte_id, globalgruppe_id, von, bis)
 
     summe = con.execute(
         "SELECT "
@@ -66,6 +75,7 @@ def dashboard(sparte_id: int | None = None,
 
 @router.get("/jahresvergleich")
 def jahresvergleich(sparte_id: int | None = None,
+                    globalgruppe_id: int | None = None,
                     von: str | None = None,
                     bis: str | None = None,
                     con: sqlite3.Connection = Depends(db_dep)):
@@ -74,7 +84,7 @@ def jahresvergleich(sparte_id: int | None = None,
     Liefert eine Gesamtzeile je Jahr und zusaetzlich eine Saldo-Matrix
     Sparte x Jahr fuer den Jahresvergleich untereinander.
     """
-    where, params = _where(sparte_id, von, bis)
+    where, params = _where(con, sparte_id, globalgruppe_id, von, bis)
 
     gesamt = [dict(r) for r in con.execute(
         "SELECT strftime('%Y', v.datum) AS jahr, "
@@ -128,6 +138,7 @@ def jahresvergleich(sparte_id: int | None = None,
 
 @router.get("/verlauf")
 def verlauf(sparte_id: int | None = None,
+            globalgruppe_id: int | None = None,
             von: str | None = None,
             bis: str | None = None,
             con: sqlite3.Connection = Depends(db_dep)):
@@ -136,7 +147,7 @@ def verlauf(sparte_id: int | None = None,
     Liefert je Kalendermonat Einnahmen/Ausgaben/Saldo. Versorgt das
     Verlauf-Diagramm und die KPI-Sparklines im Cockpit-Frontend.
     """
-    where, params = _where(sparte_id, von, bis)
+    where, params = _where(con, sparte_id, globalgruppe_id, von, bis)
 
     rows = [dict(r) for r in con.execute(
         "SELECT strftime('%Y-%m', v.datum) AS monat, "

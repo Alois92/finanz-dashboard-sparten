@@ -50,6 +50,8 @@ let buchungenCache = [];
 let editId = null;         // Buchung im Bearbeiten-Modus (null = neu anlegen)
 let periode = "alles";     // jahr | vorjahr | 12m | alles
 let spCur = "";            // Sparten-Filter ("" = alle)
+let globalgruppeCur = "";
+let globaleGruppen = [];
 let verlaufModus = "monat"; // monat | jahr
 let aktivePage = "uebersicht";
 
@@ -113,12 +115,17 @@ function periodeRange() {
   }
   return {};
 }
-function filterQuery() {
+function dimensionQuery() {
   const p = new URLSearchParams();
+  if (globalgruppeCur) p.set("globalgruppe_id", globalgruppeCur);
+  else if (spCur) p.set("sparte_id", spCur);
+  return p.toString();
+}
+function filterQuery() {
+  const p = new URLSearchParams(dimensionQuery());
   const r = periodeRange();
   if (r.von) p.set("von", r.von);
   if (r.bis) p.set("bis", r.bis);
-  if (spCur) p.set("sparte_id", spCur);
   return p.toString();
 }
 $$("#periode .pill").forEach((b) => b.addEventListener("click", () => {
@@ -128,6 +135,17 @@ $$("#periode .pill").forEach((b) => b.addEventListener("click", () => {
 }));
 
 // ---------- Sparten-Pills ----------
+function renderDashboardFilter() {
+  const select = $("#dashboard-filter");
+  const wert = globalgruppeCur ? "gg:" + globalgruppeCur : (spCur ? "sp:" + spCur : "");
+  select.innerHTML = '<option value="">Alle Sparten</option>' + '<optgroup label="Sparten">' + sparten.map((s) => `<option value="sp:${s.id}">Sparte: ${escapeHtml(s.name)}</option>`).join("") + '</optgroup>' + '<optgroup label="Gruppen">' + globaleGruppen.map((g) => `<option value="gg:${g.id}">Gruppe: ${escapeHtml(g.name)}</option>`).join("") + '</optgroup>';
+  select.value = wert;
+}
+$("#dashboard-filter").addEventListener("change", (e) => {
+  const [art, id = ""] = e.target.value.split(":");
+  spCur = art === "sp" ? id : ""; globalgruppeCur = art === "gg" ? id : "";
+  renderSpartenPills(); ladePage(aktivePage);
+});
 function renderSpartenPills() {
   const el = $("#sp-pills");
   const pills = [
@@ -139,7 +157,9 @@ function renderSpartenPills() {
   el.innerHTML = pills.join("");
   $$("#sp-pills .sp-pill").forEach((b) => b.addEventListener("click", () => {
     spCur = b.dataset.sp;
+    globalgruppeCur = "";
     renderSpartenPills();
+    renderDashboardFilter();
     ladePage(aktivePage);
   }));
 }
@@ -177,7 +197,7 @@ async function ladeUebersicht() {
       api("/dashboard?" + q),
       api("/verlauf?" + q).catch(() => ({ monate: [] })),
       // Jahresvergleich fuer Signale/Deltas: nur Sparten-Filter, volle Jahre
-      api("/jahresvergleich" + (spCur ? "?sparte_id=" + spCur : "")).catch(() => null),
+      api("/jahresvergleich" + (dimensionQuery() ? "?" + dimensionQuery() : "")).catch(() => null),
     ]);
   } catch (err) {
     fehlerKarte($("#chart-verlauf"), err);
@@ -787,12 +807,50 @@ $("#form-kategorie").addEventListener("submit", async (e) => {
     $("#k-name").value = "";
     invalidateKategorien(body.sparte_id);
     ladeKategorienTabelle();
+    renderGruppenCheckboxes();
     if (String(body.sparte_id) === $("#b-sparte").value) erneuereZeilenKategorien();
   } catch (err) {
     msg.className = "msg err"; msg.textContent = "Fehler: " + err.message;
   }
 });
 
+let gruppeEditId = null;
+async function alleKategorien() { return (await Promise.all(sparten.map((s) => ladeKategorien(s.id)))).flat(); }
+async function renderGruppenCheckboxes(selected = []) {
+  const gesetzt = new Set(selected.map(String));
+  const bloecke = await Promise.all(sparten.map(async (s) => {
+    const kats = await ladeKategorien(s.id); if (!kats.length) return "";
+    return `<fieldset style="margin:0 0 10px"><legend>${escapeHtml(s.name)}</legend>` + kats.map((k) => `<label style="display:block;margin:6px 0"><input type="checkbox" value="${k.id}"${gesetzt.has(String(k.id)) ? " checked" : ""}> ${escapeHtml(k.name)}</label>`).join("") + `</fieldset>`;
+  }));
+  $("#gg-kategorien").innerHTML = bloecke.join("") || '<p class="hint">Zuerst Kategorien anlegen.</p>';
+}
+function resetGruppenForm() {
+  gruppeEditId = null; $("#gg-form-titel").textContent = "Neue Gruppe"; $("#gg-name").value = ""; $("#gg-beschreibung").value = ""; $("#gg-cancel").hidden = true; renderGruppenCheckboxes();
+}
+async function ladeGlobalgruppen() {
+  globaleGruppen = await api("/globalgruppen");
+  if (globalgruppeCur && !globaleGruppen.some((g) => String(g.id) === globalgruppeCur)) globalgruppeCur = "";
+  renderDashboardFilter(); const kats = await alleKategorien(); const katName = Object.fromEntries(kats.map((k) => [k.id, k.name]));
+  $("#tbl-globalgruppen tbody").innerHTML = globaleGruppen.map((g) => `<tr><td>${escapeHtml(g.name)}</td><td>${g.kategorie_ids.map((id) => escapeHtml(katName[id] || ("#" + id))).join(", ") || "&ndash;"}</td><td class="row-actions"><button class="link" data-gg-edit="${g.id}">bearbeiten</button><button class="link" data-gg-del="${g.id}">l\u00f6schen</button></td></tr>`).join("") || '<tr><td colspan="3" class="hint">Noch keine Gruppen.</td></tr>';
+  $$("[data-gg-edit]").forEach((button) => button.addEventListener("click", async () => {
+    const gruppe = globaleGruppen.find((g) => String(g.id) === button.dataset.ggEdit); gruppeEditId = gruppe.id; $("#gg-form-titel").textContent = "Gruppe bearbeiten"; $("#gg-name").value = gruppe.name; $("#gg-beschreibung").value = gruppe.beschreibung || ""; $("#gg-cancel").hidden = false; await renderGruppenCheckboxes(gruppe.kategorie_ids);
+  }));
+  $$("[data-gg-del]").forEach((button) => button.addEventListener("click", async () => {
+    const gruppe = globaleGruppen.find((g) => String(g.id) === button.dataset.ggDel);
+    if (!confirm(`Gruppe \u201e${gruppe.name}\u201c wirklich l\u00f6schen? Buchungen bleiben erhalten.`)) return;
+    try { await api("/globalgruppen/" + gruppe.id, { method: "DELETE" }); if (String(gruppe.id) === globalgruppeCur) globalgruppeCur = ""; resetGruppenForm(); await ladeGlobalgruppen(); ladePage(aktivePage); }
+    catch (err) { $("#gg-msg").className = "msg err"; $("#gg-msg").textContent = "Fehler: " + err.message; }
+  }));
+}
+$("#gg-cancel").addEventListener("click", resetGruppenForm);
+$("#form-globalgruppe").addEventListener("submit", async (e) => {
+  e.preventDefault(); const msg = $("#gg-msg"); const body = { name: $("#gg-name").value.trim(), beschreibung: $("#gg-beschreibung").value.trim() || null, kategorie_ids: $$("#gg-kategorien input:checked").map((input) => parseInt(input.value, 10)) };
+  try {
+    if (gruppeEditId) await api("/globalgruppen/" + gruppeEditId, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    else { const erstellt = await api("/globalgruppen", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: body.name, beschreibung: body.beschreibung }) }); if (body.kategorie_ids.length) await api("/globalgruppen/" + erstellt.id, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); }
+    msg.className = "msg ok"; msg.textContent = "Gruppe gespeichert."; resetGruppenForm(); await ladeGlobalgruppen();
+  } catch (err) { msg.className = "msg err"; msg.textContent = "Fehler: " + err.message; }
+});
 // ===========================================================================
 // Belege
 // ===========================================================================
@@ -1198,6 +1256,7 @@ async function init() {
   $("#beleg-filter-sparte").insertAdjacentHTML("beforeend", optionen);
   $("#konto-sparte").insertAdjacentHTML("beforeend", optionen);
   $("#b-datum").value = todayISO();
+  await ladeGlobalgruppen();
   renderSpartenPills();
   await erneuereZeilenKategorien();
   addZeile();

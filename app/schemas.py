@@ -22,6 +22,12 @@ class KategorieIn(BaseModel):
         return v
 
 
+class GruppeIn(BaseModel):
+    name: str
+    beschreibung: Optional[str] = None
+    kategorie_ids: List[int] = Field(default_factory=list)
+
+
 class ZeileIn(BaseModel):
     kategorie_id: int
     betrag_cent: int = Field(ge=0)
