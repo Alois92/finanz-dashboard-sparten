@@ -14,8 +14,9 @@ Endpunkte:
 import csv
 import hashlib
 import io
+import re
 import sqlite3
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
@@ -126,12 +127,21 @@ class BankkontoIn(BaseModel):
 class UmsatzVerbuchenIn(BaseModel):
     sparte_id: int
     kategorie_id: int
+    typ: Optional[Literal["einnahme", "ausgabe", "umbuchung"]] = None
     text: Optional[str] = None       # ueberschreibt den Umsatztext der Buchung
     regel_merken: bool = False       # Zuordnung als Regel fuer die Zukunft speichern
 
 
 class UmsatzStatusIn(BaseModel):
     importstatus: str                # 'offen' oder 'ignoriert'
+
+
+class RegelPatchIn(BaseModel):
+    aktiv: Literal[0, 1]
+
+
+class VorschlaegeUebernehmenIn(BaseModel):
+    umsatz_ids: list[int]
 
 
 # ---------------------------------------------------------------------------
@@ -340,6 +350,70 @@ def _saldo_pruefen(posten: list[dict], hat_saldo: bool):
 # Umsaetze auflisten
 # ---------------------------------------------------------------------------
 
+def _normalisiere_regeltext(text: Optional[str]) -> str:
+    """Stabilen, klein geschriebenen Regeltext ohne lange Nummern liefern."""
+    wert = re.sub(r"\d{5,}", " ", (text or "").lower())
+    wert = re.sub(r"\s+", " ", wert).strip(" -_,.;:/")
+    return wert[:60].strip()
+
+
+def _regel_text(umsatz) -> str:
+    """Empfaenger bevorzugen, sonst den ersten brauchbaren Verwendungszweck."""
+    gegenpartei = _normalisiere_regeltext(umsatz["gegenpartei"])
+    if gegenpartei:
+        return gegenpartei
+    for teil in re.split(r"[|;/\n]+", umsatz["text"] or ""):
+        kandidat = _normalisiere_regeltext(teil)
+        if len(kandidat) >= 3:
+            return kandidat
+    return ""
+
+
+def _regel_haystack(umsatz) -> str:
+    return _normalisiere_regeltext(
+        f"{umsatz['gegenpartei'] or ''} {umsatz['text'] or ''}"
+    )
+
+
+@router.get("/regeln")
+def list_regeln(con: sqlite3.Connection = Depends(db_dep)):
+    rows = con.execute(
+        "SELECT id, name, aktiv, prioritaet, bedingung_text, ziel_sparte_id, "
+        "ziel_kategorie_id, ziel_typ FROM regel ORDER BY prioritaet, id"
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
+@router.patch("/regeln/{regel_id}")
+def patch_regel(
+    regel_id: int,
+    body: RegelPatchIn,
+    con: sqlite3.Connection = Depends(db_dep),
+):
+    if not con.execute("SELECT 1 FROM regel WHERE id = ?", (regel_id,)).fetchone():
+        raise HTTPException(404, "Regel nicht gefunden")
+    con.execute("UPDATE regel SET aktiv = ? WHERE id = ?", (body.aktiv, regel_id))
+    con.commit()
+    return next(row for row in list_regeln(con) if row["id"] == regel_id)
+
+
+@router.delete("/regeln/{regel_id}", status_code=204)
+def delete_regel(regel_id: int, con: sqlite3.Connection = Depends(db_dep)):
+    cur = con.execute("DELETE FROM regel WHERE id = ?", (regel_id,))
+    if cur.rowcount == 0:
+        raise HTTPException(404, "Regel nicht gefunden")
+    con.commit()
+
+
+def _aktive_regeln(con: sqlite3.Connection):
+    return con.execute(
+        "SELECT r.*, k.sparte_id AS kat_sparte_id FROM regel r "
+        "LEFT JOIN kategorie k ON k.id = r.ziel_kategorie_id "
+        "WHERE r.aktiv = 1 "
+        "ORDER BY r.prioritaet, LENGTH(r.bedingung_text) DESC, r.id"
+    ).fetchall()
+
+
 @router.get("/bankumsaetze")
 def list_bankumsaetze(
     bankkonto_id: Optional[int] = None,
@@ -369,27 +443,22 @@ def list_bankumsaetze(
     sql += " ORDER BY datum DESC, id DESC"
     rows = [dict(r) for r in con.execute(sql, params).fetchall()]
 
-    # Offenen Umsaetzen einen Zuordnungs-Vorschlag mitgeben (Regeln zuerst,
-    # sonst die juengste Buchung mit gleicher Gegenpartei).
+    # Offenen Umsaetzen den ersten passenden aktiven Regelvorschlag mitgeben.
     offene = [r for r in rows if r["importstatus"] == "offen"]
     if offene:
-        regeln = con.execute(
-            "SELECT r.*, k.sparte_id AS kat_sparte_id FROM regel r "
-            "LEFT JOIN kategorie k ON k.id = r.ziel_kategorie_id "
-            "WHERE r.aktiv = 1 ORDER BY r.prioritaet, r.id"
-        ).fetchall()
+        regeln = _aktive_regeln(con)
         for u in offene:
             u["vorschlag"] = _vorschlag_fuer_umsatz(con, u, regeln)
     return rows
 
 
 def _vorschlag_fuer_umsatz(con, u: dict, regeln) -> Optional[dict]:
-    """Zuordnungs-Vorschlag: erst Regeln (Prioritaet), dann Verlauf."""
-    haystack = ((u["text"] or "") + " " + (u["gegenpartei"] or "")).lower()
+    """Ersten passenden aktiven Regelvorschlag liefern."""
+    haystack = _regel_haystack(u)
     for r in regeln:
         if r["bankkonto_id"] is not None and r["bankkonto_id"] != u["bankkonto_id"]:
             continue
-        if r["bedingung_text"] and r["bedingung_text"].lower() not in haystack:
+        if not r["bedingung_text"] or _normalisiere_regeltext(r["bedingung_text"]) not in haystack:
             continue
         betrag = abs(u["betrag_cent"])
         if r["bedingung_betrag_von_cent"] is not None and betrag < r["bedingung_betrag_von_cent"]:
@@ -399,21 +468,52 @@ def _vorschlag_fuer_umsatz(con, u: dict, regeln) -> Optional[dict]:
         sparte_id = r["ziel_sparte_id"] or r["kat_sparte_id"]
         if not sparte_id or not r["ziel_kategorie_id"]:
             continue
-        return {"sparte_id": sparte_id, "kategorie_id": r["ziel_kategorie_id"],
-                "quelle": "regel", "regel_name": r["name"]}
-    # Verlauf: juengste uebernommene Buchung mit gleicher Gegenpartei
-    if u["gegenpartei"]:
-        row = con.execute(
-            "SELECT b.sparte_id, z.kategorie_id FROM buchung b "
-            "JOIN buchungszeile z ON z.buchung_id = b.id "
-            "JOIN bankumsatz bu ON bu.id = b.bankumsatz_id "
-            "WHERE bu.gegenpartei = ? ORDER BY b.datum DESC, b.id DESC LIMIT 1",
-            (u["gegenpartei"],),
-        ).fetchone()
-        if row:
-            return {"sparte_id": row["sparte_id"], "kategorie_id": row["kategorie_id"],
-                    "quelle": "verlauf", "regel_name": None}
+        return {
+            "sparte_id": sparte_id,
+            "kategorie_id": r["ziel_kategorie_id"],
+            "typ": r["ziel_typ"] or ("ausgabe" if u["betrag_cent"] < 0 else "einnahme"),
+            "regel_id": r["id"],
+            "regel_name": r["name"],
+        }
     return None
+
+
+@router.post("/bankumsaetze/vorschlaege-uebernehmen")
+def uebernehme_vorschlaege(
+    body: VorschlaegeUebernehmenIn,
+    con: sqlite3.Connection = Depends(db_dep),
+):
+    verbucht = 0
+    uebersprungen = 0
+    for umsatz_id in body.umsatz_ids:
+        umsatz = con.execute(
+            "SELECT * FROM bankumsatz WHERE id = ? AND importstatus = 'offen'",
+            (umsatz_id,),
+        ).fetchone()
+        if not umsatz:
+            uebersprungen += 1
+            continue
+        vorschlag = _vorschlag_fuer_umsatz(
+            con, dict(umsatz), _aktive_regeln(con),
+        )
+        if not vorschlag:
+            uebersprungen += 1
+            continue
+        try:
+            verbuche_umsatz(
+                umsatz_id,
+                UmsatzVerbuchenIn(
+                    sparte_id=vorschlag["sparte_id"],
+                    kategorie_id=vorschlag["kategorie_id"],
+                    typ=vorschlag["typ"],
+                ),
+                con,
+            )
+            verbucht += 1
+        except (HTTPException, sqlite3.Error):
+            con.rollback()
+            uebersprungen += 1
+    return {"verbucht": verbucht, "uebersprungen": uebersprungen}
 
 
 # ---------------------------------------------------------------------------
@@ -437,7 +537,7 @@ def verbuche_umsatz(umsatz_id: int, body: UmsatzVerbuchenIn,
     if krow["sparte_id"] != body.sparte_id:
         raise HTTPException(400, "Kategorie gehoert nicht zur gewaehlten Sparte")
 
-    typ = "ausgabe" if u["betrag_cent"] < 0 else "einnahme"
+    typ = body.typ or ("ausgabe" if u["betrag_cent"] < 0 else "einnahme")
     betrag = abs(u["betrag_cent"])
     if betrag == 0:
         raise HTTPException(400, "Umsatz mit Betrag 0 kann nicht verbucht werden")
@@ -461,21 +561,25 @@ def verbuche_umsatz(umsatz_id: int, body: UmsatzVerbuchenIn,
             (umsatz_id,),
         )
         regel_angelegt = False
-        if body.regel_merken:
-            muster = (u["gegenpartei"] or (u["text"] or "")[:40]).strip()
-            if muster:
-                # Nur anlegen, wenn es noch keine gleichlautende Regel gibt.
-                if not con.execute(
-                        "SELECT 1 FROM regel WHERE bedingung_text = ? "
-                        "AND ziel_kategorie_id = ? AND aktiv = 1",
-                        (muster, body.kategorie_id)).fetchone():
-                    con.execute(
-                        "INSERT INTO regel(name, bedingung_text, ziel_sparte_id, "
-                        "ziel_kategorie_id, ziel_typ) VALUES(?,?,?,?,?)",
-                        (f"Auto: {muster}", muster, body.sparte_id,
-                         body.kategorie_id, typ),
-                    )
-                    regel_angelegt = True
+        muster = _regel_text(u)
+        if muster:
+            vorhanden = con.execute(
+                "SELECT id FROM regel WHERE LOWER(bedingung_text) = ? ORDER BY id LIMIT 1",
+                (muster,),
+            ).fetchone()
+            if vorhanden:
+                con.execute(
+                    "UPDATE regel SET name = ?, aktiv = 1, ziel_sparte_id = ?, "
+                    "ziel_kategorie_id = ?, ziel_typ = ? WHERE id = ?",
+                    (muster, body.sparte_id, body.kategorie_id, typ, vorhanden["id"]),
+                )
+            else:
+                con.execute(
+                    "INSERT INTO regel(name, bedingung_text, ziel_sparte_id, "
+                    "ziel_kategorie_id, ziel_typ) VALUES(?,?,?,?,?)",
+                    (muster, muster, body.sparte_id, body.kategorie_id, typ),
+                )
+                regel_angelegt = True
         con.commit()
     except sqlite3.IntegrityError as e:
         con.rollback()

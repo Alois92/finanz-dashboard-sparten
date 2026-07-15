@@ -305,6 +305,19 @@
             </form>
           </div>
         </div>
+
+        <div class="card">
+          <div class="card-head"><h2>Regeln</h2></div>
+          <p class="hint">Regeln entstehen automatisch beim Zuordnen von Bankums&auml;tzen und machen nur Vorschl&auml;ge.</p>
+          <p class="hint" id="regeln-leer" hidden>Noch keine Regeln.</p>
+          <div class="table-wrap"><table id="tbl-regeln">
+            <thead><tr><th>Bedingung</th><th>Ziel</th><th>Typ</th><th>Aktiv</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table></div>
+          <div class="form-foot">
+            <span class="msg" id="regeln-msg"></span>
+          </div>
+        </div>
       </section>
 
       <!-- ============ Belege ============ -->
@@ -379,6 +392,10 @@
           </div>
           <p class="hint">Offene Umsätze mit „Übernehmen“ als Buchung erfassen — Vorschläge kommen aus deinen Merkregeln.</p>
           <p class="hint" id="umsaetze-leer" hidden>Keine Umsätze.</p>
+          <div class="form-foot">
+            <button type="button" class="btn accent" id="vorschlaege-alle" disabled>Alle Vorschl&auml;ge &uuml;bernehmen</button>
+            <span class="msg" id="vorschlaege-msg"></span>
+          </div>
           <div class="table-wrap"><table id="tbl-umsaetze">
             <thead><tr><th>Datum</th><th>Text</th><th>Gegenpartei</th><th class="num">Betrag</th><th>Status</th><th></th></tr></thead>
             <tbody></tbody></table></div>

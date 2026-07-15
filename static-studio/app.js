@@ -877,6 +877,7 @@ async function ladeKategorienTabelle() {
     || `<tr><td colspan="3" class="hint">Noch keine Kategorien.</td></tr>`;
   $("#k-parent").innerHTML = '<option value="">– keine –</option>' +
     kats.map((k) => `<option value="${k.id}">${escapeHtml(k.name)}</option>`).join("");
+  ladeRegeln();
 }
 $("#k-sparte").addEventListener("change", ladeKategorienTabelle);
 $("#form-kategorie").addEventListener("submit", async (e) => {
@@ -938,6 +939,58 @@ $("#form-globalgruppe").addEventListener("submit", async (e) => {
     msg.className = "msg ok"; msg.textContent = "Gruppe gespeichert."; resetGruppenForm(); await ladeGlobalgruppen();
   } catch (err) { msg.className = "msg err"; msg.textContent = "Fehler: " + err.message; }
 });
+
+async function ladeRegeln() {
+  const tbody = $("#tbl-regeln tbody");
+  let regeln;
+  try {
+    regeln = await api("/regeln");
+    await Promise.all([...new Set(regeln.map((r) => r.ziel_sparte_id).filter(Boolean))]
+      .map((id) => ladeKategorien(id)));
+  } catch (err) {
+    tbody.innerHTML = "";
+    $("#regeln-leer").hidden = false;
+    $("#regeln-msg").className = "msg err";
+    $("#regeln-msg").textContent = "Fehler: " + err.message;
+    return;
+  }
+  $("#regeln-leer").hidden = regeln.length > 0;
+  tbody.innerHTML = regeln.map((r) => {
+    const kats = kategorienCache[r.ziel_sparte_id] || [];
+    const kat = kats.find((k) => String(k.id) === String(r.ziel_kategorie_id));
+    const ziel = [sparteName(r.ziel_sparte_id), kat ? kat.name : ("#" + r.ziel_kategorie_id)]
+      .filter(Boolean).join(" / ");
+    return `<tr>
+      <td>${escapeHtml(r.bedingung_text || r.name)}</td>
+      <td>${escapeHtml(ziel)}</td>
+      <td><span class="badge ${escapeHtml(r.ziel_typ || "")}">${escapeHtml(r.ziel_typ || "")}</span></td>
+      <td><input type="checkbox" data-regel-aktiv="${r.id}" ${r.aktiv ? "checked" : ""} aria-label="Regel aktiv"></td>
+      <td><button type="button" class="link" data-regel-loeschen="${r.id}">loeschen</button></td>
+    </tr>`;
+  }).join("");
+  $$("[data-regel-aktiv]").forEach((cb) => cb.addEventListener("change", async () => {
+    try {
+      await api("/regeln/" + cb.dataset.regelAktiv, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ aktiv: cb.checked ? 1 : 0 }),
+      });
+    } catch (err) {
+      cb.checked = !cb.checked;
+      $("#regeln-msg").className = "msg err";
+      $("#regeln-msg").textContent = "Fehler: " + err.message;
+    }
+  }));
+  $$("[data-regel-loeschen]").forEach((btn) => btn.addEventListener("click", async () => {
+    if (!confirm("Regel wirklich loeschen?")) return;
+    try {
+      await api("/regeln/" + btn.dataset.regelLoeschen, { method: "DELETE" });
+      ladeRegeln();
+    } catch (err) {
+      $("#regeln-msg").className = "msg err";
+      $("#regeln-msg").textContent = "Fehler: " + err.message;
+    }
+  }));
+}
 // ===========================================================================
 // Belege
 // ===========================================================================
@@ -1063,6 +1116,7 @@ $("#form-import").addEventListener("submit", async (e) => {
 });
 let umsaetzeCache = [];
 async function ladeUmsaetze() {
+
   const kontoId = $("#umsatz-konto").value;
   const tbody = $("#tbl-umsaetze tbody");
   if (!kontoId) { tbody.innerHTML = ""; $("#umsaetze-leer").hidden = false; return; }
@@ -1083,6 +1137,8 @@ async function ladeUmsaetze() {
     const neg = (u.betrag_cent || 0) < 0;
     const st = u.importstatus || "offen";
     let aktionen = "";
+    const vorschlagBadge = u.vorschlag
+      ? `<div><span class="badge einnahme">Vorschlag: ${escapeHtml(u.vorschlag.regel_name)}</span></div>` : "";
     if (st === "offen") {
       aktionen = `<button class="link" data-uebernehmen="${u.id}">Übernehmen</button>
         <button class="link" data-ignorieren="${u.id}">ignorieren</button>`;
@@ -1091,13 +1147,15 @@ async function ladeUmsaetze() {
     }
     return `<tr data-uid="${u.id}">
       <td>${escapeHtml(u.datum || "")}</td>
-      <td>${escapeHtml(u.text || "")}</td>
+      <td>${escapeHtml(u.text || "")}${vorschlagBadge}</td>
       <td>${escapeHtml(u.gegenpartei || "")}</td>
       <td class="num ${neg ? "neg" : "pos"}">${centToEuro(u.betrag_cent || 0)}</td>
       <td><span class="badge ${escapeHtml(st)}">${escapeHtml(st)}</span></td>
       <td class="row-actions">${aktionen}</td>
     </tr>`;
   }).join("");
+  const vorschlagIds = rows.filter((u) => u.importstatus === "offen" && u.vorschlag).map((u) => u.id);
+  $("#vorschlaege-alle").disabled = vorschlagIds.length === 0;
   $$("#tbl-umsaetze [data-uebernehmen]").forEach((b) => b.addEventListener("click", () =>
     oeffneUmsatzEditor(parseInt(b.dataset.uebernehmen, 10))));
   $$("#tbl-umsaetze [data-ignorieren]").forEach((b) => b.addEventListener("click", () =>
@@ -1105,6 +1163,28 @@ async function ladeUmsaetze() {
   $$("#tbl-umsaetze [data-oeffnen]").forEach((b) => b.addEventListener("click", () =>
     setzeUmsatzStatus(parseInt(b.dataset.oeffnen, 10), "offen")));
 }
+$("#vorschlaege-alle").addEventListener("click", async () => {
+  const ids = umsaetzeCache
+    .filter((u) => u.importstatus === "offen" && u.vorschlag)
+    .map((u) => u.id);
+  if (!ids.length) return;
+  const btn = $("#vorschlaege-alle");
+  const msg = $("#vorschlaege-msg");
+  btn.disabled = true;
+  try {
+    const res = await api("/bankumsaetze/vorschlaege-uebernehmen", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ umsatz_ids: ids }),
+    });
+    msg.className = "msg ok";
+    msg.textContent = `${res.verbucht} verbucht, ${res.uebersprungen} uebersprungen.`;
+    await ladeUmsaetze();
+  } catch (err) {
+    msg.className = "msg err";
+    msg.textContent = "Fehler: " + err.message;
+    btn.disabled = false;
+  }
+});
 $("#umsatz-status").addEventListener("change", ladeUmsaetze);
 
 async function setzeUmsatzStatus(id, status) {
@@ -1127,7 +1207,7 @@ async function oeffneUmsatzEditor(id) {
   // Nur ein Editor gleichzeitig
   $$("#tbl-umsaetze .umsatz-editor").forEach((tr) => tr.remove());
   const zeile = $(`#tbl-umsaetze tr[data-uid="${id}"]`);
-  const typ = (u.betrag_cent || 0) < 0 ? "ausgabe" : "einnahme";
+  const defaultTyp = (u.betrag_cent || 0) < 0 ? "ausgabe" : "einnahme";
   const v = u.vorschlag || null;
   const spartenOpts = sparten.map((s) =>
     `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join("");
@@ -1135,10 +1215,13 @@ async function oeffneUmsatzEditor(id) {
   tr.className = "umsatz-editor";
   tr.innerHTML = `<td colspan="6">
     <div class="ue-form">
-      <span class="badge ${typ}">${typ}</span>
+      <label>Typ <select class="ue-typ">
+        <option value="ausgabe">Ausgabe</option>
+        <option value="einnahme">Einnahme</option>
+        <option value="umbuchung">Umbuchung</option>
+      </select></label>
       <label>Sparte <select class="ue-sparte">${spartenOpts}</select></label>
       <label>Kategorie <select class="ue-kat"></select></label>
-      <label class="ue-check"><input type="checkbox" class="ue-regel"> Regel merken</label>
       <button type="button" class="btn accent ue-save">Verbuchen</button>
       <button type="button" class="btn ghost ue-cancel">Abbrechen</button>
       <span class="hint ue-hint"></span>
@@ -1147,20 +1230,26 @@ async function oeffneUmsatzEditor(id) {
   zeile.after(tr);
 
   const selSparte = tr.querySelector(".ue-sparte");
+  const selTyp = tr.querySelector(".ue-typ");
   const selKat = tr.querySelector(".ue-kat");
   const hint = tr.querySelector(".ue-hint");
   async function fuelleKats() {
     const kats = await ladeKategorien(selSparte.value);
-    const passend = kats.filter((k) => k.richtung === typ || k.richtung === "beides");
+    const passend = kats.filter((k) => k.richtung === selTyp.value || k.richtung === "beides");
     selKat.innerHTML = passend.map((k) =>
       `<option value="${k.id}">${escapeHtml(k.name)}</option>`).join("")
       || `<option value="">– keine passende Kategorie –</option>`;
   }
   selSparte.addEventListener("change", fuelleKats);
   if (v) {
+  selTyp.addEventListener("change", fuelleKats);
     selSparte.value = String(v.sparte_id);
     hint.textContent = v.quelle === "regel"
       ? `Vorschlag aus Regel „${v.regel_name}“` : "Vorschlag aus früheren Buchungen";
+    selTyp.value = v.typ || defaultTyp;
+    hint.textContent = "Vorschlag: " + v.regel_name;
+  } else {
+    selTyp.value = defaultTyp;
   }
   await fuelleKats();
   if (v && [...selKat.options].some((o) => o.value === String(v.kategorie_id))) {
@@ -1175,13 +1264,14 @@ async function oeffneUmsatzEditor(id) {
         body: JSON.stringify({
           sparte_id: parseInt(selSparte.value, 10),
           kategorie_id: parseInt(selKat.value, 10),
-          regel_merken: tr.querySelector(".ue-regel").checked,
+          typ: selTyp.value,
         }),
       });
       $("#import-msg").className = "msg ok";
       $("#import-msg").textContent = `Verbucht: ${centToEuro(res.betrag_cent)} (${res.typ})`
         + (res.regel_angelegt ? " — Regel gemerkt." : ".");
       ladeUmsaetze();
+      $("#import-msg").textContent = `Verbucht: ${centToEuro(res.betrag_cent)} (${res.typ}).`;
     } catch (err) {
       hint.textContent = "Fehler: " + err.message;
     }
