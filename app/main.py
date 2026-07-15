@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .db import init_db
 from .routers import (belege, buchungen, dashboard, import_bank,
-                      schnellerfassung, stammdaten)
+                      import_excel, schnellerfassung, stammdaten)
 
 STATIC_DIR = pathlib.Path(__file__).resolve().parent.parent / "static"
 COCKPIT_DIR = pathlib.Path(__file__).resolve().parent.parent / "static-cockpit"
@@ -28,6 +28,7 @@ app.include_router(dashboard.router, prefix="/api")
 app.include_router(schnellerfassung.router, prefix="/api")
 app.include_router(belege.router, prefix="/api")
 app.include_router(import_bank.router, prefix="/api")
+app.include_router(import_excel.router, prefix="/api")
 
 
 @app.get("/api/health")

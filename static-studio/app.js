@@ -872,6 +872,141 @@ async function oeffneUmsatzEditor(id) {
 }
 
 // ===========================================================================
+// Excel-Import (Altdaten-Migration)
+// ===========================================================================
+// Jede Datei wird zuerst mit modus=pruefen hochgeladen (aendert nichts) und
+// erst nach Klick mit modus=einspielen wirklich uebernommen.
+let xlDateien = [];   // {file, status: 'prueft'|'geprueft'|'eingespielt'|'fehler', bericht|fehler}
+
+const xlDrop = $("#xl-drop");
+const xlInput = $("#xl-datei");
+xlDrop.addEventListener("click", () => xlInput.click());
+xlDrop.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" || e.key === " ") { e.preventDefault(); xlInput.click(); }
+});
+["dragover", "dragenter"].forEach((ev) => xlDrop.addEventListener(ev, (e) => {
+  e.preventDefault(); xlDrop.classList.add("drag");
+}));
+["dragleave", "drop"].forEach((ev) => xlDrop.addEventListener(ev, (e) => {
+  e.preventDefault(); xlDrop.classList.remove("drag");
+}));
+xlDrop.addEventListener("drop", (e) => xlNimmDateien(e.dataTransfer.files));
+xlInput.addEventListener("change", () => { xlNimmDateien(xlInput.files); xlInput.value = ""; });
+
+function xlNimmDateien(fileList) {
+  const passend = Array.from(fileList || []).filter((f) => /\.(xls|xlsx|xlsm)$/i.test(f.name));
+  if (!passend.length) {
+    $("#xl-msg").className = "msg err";
+    $("#xl-msg").textContent = "Keine Excel-Dateien (.xls/.xlsx) dabei.";
+    $("#xl-alle-wrap").hidden = false;
+    return;
+  }
+  passend.forEach((f) => {
+    const eintrag = { file: f, status: "prueft", bericht: null, fehler: null };
+    xlDateien.push(eintrag);
+    xlPruefe(eintrag);
+  });
+  xlRender();
+}
+
+async function xlUpload(eintrag, modus) {
+  const fd = new FormData();
+  fd.append("datei", eintrag.file);
+  fd.append("sparte_id", $("#xl-sparte").value);
+  fd.append("modus", modus);
+  return api("/import/excel", { method: "POST", body: fd });
+}
+
+async function xlPruefe(eintrag) {
+  eintrag.status = "prueft"; eintrag.fehler = null;
+  try {
+    eintrag.bericht = await xlUpload(eintrag, "pruefen");
+    eintrag.status = "geprueft";
+  } catch (err) {
+    eintrag.status = "fehler";
+    eintrag.fehler = err.message;
+  }
+  xlRender();
+}
+
+async function xlSpieleEin(eintrag) {
+  eintrag.status = "prueft";
+  xlRender();
+  try {
+    eintrag.bericht = await xlUpload(eintrag, "einspielen");
+    eintrag.status = "eingespielt";
+  } catch (err) {
+    eintrag.status = "fehler";
+    eintrag.fehler = err.message;
+  }
+  xlRender();
+}
+
+function xlRender() {
+  const el = $("#xl-liste");
+  el.innerHTML = xlDateien.map((d, i) => {
+    const b = d.bericht;
+    let inhalt = "";
+    if (d.status === "prueft") {
+      inhalt = `<span class="hint">Wird verarbeitet …</span>`;
+    } else if (d.status === "fehler") {
+      inhalt = `<span class="msg err">Fehler: ${escapeHtml(d.fehler)}</span>
+        <button class="link" data-xl-retry="${i}">nochmal prüfen</button>`;
+    } else if (b) {
+      const teile = [
+        `<strong>${b.buchungen_neu}</strong> Buchungen`,
+        b.zeitraum ? `${escapeHtml(b.zeitraum.von)} bis ${escapeHtml(b.zeitraum.bis)}` : null,
+        `${b.monate_mit_daten} Monatsblätter`,
+        `Einnahmen ${centToEuro(b.einnahmen_cent)}`,
+        `Ausgaben ${centToEuro(b.ausgaben_cent)}`,
+        b.duplikate ? `${b.duplikate} Duplikate übersprungen` : null,
+      ].filter(Boolean).join(" · ");
+      const neueKat = b.neue_kategorien.length
+        ? `<div class="hint">Neue Kategorien: ${b.neue_kategorien.map(escapeHtml).join(", ")}</div>` : "";
+      const warn = b.warnungen.length
+        ? `<details class="xl-warn"><summary>${b.warnungen.length} Hinweise</summary>
+           <ul>${b.warnungen.map((w) => `<li>${escapeHtml(w)}</li>`).join("")}</ul></details>` : "";
+      const aktion = d.status === "eingespielt"
+        ? `<span class="badge einnahme">eingespielt: ${b.eingespielt} Buchungen</span>`
+        : (b.buchungen_neu > 0
+          ? `<button class="btn accent xl-btn" data-xl-import="${i}">Einspielen</button>`
+          : `<span class="badge umbuchung">nichts Neues</span>`);
+      inhalt = `<div class="xl-zeile1">${teile}</div>${neueKat}${warn}
+        <div class="xl-aktion">${aktion}</div>`;
+    }
+    return `<div class="xl-file ${d.status}">
+      <div class="xl-name">🗎 ${escapeHtml(d.file.name)}</div>${inhalt}</div>`;
+  }).join("");
+  $$("#xl-liste [data-xl-import]").forEach((btn) => btn.addEventListener("click", () =>
+    xlSpieleEin(xlDateien[parseInt(btn.dataset.xlImport, 10)])));
+  $$("#xl-liste [data-xl-retry]").forEach((btn) => btn.addEventListener("click", () =>
+    xlPruefe(xlDateien[parseInt(btn.dataset.xlRetry, 10)])));
+  const bereit = xlDateien.filter((d) => d.status === "geprueft" && d.bericht
+    && d.bericht.buchungen_neu > 0);
+  $("#xl-alle-wrap").hidden = bereit.length < 2 && !$("#xl-msg").textContent;
+  $("#xl-alle").hidden = bereit.length < 2;
+}
+
+$("#xl-alle").addEventListener("click", async () => {
+  const bereit = xlDateien.filter((d) => d.status === "geprueft" && d.bericht
+    && d.bericht.buchungen_neu > 0);
+  for (const d of bereit) {
+    await xlSpieleEin(d);
+  }
+  const gesamt = xlDateien.reduce((a, d) =>
+    a + (d.status === "eingespielt" ? (d.bericht.eingespielt || 0) : 0), 0);
+  $("#xl-msg").className = "msg ok";
+  $("#xl-msg").textContent = `Fertig — ${gesamt} Buchungen eingespielt.`;
+  $("#xl-alle-wrap").hidden = false;
+});
+
+// Sparte gewechselt: bereits eingespielte Dateien bleiben stehen,
+// geprüfte werden fuer die neue Sparte erneut geprueft.
+$("#xl-sparte") && $("#xl-sparte").addEventListener("change", () => {
+  xlDateien.filter((d) => d.status !== "eingespielt").forEach((d) => xlPruefe(d));
+});
+
+// ===========================================================================
 // Init
 // ===========================================================================
 async function init() {
@@ -881,6 +1016,7 @@ async function init() {
   const optionen = sparten.map(opt).join("");
   $("#b-sparte").innerHTML = optionen;
   $("#k-sparte").innerHTML = optionen;
+  $("#xl-sparte").innerHTML = optionen;
   $("#beleg-sparte").insertAdjacentHTML("beforeend", optionen);
   $("#beleg-filter-sparte").insertAdjacentHTML("beforeend", optionen);
   $("#konto-sparte").insertAdjacentHTML("beforeend", optionen);

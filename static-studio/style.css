@@ -292,6 +292,33 @@ input[type="file"] { padding: 7px; background: transparent; }
 .badge.verbucht { background: color-mix(in srgb, var(--ein) 16%, transparent); color: var(--ein); }
 .badge.ignoriert { background: var(--panel-2); color: var(--muted); }
 
+/* Excel-Import: Dropzone + Datei-Berichte */
+.dropzone {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  border: 2px dashed var(--border); border-radius: var(--radius);
+  padding: 34px 20px; margin: 14px 0; cursor: pointer; text-align: center;
+  color: var(--muted); transition: border-color .15s, background .15s;
+}
+.dropzone:hover, .dropzone.drag {
+  border-color: var(--accent); background: var(--accent-soft); color: var(--text);
+}
+.dropzone .dz-ico { font-size: 1.8rem; line-height: 1; color: var(--accent); }
+.xl-file {
+  border: 1px solid var(--border); border-left: 3px solid var(--muted);
+  border-radius: 10px; padding: 12px 14px; margin-top: 10px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.xl-file.geprueft { border-left-color: var(--accent); }
+.xl-file.eingespielt { border-left-color: var(--ein); }
+.xl-file.fehler { border-left-color: var(--aus); }
+.xl-name { font-weight: 600; }
+.xl-zeile1 { font-size: .88rem; }
+.xl-zeile1 strong { font-family: var(--font-num); }
+.xl-aktion { margin-top: 2px; }
+.xl-btn { min-height: 38px; padding: 7px 16px; }
+.xl-warn summary { cursor: pointer; color: var(--muted); font-size: .82rem; }
+.xl-warn ul { margin: 6px 0 0; padding-left: 18px; font-size: .8rem; color: var(--muted); }
+
 /* ==========================================================================
    Mobil (< 900 px): Bottom-Navigation, Vollbreite, Sidebar aus
    ========================================================================== */

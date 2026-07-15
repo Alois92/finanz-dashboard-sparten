@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Hohenegg Finanzstudio</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231E6E4E'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-family='sans-serif' font-weight='700' font-size='17' fill='white'%3EH%3C/text%3E%3C/svg%3E">
-  <link rel="stylesheet" href="/studio/style.css?v=2">
+  <link rel="stylesheet" href="/studio/style.css?v=3">
   <script>
     // Theme so frueh wie moeglich setzen, damit nichts aufblitzt.
     (function () {
@@ -33,6 +33,7 @@
       <button class="nav-item" data-page="kategorien"><span class="nav-ico" aria-hidden="true">⌘</span>Kategorien</button>
       <button class="nav-item" data-page="belege"><span class="nav-ico" aria-hidden="true">🗎</span>Belege</button>
       <button class="nav-item" data-page="bankimport"><span class="nav-ico" aria-hidden="true">⇄</span>Bankimport</button>
+      <button class="nav-item" data-page="excelimport"><span class="nav-ico" aria-hidden="true">⇪</span>Excel-Import</button>
     </nav>
     <button id="theme-toggle" class="theme-toggle" type="button" title="Hell/Dunkel umschalten">
       <span class="theme-icon" aria-hidden="true">🌙</span><span class="theme-label">Ansicht</span>
@@ -312,6 +313,31 @@
         </div>
       </section>
 
+      <!-- ============ Excel-Import (Altdaten) ============ -->
+      <section class="page" id="page-excelimport">
+        <div class="card">
+          <div class="card-head">
+            <h2>Alte Excel-Kassabücher einspielen</h2>
+            <label class="inline">Sparte <select id="xl-sparte"></select></label>
+          </div>
+          <p class="hint">Eine Datei je Jahr (.xls oder .xlsx, Aufbau wie dein Kassabuch-Muster).
+            Zuerst wähle die Sparte, dann zieh die Dateien in das Feld — es passiert noch nichts:
+            Du bekommst erst einen Prüfbericht und spielst dann per Knopf ein.</p>
+          <div class="dropzone" id="xl-drop" role="button" tabindex="0"
+               aria-label="Excel-Dateien auswählen oder hierher ziehen">
+            <span class="dz-ico" aria-hidden="true">⇪</span>
+            <strong>Dateien hierher ziehen</strong>
+            <span class="hint">oder klicken zum Auswählen — mehrere auf einmal möglich</span>
+          </div>
+          <input type="file" id="xl-datei" multiple accept=".xls,.xlsx,.xlsm" hidden>
+          <div id="xl-liste"></div>
+          <div class="form-foot" id="xl-alle-wrap" hidden>
+            <button class="btn accent" id="xl-alle" type="button">Alle geprüften Dateien einspielen</button>
+            <span class="msg" id="xl-msg"></span>
+          </div>
+        </div>
+      </section>
+
     </main>
   </div>
 </div>
@@ -329,11 +355,12 @@
     <button class="sheet-item" data-page="kategorien">Kategorien</button>
     <button class="sheet-item" data-page="belege">Belege</button>
     <button class="sheet-item" data-page="bankimport">Bankimport</button>
+    <button class="sheet-item" data-page="excelimport">Excel-Import</button>
     <button class="sheet-item sheet-close" id="mehr-close">Schließen</button>
   </div>
 </div>
 
-<script src="/studio/charts.js?v=2"></script>
-<script src="/studio/app.js?v=2"></script>
+<script src="/studio/charts.js?v=3"></script>
+<script src="/studio/app.js?v=3"></script>
 </body>
 </html>
