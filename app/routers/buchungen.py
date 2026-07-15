@@ -1,5 +1,6 @@
 """Buchungen: erfassen (Kopf + Zeilen), auflisten, bearbeiten, loeschen.
 Dazu Umbuchungen zwischen Sparten (zwei gekoppelte Buchungen)."""
+import re
 import sqlite3
 import uuid
 
@@ -67,7 +68,20 @@ def list_buchungen(sparte_id: int | None = None,
                    von: str | None = None,
                    bis: str | None = None,
                    typ: str | None = None,
+                   monat: str | None = None,
+                   kategorie_id: int | None = None,
+                   globalgruppe_id: int | None = None,
                    con: sqlite3.Connection = Depends(db_dep)):
+    if monat is not None and not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", monat):
+        raise HTTPException(400, "Monat muss das Format JJJJ-MM haben")
+    if kategorie_id is not None and not con.execute(
+        "SELECT 1 FROM kategorie WHERE id = ?", (kategorie_id,)
+    ).fetchone():
+        raise HTTPException(404, "Kategorie nicht gefunden")
+    if globalgruppe_id is not None and not con.execute(
+        "SELECT 1 FROM globale_kategoriegruppe WHERE id = ?", (globalgruppe_id,)
+    ).fetchone():
+        raise HTTPException(404, "Gruppe nicht gefunden")
     sql = ("SELECT b.id, b.sparte_id, s.name AS sparte_name, b.datum, b.typ, "
            "b.betrag_cent, b.zahlungsart, b.belegstatus, b.buchungsstatus, "
            "b.text, b.notiz, b.transfer_gruppe_id "
@@ -79,6 +93,17 @@ def list_buchungen(sparte_id: int | None = None,
         sql += " AND b.datum >= ?"; params.append(von)
     if bis:
         sql += " AND b.datum <= ?"; params.append(bis)
+    if monat:
+        sql += " AND strftime('%Y-%m', b.datum) = ?"; params.append(monat)
+    if kategorie_id is not None:
+        sql += (" AND EXISTS (SELECT 1 FROM buchungszeile fz "
+                "WHERE fz.buchung_id = b.id AND fz.kategorie_id = ?)")
+        params.append(kategorie_id)
+    if globalgruppe_id is not None:
+        sql += (" AND EXISTS (SELECT 1 FROM buchungszeile gz "
+                "JOIN kategorie_globalgruppe kg ON kg.kategorie_id = gz.kategorie_id "
+                "WHERE gz.buchung_id = b.id AND kg.globalgruppe_id = ?)")
+        params.append(globalgruppe_id)
     if typ:
         sql += " AND b.typ = ?"; params.append(typ)
     sql += " ORDER BY b.datum DESC, b.id DESC"
@@ -164,6 +189,7 @@ def create_umbuchung(u: UmbuchungIn, con: sqlite3.Connection = Depends(db_dep)):
 @router.put("/buchungen/{buchung_id}")
 def update_buchung(buchung_id: int, b: BuchungIn,
                    con: sqlite3.Connection = Depends(db_dep)):
+
     """Buchung ueberschreiben: Kopf-Felder aktualisieren, Zeilen ersetzen.
 
     Verknuepfungen, die nicht im Formular stehen (bankumsatz_id, Belegstatus,

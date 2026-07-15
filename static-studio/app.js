@@ -47,6 +47,7 @@ let sparten = [];
 let bankkonten = null;
 let kategorienCache = {};
 let buchungenCache = [];
+let drilldownBuchungen = [];
 let editId = null;         // Buchung im Bearbeiten-Modus (null = neu anlegen)
 let periode = "alles";     // jahr | vorjahr | 12m | alles
 let spCur = "";            // Sparten-Filter ("" = alle)
@@ -240,6 +241,15 @@ async function ladeUebersicht() {
       ],
       line: { name: "Saldo", color: "var(--saldo)", values: monate.map((m) => m.saldo_cent) },
       empty: "Noch keine Buchungen — leg unter „Erfassen“ los.",
+      onBarClick: (label, seriesName) => {
+        const eintrag = monate.find((m) => monatLabel(m.monat) === label);
+        if (!eintrag) return;
+        zeigeDrilldown({
+          monat: eintrag.monat,
+          typ: seriesName === "Einnahmen" ? "einnahme" : "ausgabe",
+          titel: `${seriesName} · ${label}`,
+        });
+      },
     });
   }
 
@@ -258,6 +268,8 @@ async function ladeUebersicht() {
       const key = r.kategorie + "|" + (r.sparte || "");
       return {
         label: r.kategorie,
+        kategorie_id: r.kategorie_id,
+        typ,
         sub: r.sparte ? (sparteKuerzelByName[r.sparte] || r.sparte) : "",
         color: colorForSparteName(r.sparte),
         value: r.betrag_cent,
@@ -265,8 +277,20 @@ async function ladeUebersicht() {
         gut,
       };
     });
-  Charts.rankList($("#rank-aus"), rank("ausgabe", false), { emptyText: "Keine Ausgaben im Zeitraum." });
-  Charts.rankList($("#rank-ein"), rank("einnahme", true), { emptyText: "Keine Einnahmen im Zeitraum." });
+  Charts.rankList($("#rank-aus"), rank("ausgabe", false), {
+    emptyText: "Keine Ausgaben im Zeitraum.",
+    onRowClick: (row) => zeigeDrilldown({
+      kategorie_id: row.kategorie_id, typ: row.typ,
+      titel: `${row.label} · Ausgaben`,
+    }),
+  });
+  Charts.rankList($("#rank-ein"), rank("einnahme", true), {
+    emptyText: "Keine Einnahmen im Zeitraum.",
+    onRowClick: (row) => zeigeDrilldown({
+      kategorie_id: row.kategorie_id, typ: row.typ,
+      titel: `${row.label} · Einnahmen`,
+    }),
+  });
 }
 
 // Veränderung je Kategorie: laufendes Jahr (aufs Gesamtjahr hochgerechnet)
@@ -399,6 +423,69 @@ async function ladeAuswertungen() {
   }
 }
 
+// ===========================================================================
+// Diagramm-Drilldown
+// ===========================================================================
+function schliesseDrilldown() {
+  $("#drilldown-modal").hidden = true;
+  document.body.classList.remove("drilldown-open");
+}
+
+async function zeigeDrilldown({ monat, kategorie_id, sparte_id, typ, titel }) {
+  const modal = $("#drilldown-modal");
+  const msg = $("#drilldown-msg");
+  const params = new URLSearchParams(filterQuery());
+  if (typeof globalgruppeCur !== "undefined" && globalgruppeCur) {
+    params.delete("sparte_id");
+    params.set("globalgruppe_id", globalgruppeCur);
+  }
+  if (monat) params.set("monat", monat);
+  if (kategorie_id) params.set("kategorie_id", kategorie_id);
+  if (sparte_id) params.set("sparte_id", sparte_id);
+  if (typ) params.set("typ", typ);
+
+  $("#drilldown-titel").textContent = titel || "Buchungen";
+  $("#tbl-drilldown tbody").innerHTML = "";
+  $("#drilldown-summe").textContent = centToEuro(0);
+  msg.textContent = "Buchungen werden geladen …";
+  modal.hidden = false;
+  document.body.classList.add("drilldown-open");
+
+  try {
+    drilldownBuchungen = await api("/buchungen?" + params.toString());
+    const tbody = $("#tbl-drilldown tbody");
+    tbody.innerHTML = drilldownBuchungen.map((b) => {
+      const kats = (b.zeilen || []).map((z) => escapeHtml(z.kategorie_name)).join(", ");
+      const bearbeiten = b.transfer_gruppe_id
+        ? "" : `<button type="button" class="link" data-drilldown-edit="${b.id}">Bearbeiten</button>`;
+      return `<tr><td>${escapeHtml(b.datum)}</td><td>${escapeHtml(b.text || "")}</td>`
+        + `<td>${kats}</td><td>${escapeHtml(b.sparte_name)}</td>`
+        + `<td class="num">${centToEuro(b.betrag_cent)}</td><td>${bearbeiten}</td></tr>`;
+    }).join("");
+    const summe = drilldownBuchungen.reduce((total, b) => total + b.betrag_cent, 0);
+    $("#drilldown-summe").textContent = centToEuro(summe);
+    msg.textContent = drilldownBuchungen.length
+      ? `${drilldownBuchungen.length} Buchung${drilldownBuchungen.length === 1 ? "" : "en"}`
+      : "Keine Buchungen für diese Auswahl.";
+    $$("#tbl-drilldown [data-drilldown-edit]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const buchung = drilldownBuchungen.find((b) => String(b.id) === button.dataset.drilldownEdit);
+        if (buchung) { schliesseDrilldown(); starteBearbeitung(buchung); }
+      });
+    });
+  } catch (err) {
+    drilldownBuchungen = [];
+    msg.textContent = "Buchungen konnten nicht geladen werden (" + err.message + ").";
+  }
+}
+
+$("#drilldown-close").addEventListener("click", schliesseDrilldown);
+$("#drilldown-modal").addEventListener("click", (event) => {
+  if (event.target.id === "drilldown-modal") schliesseDrilldown();
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !$("#drilldown-modal").hidden) schliesseDrilldown();
+});
 // ===========================================================================
 // Buchungen
 // ===========================================================================

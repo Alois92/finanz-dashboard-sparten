@@ -48,7 +48,8 @@ def dashboard(sparte_id: int | None = None,
     # sparte je Kategorie mitliefern (Studio nutzt sie fuer Farbe/Zuordnung;
     # gleichnamige Kategorien in verschiedenen Sparten bleiben unterscheidbar).
     per_kategorie = [dict(r) for r in con.execute(
-        "SELECT k.name AS kategorie, s.name AS sparte, v.typ, SUM(v.betrag_cent) AS betrag_cent "
+        "SELECT k.id AS kategorie_id, k.name AS kategorie, s.name AS sparte, "
+        "v.typ, SUM(v.betrag_cent) AS betrag_cent "
         "FROM v_einnahmen_ausgaben v JOIN kategorie k ON k.id = v.kategorie_id "
         "JOIN sparte s ON s.id = v.sparte_id" + where +
         " GROUP BY k.id, v.typ ORDER BY betrag_cent DESC",

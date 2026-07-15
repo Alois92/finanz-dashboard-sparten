@@ -52,7 +52,7 @@ const Charts = (() => {
   }
 
   /* ---- Balkengruppen + optionale Linie (Verlauf, Jahre) ------------------ */
-  function barGroup(el, { labels, series, line, empty: emptyText }) {
+  function barGroup(el, { labels, series, line, empty: emptyText, onBarClick }) {
     if (!labels || !labels.length) { empty(el, emptyText); return; }
     const W = 900, H = 300;
     const padL = 56, padR = 16, padT = 14, padB = 34;
@@ -83,7 +83,7 @@ const Charts = (() => {
         const v = Math.max(s.values[i] || 0, 0);
         const bx = cx - groupW / 2 + si * (barW + 3);
         const by = yOf(v);
-        out += `<rect x="${bx.toFixed(1)}" y="${by.toFixed(1)}" width="${barW.toFixed(1)}" height="${(padT + ih - by).toFixed(1)}" rx="3" fill="${s.color}"><title>${esc(lab)} · ${esc(s.name)}: ${euro(s.values[i] || 0)}</title></rect>`;
+        out += `<rect x="${bx.toFixed(1)}" y="${by.toFixed(1)}" width="${barW.toFixed(1)}" height="${(padT + ih - by).toFixed(1)}" rx="3" fill="${s.color}" data-bar-index="${i}" data-series-index="${si}" style="${onBarClick ? "cursor:pointer" : ""}"><title>${esc(lab)} · ${esc(s.name)}: ${euro(s.values[i] || 0)}</title></rect>`;
       });
       const step = Math.ceil(n / 16);
       if (i % step === 0) {
@@ -110,6 +110,18 @@ const Charts = (() => {
     });
     out += `</div>`;
     el.innerHTML = out;
+    el._chartsBarState = { labels, series, onBarClick };
+    if (!el._chartsBarClickBound) {
+      el.addEventListener("click", (event) => {
+        const bar = event.target.closest("rect[data-bar-index]");
+        const state = el._chartsBarState;
+        if (!bar || typeof state.onBarClick !== "function") return;
+        const barIndex = Number(bar.dataset.barIndex);
+        const seriesIndex = Number(bar.dataset.seriesIndex);
+        state.onBarClick(state.labels[barIndex], state.series[seriesIndex].name);
+      });
+      el._chartsBarClickBound = true;
+    }
   }
 
   /* ---- Schmetterling: Ausgaben links, Einnahmen rechts (Signatur) -------- */
@@ -138,10 +150,10 @@ const Charts = (() => {
   /* ---- Ranking mit Vorjahres-Delta --------------------------------------- */
   // rows: [{label, color, value, deltaPct|null, gut}] — gut=true: Anstieg ist
   // positiv zu werten (Einnahmen), sonst negativ (Ausgaben).
-  function rankList(el, rows, { emptyText } = {}) {
+  function rankList(el, rows, { emptyText, onRowClick } = {}) {
     if (!rows || !rows.length) { empty(el, emptyText); return; }
     const maxV = Math.max(...rows.map((r) => r.value), 1);
-    el.innerHTML = rows.map((r) => {
+    el.innerHTML = rows.map((r, rowIndex) => {
       let delta = `<span class="rank-delta none">–</span>`;
       if (r.deltaPct != null && isFinite(r.deltaPct)) {
         const up = r.deltaPct >= 0;
@@ -151,7 +163,7 @@ const Charts = (() => {
         delta = `<span class="rank-delta ${cls} ${moral}" title="Veränderung gegenüber Vorjahr">${arrow} ${Math.abs(r.deltaPct).toLocaleString("de-DE", { maximumFractionDigits: 0 })} %</span>`;
       }
       const sub = r.sub ? ` <span class="kat-sp">${esc(r.sub)}</span>` : "";
-      return `<div class="rank-row">
+      return `<div class="rank-row" data-row-index="${rowIndex}" style="${onRowClick ? "cursor:pointer" : ""}">
         <div class="rank-main">
           <div class="rank-label"><span class="dot" style="background:${r.color}"></span><span>${esc(r.label)}${sub}</span></div>
           <div class="rank-bar" style="width:${(r.value / maxV * 100).toFixed(1)}%;background:${r.color}"></div>
@@ -160,6 +172,16 @@ const Charts = (() => {
         ${delta}
       </div>`;
     }).join("");
+    el._chartsRankState = { rows, onRowClick };
+    if (!el._chartsRankClickBound) {
+      el.addEventListener("click", (event) => {
+        const target = event.target.closest(".rank-row[data-row-index]");
+        const state = el._chartsRankState;
+        if (!target || typeof state.onRowClick !== "function") return;
+        state.onRowClick(state.rows[Number(target.dataset.rowIndex)]);
+      });
+      el._chartsRankClickBound = true;
+    }
   }
 
   return { sparkline, barGroup, butterfly, rankList, empty };
