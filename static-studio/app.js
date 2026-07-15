@@ -775,6 +775,10 @@ async function ladeExport() {
       || "<option value=''>–</option>";
     sel.value = jahre.includes(vorher) ? vorher : (jahre[jahre.length - 1] || "");
   } catch (e) { /* Jahresliste optional */ }
+  if (sel.value && !$("#ex-von").value) {
+    $("#ex-von").value = sel.value + "-01-01";
+    $("#ex-bis").value = sel.value + "-12-31";
+  }
   await ladeExportListe();
 }
 
@@ -813,6 +817,45 @@ async function ladeExportListe() {
 }
 $("#ex-jahr").addEventListener("change", ladeExportListe);
 $("#ex-sparte").addEventListener("change", ladeExportListe);
+
+$("#ex-jahr").addEventListener("change", () => {
+  const jahr = $("#ex-jahr").value;
+  if (jahr) {
+    $("#ex-von").value = jahr + "-01-01";
+    $("#ex-bis").value = jahr + "-12-31";
+  }
+});
+
+function exPaketParams() {
+  const von = $("#ex-von").value;
+  const bis = $("#ex-bis").value;
+  if (!von || !bis || von > bis) {
+    const msg = $("#ex-msg");
+    msg.className = "msg err";
+    msg.textContent = "Bitte einen gueltigen Zeitraum waehlen.";
+    return null;
+  }
+  const params = new URLSearchParams({ von, bis });
+  if ($("#ex-sparte").value) params.set("sparte_id", $("#ex-sparte").value);
+  return params;
+}
+
+$("#ex-xlsx").addEventListener("click", () => {
+  const params = exPaketParams();
+  if (params) window.location.assign("/api/export/xlsx?" + params.toString());
+});
+
+$("#ex-bericht").addEventListener("click", () => {
+  const jahr = $("#ex-jahr").value;
+  if (!jahr) {
+    $("#ex-msg").className = "msg err";
+    $("#ex-msg").textContent = "Bitte ein Jahr waehlen.";
+    return;
+  }
+  const params = new URLSearchParams({ jahr });
+  if ($("#ex-sparte").value) params.set("sparte_id", $("#ex-sparte").value);
+  window.open("/export/bericht?" + params.toString(), "_blank", "noopener");
+});
 
 function exAusgewaehlte() {
   return exBuchungen.filter((b) => !exAbgewaehlt.has(b.id));

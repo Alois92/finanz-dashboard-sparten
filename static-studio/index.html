@@ -235,8 +235,16 @@
             <h2>Jahres-Export</h2>
             <div class="list-filter">
               <label class="inline">Jahr <select id="ex-jahr"></select></label>
+              <label class="inline">Von <input type="date" id="ex-von"></label>
+              <label class="inline">Bis <input type="date" id="ex-bis"></label>
               <label class="inline">Sparte <select id="ex-sparte"><option value="">Alle</option></select></label>
             </div>
+          </div>
+          <p class="hint">Excel-Arbeitsmappe mit Buchungen, Monatssummen und Kategorien
+            oder druckoptimierter Jahresbericht zum Speichern als PDF.</p>
+          <div class="form-foot">
+            <button type="button" class="btn accent" id="ex-xlsx">Excel-Export</button>
+            <button type="button" class="btn ghost" id="ex-bericht">Jahresbericht</button>
           </div>
           <p class="hint">Häkchen bestimmen, welche Buchungen in die Datei kommen — standardmäßig alle.
             Umbuchungen sind abwählbar enthalten. Die Datei (.csv) lässt sich direkt in Excel öffnen.</p>
