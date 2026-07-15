@@ -1,12 +1,25 @@
-"""Buchungen: erfassen (Kopf + Zeilen), auflisten, bearbeiten, loeschen."""
+"""Buchungen: erfassen (Kopf + Zeilen), auflisten, bearbeiten, loeschen.
+Dazu Umbuchungen zwischen Sparten (zwei gekoppelte Buchungen)."""
 import sqlite3
+import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 
 from ..db import db_dep
 from ..schemas import BuchungIn
 
 router = APIRouter(tags=["buchungen"])
+
+UMBUCHUNG_KATEGORIE = "Umbuchung"
+
+
+class UmbuchungIn(BaseModel):
+    von_sparte_id: int
+    nach_sparte_id: int
+    datum: str
+    betrag_cent: int = Field(gt=0)
+    text: str | None = None
 
 
 def _pruefe_sparte_und_zeilen(con: sqlite3.Connection, b: BuchungIn) -> None:
@@ -57,7 +70,7 @@ def list_buchungen(sparte_id: int | None = None,
                    con: sqlite3.Connection = Depends(db_dep)):
     sql = ("SELECT b.id, b.sparte_id, s.name AS sparte_name, b.datum, b.typ, "
            "b.betrag_cent, b.zahlungsart, b.belegstatus, b.buchungsstatus, "
-           "b.text, b.notiz "
+           "b.text, b.notiz, b.transfer_gruppe_id "
            "FROM buchung b JOIN sparte s ON s.id = b.sparte_id WHERE 1=1")
     params: list = []
     if sparte_id is not None:
@@ -84,9 +97,68 @@ def list_buchungen(sparte_id: int | None = None,
         by_buchung: dict[int, list] = {}
         for z in zeilen:
             by_buchung.setdefault(z["buchung_id"], []).append(dict(z))
+        belege = con.execute(
+            f"SELECT bb.buchung_id, bl.id, bl.dateiname "
+            f"FROM buchung_beleg bb JOIN beleg bl ON bl.id = bb.beleg_id "
+            f"WHERE bb.buchung_id IN ({marks}) ORDER BY bl.id",
+            ids,
+        ).fetchall()
+        belege_by: dict[int, list] = {}
+        for bl in belege:
+            belege_by.setdefault(bl["buchung_id"], []).append(
+                {"id": bl["id"], "dateiname": bl["dateiname"]})
         for b in buchungen:
             b["zeilen"] = by_buchung.get(b["id"], [])
+            b["belege"] = belege_by.get(b["id"], [])
     return buchungen
+
+
+@router.post("/umbuchungen", status_code=201)
+def create_umbuchung(u: UmbuchungIn, con: sqlite3.Connection = Depends(db_dep)):
+    """Geld zwischen zwei Sparten verschieben: zwei gekoppelte Buchungen
+    (typ='umbuchung'), verbunden ueber transfer_gruppe_id. Umbuchungen sind
+    in allen Einnahmen/Ausgaben-Auswertungen ausgeblendet (v_einnahmen_ausgaben).
+    """
+    if u.von_sparte_id == u.nach_sparte_id:
+        raise HTTPException(400, "Von- und Nach-Sparte muessen verschieden sein")
+    for sid in (u.von_sparte_id, u.nach_sparte_id):
+        if not con.execute("SELECT 1 FROM sparte WHERE id = ?", (sid,)).fetchone():
+            raise HTTPException(404, f"Sparte {sid} nicht gefunden")
+
+    def umbuchung_kategorie(sparte_id: int) -> int:
+        row = con.execute(
+            "SELECT id FROM kategorie WHERE sparte_id = ? AND lower(name) = ? "
+            "AND aktiv = 1", (sparte_id, UMBUCHUNG_KATEGORIE.lower())).fetchone()
+        if row:
+            return row["id"]
+        return con.execute(
+            "INSERT INTO kategorie(sparte_id, name, richtung) VALUES(?,?, 'beides')",
+            (sparte_id, UMBUCHUNG_KATEGORIE)).lastrowid
+
+    gruppe = uuid.uuid4().hex
+    try:
+        ids = []
+        for sparte_id, richtung_text in ((u.von_sparte_id, "an"), (u.nach_sparte_id, "von")):
+            andere = u.nach_sparte_id if sparte_id == u.von_sparte_id else u.von_sparte_id
+            name_andere = con.execute("SELECT name FROM sparte WHERE id = ?",
+                                      (andere,)).fetchone()["name"]
+            text = u.text or f"Umbuchung {richtung_text} {name_andere}"
+            cur = con.execute(
+                "INSERT INTO buchung(sparte_id, datum, typ, zahlungsart, "
+                "transfer_gruppe_id, buchungsstatus, text) "
+                "VALUES(?,?, 'umbuchung', 'bank', ?, 'zugeordnet', ?)",
+                (sparte_id, u.datum, gruppe, text))
+            con.execute(
+                "INSERT INTO buchungszeile(buchung_id, kategorie_id, betrag_cent) "
+                "VALUES(?,?,?)",
+                (cur.lastrowid, umbuchung_kategorie(sparte_id), u.betrag_cent))
+            ids.append(cur.lastrowid)
+        con.commit()
+    except sqlite3.Error as e:
+        con.rollback()
+        raise HTTPException(400, f"Datenbankfehler: {e}")
+    return {"transfer_gruppe_id": gruppe, "buchung_ids": ids,
+            "betrag_cent": u.betrag_cent}
 
 
 @router.put("/buchungen/{buchung_id}")
@@ -97,8 +169,13 @@ def update_buchung(buchung_id: int, b: BuchungIn,
     Verknuepfungen, die nicht im Formular stehen (bankumsatz_id, Belegstatus,
     transfer_gruppe_id), bleiben unveraendert erhalten.
     """
-    if not con.execute("SELECT 1 FROM buchung WHERE id = ?", (buchung_id,)).fetchone():
+    alt = con.execute("SELECT transfer_gruppe_id FROM buchung WHERE id = ?",
+                      (buchung_id,)).fetchone()
+    if not alt:
         raise HTTPException(404, "Buchung nicht gefunden")
+    if alt["transfer_gruppe_id"]:
+        raise HTTPException(400, "Umbuchungen sind gekoppelt - bitte loeschen "
+                                 "und neu anlegen statt bearbeiten")
     _pruefe_sparte_und_zeilen(con, b)
     try:
         con.execute(
@@ -123,16 +200,25 @@ def update_buchung(buchung_id: int, b: BuchungIn,
 
 @router.delete("/buchungen/{buchung_id}", status_code=204)
 def delete_buchung(buchung_id: int, con: sqlite3.Connection = Depends(db_dep)):
-    row = con.execute("SELECT bankumsatz_id FROM buchung WHERE id = ?",
-                      (buchung_id,)).fetchone()
+    row = con.execute(
+        "SELECT bankumsatz_id, transfer_gruppe_id FROM buchung WHERE id = ?",
+        (buchung_id,)).fetchone()
     if not row:
         raise HTTPException(404, "Buchung nicht gefunden")
-    con.execute("DELETE FROM buchung WHERE id = ?", (buchung_id,))  # Zeilen via ON DELETE CASCADE
-    # War die Buchung aus einem Bankumsatz uebernommen, wird dieser wieder
-    # geoeffnet, damit er nicht unerledigt als "verbucht" haengen bleibt.
-    if row["bankumsatz_id"] is not None:
-        con.execute("UPDATE bankumsatz SET importstatus = 'offen' WHERE id = ?",
-                    (row["bankumsatz_id"],))
+    # Umbuchungen sind gekoppelt: immer beide Seiten der Gruppe entfernen.
+    if row["transfer_gruppe_id"]:
+        betroffen = con.execute(
+            "SELECT id, bankumsatz_id FROM buchung WHERE transfer_gruppe_id = ?",
+            (row["transfer_gruppe_id"],)).fetchall()
+    else:
+        betroffen = [{"id": buchung_id, "bankumsatz_id": row["bankumsatz_id"]}]
+    for b in betroffen:
+        con.execute("DELETE FROM buchung WHERE id = ?", (b["id"],))  # Zeilen via CASCADE
+        # War die Buchung aus einem Bankumsatz uebernommen, wird dieser wieder
+        # geoeffnet, damit er nicht unerledigt als "verbucht" haengen bleibt.
+        if b["bankumsatz_id"] is not None:
+            con.execute("UPDATE bankumsatz SET importstatus = 'offen' WHERE id = ?",
+                        (b["bankumsatz_id"],))
     con.commit()
 
 

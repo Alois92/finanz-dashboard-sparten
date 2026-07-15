@@ -10,7 +10,7 @@ manuelle Buchungserfassung mit Split, Umbuchungen und einem Dashboard.
 
 - **Backend:** Python + FastAPI (`app/`)
 - **Datenbank:** SQLite (`db/schema.sql`, `db/seed.sql`)
-- **Frontend:** statisches HTML/JS ohne Build-Schritt (`static/`)
+- **Frontend:** statisches HTML/JS ohne Build-Schritt (`static-studio/`, erreichbar unter `/` und `/studio`)
 
 Alle Geldbetraege werden als Ganzzahl in **Cent** gespeichert. Die Datenbank
 wird beim ersten Start automatisch aus Schema + Seed erzeugt.

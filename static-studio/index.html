@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Hohenegg Finanzstudio</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231E6E4E'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-family='sans-serif' font-weight='700' font-size='17' fill='white'%3EH%3C/text%3E%3C/svg%3E">
-  <link rel="stylesheet" href="/studio/style.css?v=3">
+  <link rel="stylesheet" href="/studio/style.css?v=4">
   <script>
     // Theme so frueh wie moeglich setzen, damit nichts aufblitzt.
     (function () {
@@ -28,6 +28,7 @@
     <nav class="nav" aria-label="Hauptnavigation">
       <button class="nav-item active" data-page="uebersicht"><span class="nav-ico" aria-hidden="true">◫</span>Übersicht</button>
       <button class="nav-item" data-page="auswertungen"><span class="nav-ico" aria-hidden="true">▤</span>Auswertungen</button>
+      <button class="nav-item" data-page="export"><span class="nav-ico" aria-hidden="true">⤓</span>Export</button>
       <button class="nav-item" data-page="buchungen"><span class="nav-ico" aria-hidden="true">≣</span>Buchungen</button>
       <button class="nav-item" data-page="erfassen"><span class="nav-ico" aria-hidden="true">✎</span>Erfassen</button>
       <button class="nav-item" data-page="kategorien"><span class="nav-ico" aria-hidden="true">⌘</span>Kategorien</button>
@@ -158,8 +159,9 @@
           </div>
           <p class="hint" id="liste-leer" hidden>Keine Buchungen im gewählten Zeitraum.</p>
           <div class="table-wrap"><table id="tbl-buchungen">
-            <thead><tr><th>Datum</th><th>Sparte</th><th>Typ</th><th>Text</th><th>Kategorien</th><th class="num">Betrag</th><th></th></tr></thead>
+            <thead><tr><th>Datum</th><th>Sparte</th><th>Typ</th><th>Text</th><th>Kategorien</th><th>Beleg</th><th class="num">Betrag</th><th></th></tr></thead>
             <tbody></tbody></table></div>
+          <input type="file" id="beleg-anhang" accept="image/*,.pdf,.heic,.webp" hidden>
         </div>
       </section>
 
@@ -202,6 +204,49 @@
               <span class="msg" id="b-msg"></span>
             </div>
           </form>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h2>Umbuchung zwischen Sparten</h2>
+            <p class="hint">Zählt weder als Einnahme noch als Ausgabe — nur Geld verschieben.</p></div>
+          <form id="form-umbuchung">
+            <div class="form-grid">
+              <label>Von Sparte<select id="u-von"></select></label>
+              <label>Nach Sparte<select id="u-nach"></select></label>
+              <label>Datum<input type="date" id="u-datum" required></label>
+              <label>Betrag (€)<input type="text" id="u-betrag" inputmode="decimal" placeholder="0,00" required></label>
+              <label class="wide">Text (optional)<input type="text" id="u-text" placeholder="z. B. Rücklage Hof"></label>
+            </div>
+            <div class="form-foot">
+              <button type="submit" class="btn accent">Umbuchen</button>
+              <span class="msg" id="u-msg"></span>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <!-- ============ Export ============ -->
+      <section class="page" id="page-export">
+        <div class="card">
+          <div class="card-head">
+            <h2>Jahres-Export</h2>
+            <div class="list-filter">
+              <label class="inline">Jahr <select id="ex-jahr"></select></label>
+              <label class="inline">Sparte <select id="ex-sparte"><option value="">Alle</option></select></label>
+            </div>
+          </div>
+          <p class="hint">Häkchen bestimmen, welche Buchungen in die Datei kommen — standardmäßig alle.
+            Umbuchungen sind abwählbar enthalten. Die Datei (.csv) lässt sich direkt in Excel öffnen.</p>
+          <div class="form-foot">
+            <button type="button" class="btn ghost" id="ex-alle">Alle an/abwählen</button>
+            <button type="button" class="btn accent" id="ex-download">Auswahl als CSV herunterladen</button>
+            <span class="msg" id="ex-msg"></span>
+          </div>
+          <p class="hint" id="ex-leer" hidden>Keine Buchungen im gewählten Jahr.</p>
+          <div class="table-wrap"><table id="tbl-export">
+            <thead><tr><th></th><th>Datum</th><th>Sparte</th><th>Typ</th><th>Text</th><th>Kategorien</th><th class="num">Betrag</th></tr></thead>
+            <tbody></tbody></table></div>
+          <p class="hint" id="ex-summe"></p>
         </div>
       </section>
 
@@ -356,11 +401,12 @@
     <button class="sheet-item" data-page="belege">Belege</button>
     <button class="sheet-item" data-page="bankimport">Bankimport</button>
     <button class="sheet-item" data-page="excelimport">Excel-Import</button>
+    <button class="sheet-item" data-page="export">Export</button>
     <button class="sheet-item sheet-close" id="mehr-close">Schließen</button>
   </div>
 </div>
 
-<script src="/studio/charts.js?v=3"></script>
-<script src="/studio/app.js?v=3"></script>
+<script src="/studio/charts.js?v=4"></script>
+<script src="/studio/app.js?v=4"></script>
 </body>
 </html>

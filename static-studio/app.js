@@ -155,6 +155,7 @@ function activatePage(name) {
 function ladePage(name) {
   if (name === "uebersicht") ladeUebersicht();
   else if (name === "auswertungen") ladeAuswertungen();
+  else if (name === "export") ladeExport();
   else if (name === "buchungen") ladeBuchungen();
   else if (name === "kategorien") ladeKategorienTabelle();
   else if (name === "belege") ladeBelege();
@@ -407,17 +408,26 @@ function renderBuchungen() {
   $("#liste-leer").textContent = "Keine Buchungen im gewählten Zeitraum.";
   $("#tbl-buchungen tbody").innerHTML = rows.map((b) => {
     const kats = (b.zeilen || []).map((z) => escapeHtml(z.kategorie_name) + (b.zeilen.length > 1 ? " (" + centToEuro(z.betrag_cent) + ")" : "")).join(", ");
+    const belege = (b.belege || []).map((bl) =>
+      `<a href="/api/belege/${bl.id}/datei" target="_blank" rel="noopener" title="${escapeHtml(bl.dateiname)}">🗎</a>`).join(" ");
+    const bearbeiten = b.transfer_gruppe_id
+      ? "" : `<button class="link" data-edit="${b.id}">bearbeiten</button>`;
     return `<tr>
       <td>${escapeHtml(b.datum)}</td>
       <td><span class="sp-tag"><span class="dot" style="background:${colorForSparteName(b.sparte_name)}"></span>${escapeHtml(b.sparte_name)}</span></td>
       <td><span class="badge ${escapeHtml(b.typ)}">${escapeHtml(b.typ)}</span></td>
       <td>${escapeHtml(b.text || "")}</td><td>${kats}</td>
+      <td class="beleg-zelle">${belege} <button class="link" data-beleg="${b.id}" title="Beleg anhängen (Foto oder PDF)">＋</button></td>
       <td class="num">${centToEuro(b.betrag_cent)}</td>
-      <td class="row-actions"><button class="link" data-edit="${b.id}">bearbeiten</button>
+      <td class="row-actions">${bearbeiten}
       <button class="link" data-del="${b.id}">löschen</button></td></tr>`;
   }).join("");
   $$("#tbl-buchungen [data-del]").forEach((btn) => btn.addEventListener("click", async () => {
-    if (!confirm("Buchung wirklich löschen?")) return;
+    const b = buchungenCache.find((x) => String(x.id) === btn.dataset.del);
+    const frage = b && b.transfer_gruppe_id
+      ? "Umbuchung wirklich löschen? Beide Seiten werden entfernt."
+      : "Buchung wirklich löschen?";
+    if (!confirm(frage)) return;
     await api("/buchungen/" + btn.dataset.del, { method: "DELETE" });
     ladeBuchungen();
   }));
@@ -425,7 +435,33 @@ function renderBuchungen() {
     const b = buchungenCache.find((x) => String(x.id) === btn.dataset.edit);
     if (b) starteBearbeitung(b);
   }));
+  $$("#tbl-buchungen [data-beleg]").forEach((btn) => btn.addEventListener("click", () => {
+    belegZielBuchung = buchungenCache.find((x) => String(x.id) === btn.dataset.beleg);
+    if (belegZielBuchung) $("#beleg-anhang").click();
+  }));
 }
+
+// Beleg direkt an eine Buchung haengen (am Handy oeffnet sich die Kamera/Galerie)
+let belegZielBuchung = null;
+$("#beleg-anhang").addEventListener("change", async () => {
+  const datei = $("#beleg-anhang").files[0];
+  const b = belegZielBuchung;
+  $("#beleg-anhang").value = "";
+  if (!datei || !b) return;
+  try {
+    const fd = new FormData();
+    fd.append("datei", datei);
+    fd.append("sparte_id", b.sparte_id);
+    const beleg = await api("/belege", { method: "POST", body: fd });
+    await api("/buchungen/" + b.id + "/belege", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ beleg_id: beleg.id }),
+    });
+    ladeBuchungen();
+  } catch (err) {
+    alert("Beleg konnte nicht angehängt werden: " + err.message);
+  }
+});
 $("#l-typ").addEventListener("change", renderBuchungen);
 $("#l-suche").addEventListener("input", renderBuchungen);
 
@@ -585,6 +621,142 @@ $("#form-buchung").addEventListener("submit", async (e) => {
     msg.className = "msg err";
     msg.textContent = "Fehler: " + err.message;
   }
+});
+
+// ---- Umbuchung zwischen Sparten ----
+$("#form-umbuchung").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const msg = $("#u-msg");
+  const betrag = euroToCent($("#u-betrag").value);
+  if (betrag <= 0) { msg.className = "msg err"; msg.textContent = "Bitte einen Betrag > 0 angeben."; return; }
+  if ($("#u-von").value === $("#u-nach").value) {
+    msg.className = "msg err"; msg.textContent = "Von- und Nach-Sparte müssen verschieden sein."; return;
+  }
+  try {
+    const res = await api("/umbuchungen", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        von_sparte_id: parseInt($("#u-von").value, 10),
+        nach_sparte_id: parseInt($("#u-nach").value, 10),
+        datum: $("#u-datum").value,
+        betrag_cent: betrag,
+        text: $("#u-text").value || null,
+      }),
+    });
+    msg.className = "msg ok";
+    msg.textContent = `Umgebucht: ${centToEuro(res.betrag_cent)} (${sparteName($("#u-von").value)} → ${sparteName($("#u-nach").value)}).`;
+    $("#u-betrag").value = ""; $("#u-text").value = "";
+  } catch (err) {
+    msg.className = "msg err"; msg.textContent = "Fehler: " + err.message;
+  }
+});
+
+// ===========================================================================
+// Jahres-Export (CSV mit an-/abwaehlbaren Buchungen)
+// ===========================================================================
+let exBuchungen = [];
+let exAbgewaehlt = new Set();   // Buchungs-IDs, die NICHT exportiert werden
+
+async function ladeExport() {
+  // Jahresliste aus dem Jahresvergleich (ungefiltert)
+  const sel = $("#ex-jahr");
+  try {
+    const jd = await api("/jahresvergleich");
+    const jahre = jd.jahre || [];
+    const vorher = sel.value;
+    sel.innerHTML = jahre.map((j) => `<option value="${escapeHtml(j)}">${escapeHtml(j)}</option>`).join("")
+      || "<option value=''>–</option>";
+    sel.value = jahre.includes(vorher) ? vorher : (jahre[jahre.length - 1] || "");
+  } catch (e) { /* Jahresliste optional */ }
+  await ladeExportListe();
+}
+
+async function ladeExportListe() {
+  const jahr = $("#ex-jahr").value;
+  const tbody = $("#tbl-export tbody");
+  if (!jahr) { tbody.innerHTML = ""; $("#ex-leer").hidden = false; $("#ex-summe").textContent = ""; return; }
+  const p = new URLSearchParams({ von: `${jahr}-01-01`, bis: `${jahr}-12-31` });
+  if ($("#ex-sparte").value) p.set("sparte_id", $("#ex-sparte").value);
+  try {
+    exBuchungen = await api("/buchungen?" + p.toString());
+  } catch (err) {
+    tbody.innerHTML = ""; $("#ex-leer").hidden = false;
+    $("#ex-leer").textContent = "Buchungen konnten nicht geladen werden (" + err.message + ").";
+    return;
+  }
+  exAbgewaehlt = new Set();
+  $("#ex-leer").hidden = exBuchungen.length > 0;
+  $("#ex-leer").textContent = "Keine Buchungen im gewählten Jahr.";
+  tbody.innerHTML = exBuchungen.map((b) => {
+    const kats = (b.zeilen || []).map((z) => escapeHtml(z.kategorie_name)).join(", ");
+    return `<tr>
+      <td><input type="checkbox" class="ex-check" data-id="${b.id}" checked></td>
+      <td>${escapeHtml(b.datum)}</td>
+      <td><span class="sp-tag"><span class="dot" style="background:${colorForSparteName(b.sparte_name)}"></span>${escapeHtml(b.sparte_name)}</span></td>
+      <td><span class="badge ${escapeHtml(b.typ)}">${escapeHtml(b.typ)}</span></td>
+      <td>${escapeHtml(b.text || "")}</td><td>${kats}</td>
+      <td class="num">${centToEuro(b.betrag_cent)}</td></tr>`;
+  }).join("");
+  $$("#tbl-export .ex-check").forEach((cb) => cb.addEventListener("change", () => {
+    const id = parseInt(cb.dataset.id, 10);
+    if (cb.checked) exAbgewaehlt.delete(id); else exAbgewaehlt.add(id);
+    exSummeAnzeigen();
+  }));
+  exSummeAnzeigen();
+}
+$("#ex-jahr").addEventListener("change", ladeExportListe);
+$("#ex-sparte").addEventListener("change", ladeExportListe);
+
+function exAusgewaehlte() {
+  return exBuchungen.filter((b) => !exAbgewaehlt.has(b.id));
+}
+function exSummeAnzeigen() {
+  const aus = exAusgewaehlte();
+  const ein = aus.filter((b) => b.typ === "einnahme").reduce((a, b) => a + b.betrag_cent, 0);
+  const ausg = aus.filter((b) => b.typ === "ausgabe").reduce((a, b) => a + b.betrag_cent, 0);
+  $("#ex-summe").textContent = aus.length
+    ? `Ausgewählt: ${aus.length} von ${exBuchungen.length} Buchungen · Einnahmen ${centToEuro(ein)} · Ausgaben ${centToEuro(ausg)} · Saldo ${centToEuro(ein - ausg)} (Umbuchungen zählen nicht mit)`
+    : "Nichts ausgewählt.";
+}
+$("#ex-alle").addEventListener("click", () => {
+  const alleAn = exAbgewaehlt.size > 0;
+  exAbgewaehlt = alleAn ? new Set() : new Set(exBuchungen.map((b) => b.id));
+  $$("#tbl-export .ex-check").forEach((cb) => { cb.checked = alleAn; });
+  exSummeAnzeigen();
+});
+
+$("#ex-download").addEventListener("click", () => {
+  const aus = exAusgewaehlte();
+  const msg = $("#ex-msg");
+  if (!aus.length) { msg.className = "msg err"; msg.textContent = "Keine Buchung ausgewählt."; return; }
+  const feld = (v) => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
+  const eur = (cent) => (cent / 100).toFixed(2).replace(".", ",");
+  const zeilen = [["Datum", "Sparte", "Typ", "Kategorie", "Text", "Zahlungsart", "Betrag EUR"].join(";")];
+  aus.forEach((b) => {
+    (b.zeilen && b.zeilen.length ? b.zeilen : [{ kategorie_name: "", betrag_cent: b.betrag_cent }])
+      .forEach((z) => {
+        zeilen.push([feld(b.datum), feld(b.sparte_name), feld(b.typ),
+          feld(z.kategorie_name), feld(b.text || ""), feld(b.zahlungsart || ""),
+          eur(z.betrag_cent)].join(";"));
+      });
+  });
+  const ein = aus.filter((b) => b.typ === "einnahme").reduce((a, b) => a + b.betrag_cent, 0);
+  const ausg = aus.filter((b) => b.typ === "ausgabe").reduce((a, b) => a + b.betrag_cent, 0);
+  zeilen.push("", ["Summe Einnahmen", "", "", "", "", "", eur(ein)].join(";"),
+    ["Summe Ausgaben", "", "", "", "", "", eur(ausg)].join(";"),
+    ["Saldo", "", "", "", "", "", eur(ein - ausg)].join(";"));
+  const jahr = $("#ex-jahr").value;
+  const sp = $("#ex-sparte").value
+    ? "-" + (sparten.find((s) => String(s.id) === $("#ex-sparte").value)?.kuerzel || "sparte") : "";
+  // BOM voranstellen, damit Excel die Umlaute korrekt erkennt
+  const blob = new Blob(["﻿" + zeilen.join("\r\n")], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `finanz-export-${jahr}${sp}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  msg.className = "msg ok";
+  msg.textContent = `Heruntergeladen: ${a.download} (${aus.length} Buchungen).`;
 });
 
 // ===========================================================================
@@ -1017,6 +1189,11 @@ async function init() {
   $("#b-sparte").innerHTML = optionen;
   $("#k-sparte").innerHTML = optionen;
   $("#xl-sparte").innerHTML = optionen;
+  $("#u-von").innerHTML = optionen;
+  $("#u-nach").innerHTML = optionen;
+  if (sparten.length > 1) $("#u-nach").selectedIndex = 1;
+  $("#ex-sparte").insertAdjacentHTML("beforeend", optionen);
+  $("#u-datum").value = todayISO();
   $("#beleg-sparte").insertAdjacentHTML("beforeend", optionen);
   $("#beleg-filter-sparte").insertAdjacentHTML("beforeend", optionen);
   $("#konto-sparte").insertAdjacentHTML("beforeend", optionen);

@@ -1,23 +1,25 @@
 """FastAPI-Einstieg: initialisiert die DB, mountet API und statisches Frontend."""
+import asyncio
 import pathlib
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from .backup import backup_schleife
 from .db import init_db
 from .routers import (belege, buchungen, dashboard, import_bank,
                       import_excel, schnellerfassung, stammdaten)
 
-STATIC_DIR = pathlib.Path(__file__).resolve().parent.parent / "static"
-COCKPIT_DIR = pathlib.Path(__file__).resolve().parent.parent / "static-cockpit"
 STUDIO_DIR = pathlib.Path(__file__).resolve().parent.parent / "static-studio"
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    sicherung = asyncio.create_task(backup_schleife())
     yield
+    sicherung.cancel()
 
 
 app = FastAPI(title="Finanz-Dashboard Sparten", version="0.1.0", lifespan=lifespan)
@@ -36,12 +38,7 @@ def health():
     return {"status": "ok"}
 
 
-# Neue "Cockpit"-Version parallel unter /cockpit (vor dem Root-Mount).
-# Bestehende Oberflaeche unter / bleibt unveraendert.
-app.mount("/cockpit", StaticFiles(directory=COCKPIT_DIR, html=True), name="cockpit")
-
-# Dritte Variante "Studio" parallel unter /studio (ebenfalls vor dem Root-Mount).
+# Studio ist die einzige Oberflaeche: unter / UND weiterhin unter /studio
+# (alte Lesezeichen bleiben gueltig). /api hat Vorrang, da zuerst registriert.
 app.mount("/studio", StaticFiles(directory=STUDIO_DIR, html=True), name="studio")
-
-# Statisches Frontend zuletzt mounten, damit /api Vorrang hat.
-app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")
+app.mount("/", StaticFiles(directory=STUDIO_DIR, html=True), name="root")

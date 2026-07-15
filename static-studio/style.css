@@ -319,6 +319,11 @@ input[type="file"] { padding: 7px; background: transparent; }
 .xl-warn summary { cursor: pointer; color: var(--muted); font-size: .82rem; }
 .xl-warn ul { margin: 6px 0 0; padding-left: 18px; font-size: .8rem; color: var(--muted); }
 
+/* Beleg-Spalte + Export-Haekchen */
+.beleg-zelle a { text-decoration: none; font-size: 1rem; }
+.beleg-zelle .link { font-size: 1rem; text-decoration: none; }
+.ex-check { width: 17px; height: 17px; min-height: 0; accent-color: var(--accent); }
+
 /* ==========================================================================
    Mobil (< 900 px): Bottom-Navigation, Vollbreite, Sidebar aus
    ========================================================================== */
