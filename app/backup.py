@@ -13,6 +13,7 @@ import asyncio
 import datetime as dt
 import logging
 import sqlite3
+import uuid
 
 from .db import DB_PATH, DB_PERSISTENT, get_connection
 
@@ -20,6 +21,21 @@ log = logging.getLogger("finanz.backup")
 
 BACKUP_AUFBEWAHREN = 30          # so viele Tageskopien bleiben liegen
 PRUEF_INTERVALL_SEKUNDEN = 6 * 3600  # laeuft der Server tagelang: alle 6 h pruefen
+
+
+def _ist_gueltige_sqlite_datei(pfad) -> bool:
+    """Prueft eine geschlossene Sicherungsdatei, ohne sie zu veraendern."""
+    con = None
+    try:
+        if pfad.stat().st_size == 0:
+            return False
+        con = sqlite3.connect(pfad)
+        return con.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    except (OSError, sqlite3.Error):
+        return False
+    finally:
+        if con is not None:
+            con.close()
 
 
 def sichere_datenbank() -> str | None:
@@ -35,23 +51,28 @@ def sichere_datenbank() -> str | None:
         return None
     ziel_ordner = DB_PATH.parent / "backup"
     ziel = ziel_ordner / f"finanz-{dt.date.today().isoformat()}.db"
-    if ziel.exists():
+    if ziel.exists() and _ist_gueltige_sqlite_datei(ziel):
         return str(ziel)
+    temp_ziel = ziel.with_name(f".{ziel.name}.{uuid.uuid4().hex}.tmp")
     try:
         ziel_ordner.mkdir(parents=True, exist_ok=True)
         quelle = get_connection()
         try:
-            kopie = sqlite3.connect(ziel)
+            kopie = sqlite3.connect(temp_ziel)
             try:
                 quelle.backup(kopie)
             finally:
                 kopie.close()
         finally:
             quelle.close()
+        if not _ist_gueltige_sqlite_datei(temp_ziel):
+            raise sqlite3.DatabaseError("Sicherungsdatei ist nicht intakt")
+        temp_ziel.replace(ziel)
         log.info("DB-Sicherung angelegt: %s", ziel)
         _rotiere(ziel_ordner)
         return str(ziel)
     except Exception:
+        temp_ziel.unlink(missing_ok=True)
         log.exception("DB-Sicherung fehlgeschlagen (Betrieb laeuft weiter)")
         return None
 

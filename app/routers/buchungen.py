@@ -138,6 +138,61 @@ def list_buchungen(sparte_id: int | None = None,
     return buchungen
 
 
+@router.get("/buchungen/suche")
+def suche_buchungen(q: str, con: sqlite3.Connection = Depends(db_dep)):
+    """Durchsucht Buchungstext, Notiz und Kontaktname Unicode-case-insensitiv."""
+    con.create_function(
+        "casefold", 1, lambda value: str(value or "").casefold(), deterministic=True
+    )
+    escaped = q.strip().casefold().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    pattern = f"%{escaped}%"
+    rows = con.execute(
+        "SELECT b.id, b.sparte_id, s.name AS sparte_name, b.datum, b.typ, "
+        "b.betrag_cent, b.zahlungsart, b.belegstatus, b.buchungsstatus, "
+        "b.text, b.notiz, b.transfer_gruppe_id, b.kontakt_id, "
+        "k.name AS kontakt_name "
+        "FROM buchung b "
+        "JOIN sparte s ON s.id = b.sparte_id "
+        "LEFT JOIN kontakt k ON k.id = b.kontakt_id "
+        "WHERE casefold(COALESCE(b.text, '')) LIKE ? ESCAPE '\\' "
+        "OR casefold(COALESCE(b.notiz, '')) LIKE ? ESCAPE '\\' "
+        "OR casefold(COALESCE(k.name, '')) LIKE ? ESCAPE '\\' "
+        "ORDER BY b.datum DESC, b.id DESC LIMIT 200",
+        (pattern, pattern, pattern),
+    ).fetchall()
+    buchungen = [dict(row) for row in rows]
+    if not buchungen:
+        return buchungen
+
+    ids = [b["id"] for b in buchungen]
+    marks = ",".join("?" * len(ids))
+    zeilen = con.execute(
+        f"SELECT z.buchung_id, z.id, z.kategorie_id, k.name AS kategorie_name, "
+        f"z.betrag_cent, z.notiz "
+        f"FROM buchungszeile z JOIN kategorie k ON k.id = z.kategorie_id "
+        f"WHERE z.buchung_id IN ({marks}) ORDER BY z.id",
+        ids,
+    ).fetchall()
+    by_buchung: dict[int, list] = {}
+    for zeile in zeilen:
+        by_buchung.setdefault(zeile["buchung_id"], []).append(dict(zeile))
+    belege = con.execute(
+        f"SELECT bb.buchung_id, bl.id, bl.dateiname "
+        f"FROM buchung_beleg bb JOIN beleg bl ON bl.id = bb.beleg_id "
+        f"WHERE bb.buchung_id IN ({marks}) ORDER BY bl.id",
+        ids,
+    ).fetchall()
+    belege_by: dict[int, list] = {}
+    for beleg in belege:
+        belege_by.setdefault(beleg["buchung_id"], []).append(
+            {"id": beleg["id"], "dateiname": beleg["dateiname"]}
+        )
+    for buchung in buchungen:
+        buchung["zeilen"] = by_buchung.get(buchung["id"], [])
+        buchung["belege"] = belege_by.get(buchung["id"], [])
+    return buchungen
+
+
 @router.post("/umbuchungen", status_code=201)
 def create_umbuchung(u: UmbuchungIn, con: sqlite3.Connection = Depends(db_dep)):
     """Geld zwischen zwei Sparten verschieben: zwei gekoppelte Buchungen

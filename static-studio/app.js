@@ -490,7 +490,11 @@ document.addEventListener("keydown", (event) => {
 // Buchungen
 // ===========================================================================
 async function ladeBuchungen() {
-  try { buchungenCache = await api("/buchungen?" + filterQuery()); }
+  const suche = $("#l-suche").value.trim();
+  const pfad = suche
+    ? "/buchungen/suche?q=" + encodeURIComponent(suche)
+    : "/buchungen?" + filterQuery();
+  try { buchungenCache = await api(pfad); }
   catch (err) {
     $("#tbl-buchungen tbody").innerHTML = "";
     $("#liste-leer").hidden = false;
@@ -501,14 +505,8 @@ async function ladeBuchungen() {
 }
 function renderBuchungen() {
   const typ = $("#l-typ").value;
-  const suche = $("#l-suche").value.trim().toLowerCase();
   const rows = buchungenCache.filter((b) => {
     if (typ && b.typ !== typ) return false;
-    if (suche) {
-      const hay = [b.text, b.sparte_name, ...(b.zeilen || []).map((z) => z.kategorie_name)]
-        .filter(Boolean).join(" ").toLowerCase();
-      if (!hay.includes(suche)) return false;
-    }
     return true;
   });
   $("#liste-leer").hidden = rows.length > 0;
@@ -570,7 +568,11 @@ $("#beleg-anhang").addEventListener("change", async () => {
   }
 });
 $("#l-typ").addEventListener("change", renderBuchungen);
-$("#l-suche").addEventListener("input", renderBuchungen);
+let buchungenSucheTimer = null;
+$("#l-suche").addEventListener("input", () => {
+  clearTimeout(buchungenSucheTimer);
+  buchungenSucheTimer = setTimeout(ladeBuchungen, 300);
+});
 
 // ===========================================================================
 // Erfassen (Schnellerfassung + Formular)
