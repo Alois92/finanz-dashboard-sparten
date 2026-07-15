@@ -28,6 +28,12 @@ class GruppeIn(BaseModel):
     kategorie_ids: List[int] = Field(default_factory=list)
 
 
+class AuswertungsgruppeIn(BaseModel):
+    name: str
+    beschreibung: Optional[str] = None
+    sparte_ids: List[int] = Field(default_factory=list)
+
+
 class ZeileIn(BaseModel):
     kategorie_id: int
     betrag_cent: int = Field(ge=0)

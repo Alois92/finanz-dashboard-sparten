@@ -95,11 +95,17 @@ def list_buchungen(sparte_id: int | None = None,
         sql += " AND b.datum <= ?"; params.append(bis)
     if monat:
         sql += " AND strftime('%Y-%m', b.datum) = ?"; params.append(monat)
-    if kategorie_id is not None:
+    if kategorie_id is not None and globalgruppe_id is not None:
+        sql += (" AND EXISTS (SELECT 1 FROM buchungszeile fz "
+                "JOIN kategorie_globalgruppe fkg ON fkg.kategorie_id = fz.kategorie_id "
+                "WHERE fz.buchung_id = b.id AND fz.kategorie_id = ? "
+                "AND fkg.globalgruppe_id = ?)")
+        params.extend((kategorie_id, globalgruppe_id))
+    elif kategorie_id is not None:
         sql += (" AND EXISTS (SELECT 1 FROM buchungszeile fz "
                 "WHERE fz.buchung_id = b.id AND fz.kategorie_id = ?)")
         params.append(kategorie_id)
-    if globalgruppe_id is not None:
+    elif globalgruppe_id is not None:
         sql += (" AND EXISTS (SELECT 1 FROM buchungszeile gz "
                 "JOIN kategorie_globalgruppe kg ON kg.kategorie_id = gz.kategorie_id "
                 "WHERE gz.buchung_id = b.id AND kg.globalgruppe_id = ?)")
@@ -108,6 +114,13 @@ def list_buchungen(sparte_id: int | None = None,
         sql += " AND b.typ = ?"; params.append(typ)
     sql += " ORDER BY b.datum DESC, b.id DESC"
     buchungen = [dict(r) for r in con.execute(sql, params).fetchall()]
+
+    gruppen_kategorien = None
+    if globalgruppe_id is not None:
+        gruppen_kategorien = {row["kategorie_id"] for row in con.execute(
+            "SELECT kategorie_id FROM kategorie_globalgruppe "
+            "WHERE globalgruppe_id = ?", (globalgruppe_id,)
+        ).fetchall()}
 
     if buchungen:
         ids = [b["id"] for b in buchungen]
@@ -134,6 +147,13 @@ def list_buchungen(sparte_id: int | None = None,
                 {"id": bl["id"], "dateiname": bl["dateiname"]})
         for b in buchungen:
             b["zeilen"] = by_buchung.get(b["id"], [])
+            if kategorie_id is not None or globalgruppe_id is not None:
+                passende_zeilen = [z for z in b["zeilen"]
+                                   if (kategorie_id is None or z["kategorie_id"] == kategorie_id)
+                                   and (gruppen_kategorien is None
+                                        or z["kategorie_id"] in gruppen_kategorien)]
+                b["filter_betrag_cent"] = sum(
+                    z["betrag_cent"] for z in passende_zeilen)
             b["belege"] = belege_by.get(b["id"], [])
     return buchungen
 

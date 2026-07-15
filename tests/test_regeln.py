@@ -3,6 +3,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from fastapi import HTTPException
+
 
 TEST_DIR = tempfile.TemporaryDirectory(prefix="finanz-regeln-")
 os.environ["FINANZ_DB"] = str(Path(TEST_DIR.name) / "regeln-test.db")
@@ -47,6 +49,14 @@ class RegelvorschlagApiTest(unittest.TestCase):
                 kategorie = {"id": kategorie_id, "sparte_id": sparte_id}
             self.sparte_id = kategorie["sparte_id"]
             self.kategorie_id = kategorie["id"]
+            self.einnahme_kategorie_id = con.execute(
+                "INSERT INTO kategorie(sparte_id, name, richtung) "
+                "VALUES(?, 'Testeinnahme', 'einnahme')", (self.sparte_id,)
+            ).lastrowid
+            self.beides_kategorie_id = con.execute(
+                "INSERT INTO kategorie(sparte_id, name, richtung) "
+                "VALUES(?, 'Testbeides', 'beides')", (self.sparte_id,)
+            ).lastrowid
             self.bankkonto_id = con.execute(
                 "INSERT INTO bankkonto(name, sparte_id) VALUES(?, ?)",
                 ("Testkonto", self.sparte_id),
@@ -169,6 +179,61 @@ class RegelvorschlagApiTest(unittest.TestCase):
         import_bank.delete_regel(regel_id, con)
         self.assertEqual(import_bank.list_regeln(con), [])
 
+    def test_verbuchen_validiert_kategorierichtung_und_umbuchung(self):
+        con = get_connection()
+        self.addCleanup(con.close)
+
+        falsche_richtung_id = self._umsatz("Test Einnahme", "falsche Kategorie", 2500)
+        with self.assertRaises(HTTPException) as ctx:
+            verbuche_umsatz(
+                falsche_richtung_id,
+                UmsatzVerbuchenIn(
+                    sparte_id=self.sparte_id,
+                    kategorie_id=self.kategorie_id,
+                    typ="einnahme",
+                ),
+                con,
+            )
+        self.assertEqual(400, ctx.exception.status_code)
+        self.assertIn("Richtung", ctx.exception.detail)
+        self.assertEqual(
+            "offen",
+            con.execute(
+                "SELECT importstatus FROM bankumsatz WHERE id = ?",
+                (falsche_richtung_id,),
+            ).fetchone()["importstatus"],
+        )
+
+        umbuchung_falsch_id = self._umsatz(
+            "Test Umbuchung", "falsche Kategorie"
+        )
+        with self.assertRaises(HTTPException) as ctx:
+            verbuche_umsatz(
+                umbuchung_falsch_id,
+                UmsatzVerbuchenIn(
+                    sparte_id=self.sparte_id,
+                    kategorie_id=self.kategorie_id,
+                    typ="umbuchung",
+                ),
+                con,
+            )
+        self.assertEqual(400, ctx.exception.status_code)
+        self.assertIn("beides", ctx.exception.detail)
+
+        umbuchung_ok_id = self._umsatz(
+            "Test Umbuchung", "passende Kategorie"
+        )
+        result = verbuche_umsatz(
+            umbuchung_ok_id,
+            UmsatzVerbuchenIn(
+                sparte_id=self.sparte_id,
+                kategorie_id=self.beides_kategorie_id,
+                typ="umbuchung",
+            ),
+            con,
+        )
+        self.assertEqual("umbuchung", result["typ"])
+
     def test_studio_bietet_bulk_uebernahme_und_regelverwaltung(self):
         root = Path(__file__).resolve().parents[1]
         html = (root / "static-studio" / "index.html").read_text(encoding="utf-8")
@@ -179,6 +244,17 @@ class RegelvorschlagApiTest(unittest.TestCase):
         self.assertIn("/bankumsaetze/vorschlaege-uebernehmen", js)
         self.assertIn('api("/regeln")', js)
         self.assertIn('api("/regeln/"', js)
+
+        listener = 'selTyp.addEventListener("change", fuelleKats);'
+        self.assertEqual(1, js.count(listener))
+        editor_start = js.index("async function oeffneUmsatzEditor")
+        self.assertLess(js.index(listener, editor_start),
+                        js.index("  if (v) {", editor_start))
+        self.assertNotIn("v.quelle", js)
+        self.assertEqual(1, js.count(
+            'Verbucht: ${centToEuro(res.betrag_cent)} (${res.typ})'
+        ))
+        self.assertIn('spCur === "" && !globalgruppeCur', js)
 
 
 if __name__ == "__main__":

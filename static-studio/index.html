@@ -314,6 +314,31 @@
           </div>
         </div>
 
+        <div class="grid-2" style="margin-top:18px">
+          <div class="card">
+            <div class="card-head"><h2>Auswertungsgruppen</h2><p class="hint">Sparten f&uuml;r gemeinsame Auswertungen b&uuml;ndeln.</p></div>
+            <div class="table-wrap"><table id="tbl-auswertungsgruppen">
+              <thead><tr><th>Name</th><th>Sparten</th><th></th></tr></thead>
+              <tbody></tbody></table></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><h2 id="ag-form-titel">Neue Auswertungsgruppe</h2></div>
+            <form id="form-auswertungsgruppe">
+              <div class="form-grid">
+                <label class="wide">Name<input type="text" id="ag-name" required></label>
+                <label class="wide">Beschreibung<input type="text" id="ag-beschreibung"></label>
+              </div>
+              <p class="hint" style="margin:14px 0 8px">Sparten</p>
+              <div id="ag-sparten"></div>
+              <div class="form-foot">
+                <button type="submit" class="btn accent">Speichern</button>
+                <button type="button" class="btn ghost" id="ag-cancel" hidden>Abbrechen</button>
+                <span class="msg" id="ag-msg"></span>
+              </div>
+            </form>
+          </div>
+        </div>
+
         <div class="card">
           <div class="card-head"><h2>Regeln</h2></div>
           <p class="hint">Regeln entstehen automatisch beim Zuordnen von Bankums&auml;tzen und machen nur Vorschl&auml;ge.</p>

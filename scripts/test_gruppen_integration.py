@@ -47,6 +47,42 @@ class GruppenTest(unittest.TestCase):
         self.assertEqual(status, expected, content.decode(errors="replace"))
         return json.loads(content) if content else None
 
+    def test_auswertungsgruppen_crud_und_spartenzuordnung(self):
+        self.assertIn(
+            "Name",
+            self.req("POST", "/api/auswertungsgruppen", 400,
+                     {"name": "   ", "sparte_ids": []})["detail"],
+        )
+        sparten = self.req("GET", "/api/sparten")[:2]
+        gruppe = self.req(
+            "POST", "/api/auswertungsgruppen", 201,
+            {"name": "  Vermietung gesamt  ", "beschreibung": "  Bericht  ",
+             "sparte_ids": [sparten[1]["id"], sparten[0]["id"],
+                             sparten[0]["id"]]},
+        )
+        gid = gruppe["id"]
+        self.assertEqual("Vermietung gesamt", gruppe["name"])
+        self.assertEqual("Bericht", gruppe["beschreibung"])
+        self.assertEqual(sorted(s["id"] for s in sparten), gruppe["sparte_ids"])
+        self.assertEqual(gruppe, next(
+            g for g in self.req("GET", "/api/auswertungsgruppen")
+            if g["id"] == gid
+        ))
+
+        gruppe = self.req(
+            "PUT", f"/api/auswertungsgruppen/{gid}", body={
+                "name": "Nur zweite Sparte", "sparte_ids": [sparten[1]["id"]]
+            },
+        )
+        self.assertEqual([sparten[1]["id"]], gruppe["sparte_ids"])
+        self.req("PUT", f"/api/auswertungsgruppen/{gid}", 404,
+                 {"name": "Fehler", "sparte_ids": [999999]})
+        self.req("DELETE", f"/api/auswertungsgruppen/{gid}", 204)
+        self.assertFalse(any(g["id"] == gid for g in
+                             self.req("GET", "/api/auswertungsgruppen")))
+        self.assertGreaterEqual(len(self.req("GET", "/api/sparten")), 2)
+        self.req("DELETE", f"/api/auswertungsgruppen/{gid}", 404)
+
     def test_crud_filter_fehlerfaelle_und_loeschsicherheit(self):
         self.assertIn("Name", self.req("POST", "/api/globalgruppen", 400, {"name":"   "})["detail"])
         sparten = self.req("GET", "/api/sparten")[:2]
@@ -87,5 +123,10 @@ class GruppenTest(unittest.TestCase):
         for marker in ("form-globalgruppe","gg-name","gg-kategorien","tbl-globalgruppen","dashboard-filter"):
             self.assertIn(f'id="{marker}"',html)
         self.assertIn('/globalgruppen',js); self.assertIn('globalgruppe_id',js)
+        for marker in ("form-auswertungsgruppe", "ag-name", "ag-sparten",
+                       "tbl-auswertungsgruppen"):
+            self.assertIn(f'id="{marker}"', html)
+        self.assertIn('/auswertungsgruppen', js)
+        self.assertIn('sparte_ids', js)
 
 if __name__ == "__main__": unittest.main(verbosity=2)

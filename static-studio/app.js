@@ -150,7 +150,7 @@ $("#dashboard-filter").addEventListener("change", (e) => {
 function renderSpartenPills() {
   const el = $("#sp-pills");
   const pills = [
-    `<button type="button" class="sp-pill all${spCur === "" ? " active" : ""}" data-sp=""><span class="dot"></span>Alle</button>`,
+    `<button type="button" class="sp-pill all${spCur === "" && !globalgruppeCur ? " active" : ""}" data-sp=""><span class="dot"></span>Alle</button>`,
   ].concat(sparten.map((s) => {
     const c = sparteColorById[s.id];
     return `<button type="button" class="sp-pill${String(s.id) === spCur ? " active" : ""}" data-sp="${s.id}" style="--c:${c}" title="${escapeHtml(s.name)}"><span class="dot"></span>${escapeHtml(s.kuerzel || s.name)}</button>`;
@@ -455,14 +455,16 @@ async function zeigeDrilldown({ monat, kategorie_id, sparte_id, typ, titel }) {
     drilldownBuchungen = await api("/buchungen?" + params.toString());
     const tbody = $("#tbl-drilldown tbody");
     tbody.innerHTML = drilldownBuchungen.map((b) => {
+      const betrag = b.filter_betrag_cent ?? b.betrag_cent;
       const kats = (b.zeilen || []).map((z) => escapeHtml(z.kategorie_name)).join(", ");
       const bearbeiten = b.transfer_gruppe_id
         ? "" : `<button type="button" class="link" data-drilldown-edit="${b.id}">Bearbeiten</button>`;
       return `<tr><td>${escapeHtml(b.datum)}</td><td>${escapeHtml(b.text || "")}</td>`
         + `<td>${kats}</td><td>${escapeHtml(b.sparte_name)}</td>`
-        + `<td class="num">${centToEuro(b.betrag_cent)}</td><td>${bearbeiten}</td></tr>`;
+        + `<td class="num">${centToEuro(betrag)}</td><td>${bearbeiten}</td></tr>`;
     }).join("");
-    const summe = drilldownBuchungen.reduce((total, b) => total + b.betrag_cent, 0);
+    const summe = drilldownBuchungen.reduce(
+      (total, b) => total + (b.filter_betrag_cent ?? b.betrag_cent), 0);
     $("#drilldown-summe").textContent = centToEuro(summe);
     msg.textContent = drilldownBuchungen.length
       ? `${drilldownBuchungen.length} Buchung${drilldownBuchungen.length === 1 ? "" : "en"}`
@@ -985,6 +987,57 @@ $("#form-globalgruppe").addEventListener("submit", async (e) => {
   } catch (err) { msg.className = "msg err"; msg.textContent = "Fehler: " + err.message; }
 });
 
+let auswertungsgruppeEditId = null;
+let auswertungsgruppen = [];
+function renderAuswertungsgruppenSparten(selected = []) {
+  const gesetzt = new Set(selected.map(String));
+  $("#ag-sparten").innerHTML = sparten.map((s) => `<label style="display:block;margin:6px 0"><input type="checkbox" value="${s.id}"${gesetzt.has(String(s.id)) ? " checked" : ""}> ${escapeHtml(s.name)}</label>`).join("") || '<p class="hint">Zuerst Sparten anlegen.</p>';
+}
+function resetAuswertungsgruppenForm() {
+  auswertungsgruppeEditId = null;
+  $("#ag-form-titel").textContent = "Neue Auswertungsgruppe";
+  $("#ag-name").value = "";
+  $("#ag-beschreibung").value = "";
+  $("#ag-cancel").hidden = true;
+  renderAuswertungsgruppenSparten();
+}
+async function ladeAuswertungsgruppen() {
+  auswertungsgruppen = await api("/auswertungsgruppen");
+  const spartenNamen = Object.fromEntries(sparten.map((s) => [s.id, s.name]));
+  $("#tbl-auswertungsgruppen tbody").innerHTML = auswertungsgruppen.map((g) => `<tr><td>${escapeHtml(g.name)}</td><td>${g.sparte_ids.map((id) => escapeHtml(spartenNamen[id] || ("#" + id))).join(", ") || "&ndash;"}</td><td class="row-actions"><button class="link" data-ag-edit="${g.id}">bearbeiten</button><button class="link" data-ag-del="${g.id}">l\u00f6schen</button></td></tr>`).join("") || '<tr><td colspan="3" class="hint">Noch keine Auswertungsgruppen.</td></tr>';
+  $$("[data-ag-edit]").forEach((button) => button.addEventListener("click", () => {
+    const gruppe = auswertungsgruppen.find((g) => String(g.id) === button.dataset.agEdit);
+    auswertungsgruppeEditId = gruppe.id;
+    $("#ag-form-titel").textContent = "Auswertungsgruppe bearbeiten";
+    $("#ag-name").value = gruppe.name;
+    $("#ag-beschreibung").value = gruppe.beschreibung || "";
+    $("#ag-cancel").hidden = false;
+    renderAuswertungsgruppenSparten(gruppe.sparte_ids);
+  }));
+  $$("[data-ag-del]").forEach((button) => button.addEventListener("click", async () => {
+    const gruppe = auswertungsgruppen.find((g) => String(g.id) === button.dataset.agDel);
+    if (!confirm(`Auswertungsgruppe \u201e${gruppe.name}\u201c wirklich l\u00f6schen?`)) return;
+    try {
+      await api("/auswertungsgruppen/" + gruppe.id, { method: "DELETE" });
+      resetAuswertungsgruppenForm();
+      await ladeAuswertungsgruppen();
+    } catch (err) { $("#ag-msg").className = "msg err"; $("#ag-msg").textContent = "Fehler: " + err.message; }
+  }));
+}
+$("#ag-cancel").addEventListener("click", resetAuswertungsgruppenForm);
+$("#form-auswertungsgruppe").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const msg = $("#ag-msg");
+  const body = { name: $("#ag-name").value.trim(), beschreibung: $("#ag-beschreibung").value.trim() || null, sparte_ids: $$("#ag-sparten input:checked").map((input) => parseInt(input.value, 10)) };
+  try {
+    const path = auswertungsgruppeEditId ? "/auswertungsgruppen/" + auswertungsgruppeEditId : "/auswertungsgruppen";
+    await api(path, { method: auswertungsgruppeEditId ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    msg.className = "msg ok"; msg.textContent = "Auswertungsgruppe gespeichert.";
+    resetAuswertungsgruppenForm();
+    await ladeAuswertungsgruppen();
+  } catch (err) { msg.className = "msg err"; msg.textContent = "Fehler: " + err.message; }
+});
+
 async function ladeRegeln() {
   const tbody = $("#tbl-regeln tbody");
   let regeln;
@@ -1286,11 +1339,9 @@ async function oeffneUmsatzEditor(id) {
       || `<option value="">– keine passende Kategorie –</option>`;
   }
   selSparte.addEventListener("change", fuelleKats);
-  if (v) {
   selTyp.addEventListener("change", fuelleKats);
+  if (v) {
     selSparte.value = String(v.sparte_id);
-    hint.textContent = v.quelle === "regel"
-      ? `Vorschlag aus Regel „${v.regel_name}“` : "Vorschlag aus früheren Buchungen";
     selTyp.value = v.typ || defaultTyp;
     hint.textContent = "Vorschlag: " + v.regel_name;
   } else {
@@ -1316,7 +1367,6 @@ async function oeffneUmsatzEditor(id) {
       $("#import-msg").textContent = `Verbucht: ${centToEuro(res.betrag_cent)} (${res.typ})`
         + (res.regel_angelegt ? " — Regel gemerkt." : ".");
       ladeUmsaetze();
-      $("#import-msg").textContent = `Verbucht: ${centToEuro(res.betrag_cent)} (${res.typ}).`;
     } catch (err) {
       hint.textContent = "Fehler: " + err.message;
     }
@@ -1479,6 +1529,8 @@ async function init() {
   $("#konto-sparte").insertAdjacentHTML("beforeend", optionen);
   $("#b-datum").value = todayISO();
   await ladeGlobalgruppen();
+  renderAuswertungsgruppenSparten();
+  await ladeAuswertungsgruppen();
   renderSpartenPills();
   await erneuereZeilenKategorien();
   addZeile();

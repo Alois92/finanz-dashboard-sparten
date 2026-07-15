@@ -528,16 +528,22 @@ def verbuche_umsatz(umsatz_id: int, body: UmsatzVerbuchenIn,
         raise HTTPException(404, "Umsatz nicht gefunden")
     if u["importstatus"] == "verbucht":
         raise HTTPException(400, "Umsatz ist bereits verbucht")
+    typ = body.typ or ("ausgabe" if u["betrag_cent"] < 0 else "einnahme")
     krow = con.execute(
-        "SELECT sparte_id FROM kategorie WHERE id = ? AND aktiv = 1",
+        "SELECT sparte_id, richtung FROM kategorie WHERE id = ? AND aktiv = 1",
         (body.kategorie_id,),
     ).fetchone()
     if not krow:
         raise HTTPException(404, "Kategorie nicht gefunden")
     if krow["sparte_id"] != body.sparte_id:
         raise HTTPException(400, "Kategorie gehoert nicht zur gewaehlten Sparte")
+    if typ == "umbuchung" and krow["richtung"] != "beides":
+        raise HTTPException(
+            400, "Umbuchung erfordert eine Kategorie mit Richtung 'beides'"
+        )
+    if typ in ("einnahme", "ausgabe") and krow["richtung"] not in (typ, "beides"):
+        raise HTTPException(400, "Kategorie-Richtung passt nicht zum gewaehlten Typ")
 
-    typ = body.typ or ("ausgabe" if u["betrag_cent"] < 0 else "einnahme")
     betrag = abs(u["betrag_cent"])
     if betrag == 0:
         raise HTTPException(400, "Umsatz mit Betrag 0 kann nicht verbucht werden")

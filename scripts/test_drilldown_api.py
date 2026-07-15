@@ -38,9 +38,13 @@ class DrilldownApiTest(unittest.TestCase):
         )
         con.executemany(
             "INSERT INTO kategorie(id, sparte_id, name, richtung) VALUES(?, ?, ?, 'ausgabe')",
-            [(911, 901, "Kategorie A"), (912, 902, "Kategorie B")],
+            [
+                (911, 901, "Kategorie A"),
+                (912, 902, "Kategorie B"),
+                (913, 901, "Kategorie ausserhalb Gruppe"),
+            ],
         )
-        cls.cat1_id, cls.cat2_id = 911, 912
+        cls.cat1_id, cls.cat2_id, cls.cat3_id = 911, 912, 913
         cls.sparte1_id, cls.sparte2_id = 901, 902
 
         cur = con.execute("INSERT INTO globale_kategoriegruppe(name) VALUES('Drilldown-Test')")
@@ -64,6 +68,20 @@ class DrilldownApiTest(unittest.TestCase):
                 "INSERT INTO buchungszeile(buchung_id, kategorie_id, betrag_cent) VALUES(?, ?, ?)",
                 (cur.lastrowid, kategorie_id, betrag),
             )
+        cur = con.execute(
+            "INSERT INTO buchung(sparte_id, datum, typ, text) "
+            "VALUES(?, '2026-07-25', 'ausgabe', 'split_20_100')",
+            (cls.sparte1_id,),
+        )
+        cls.ids["split_20_100"] = cur.lastrowid
+        con.executemany(
+            "INSERT INTO buchungszeile(buchung_id, kategorie_id, betrag_cent) "
+            "VALUES(?, ?, ?)",
+            [
+                (cur.lastrowid, cls.cat1_id, 2000),
+                (cur.lastrowid, cls.cat3_id, 8000),
+            ],
+        )
         con.commit()
         con.close()
 
@@ -118,19 +136,40 @@ class DrilldownApiTest(unittest.TestCase):
             f"/api/buchungen?monat=2026-07&kategorie_id={self.cat1_id}"
             f"&sparte_id={self.sparte1_id}"
         )
-        self.assertEqual([self.ids["juli_cat1"]], [row["id"] for row in data])
+        self.assertEqual(
+            [self.ids["split_20_100"], self.ids["juli_cat1"]],
+            [row["id"] for row in data],
+        )
 
     def test_kategorie_filtert_buchungen_mit_passender_zeile(self) -> None:
         data = self._get(f"/api/buchungen?kategorie_id={self.cat1_id}")
         self.assertEqual(
-            {self.ids["juli_cat1"], self.ids["juni_cat1"]},
+            {self.ids["juli_cat1"], self.ids["juni_cat1"], self.ids["split_20_100"]},
             {row["id"] for row in data},
         )
+
+    def test_splitbuchung_liefert_filterbezogenen_anteil(self) -> None:
+        nach_kategorie = self._get(f"/api/buchungen?kategorie_id={self.cat1_id}")
+        split = next(row for row in nach_kategorie
+                     if row["id"] == self.ids["split_20_100"])
+        self.assertEqual(10000, split["betrag_cent"])
+        self.assertEqual(2000, split["filter_betrag_cent"])
+
+        nach_gruppe = self._get(
+            f"/api/buchungen?globalgruppe_id={self.gruppe_id}"
+        )
+        split = next(row for row in nach_gruppe
+                     if row["id"] == self.ids["split_20_100"])
+        self.assertEqual(2000, split["filter_betrag_cent"])
+
+    def test_studio_summiert_filterbezogenen_anteil(self) -> None:
+        js = (ROOT / "static-studio" / "app.js").read_text(encoding="utf-8")
+        self.assertIn("b.filter_betrag_cent ?? b.betrag_cent", js)
 
     def test_globalgruppe_filtert_ueber_zugeordnete_kategorien(self) -> None:
         data = self._get(f"/api/buchungen?monat=2026-07&globalgruppe_id={self.gruppe_id}")
         self.assertEqual(
-            {self.ids["juli_cat1"], self.ids["juli_cat2"]},
+            {self.ids["juli_cat1"], self.ids["juli_cat2"], self.ids["split_20_100"]},
             {row["id"] for row in data},
         )
 
