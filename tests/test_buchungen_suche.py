@@ -3,10 +3,6 @@ import sqlite3
 import tempfile
 import unittest
 
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
-
-from app.db import db_dep
 from app.routers import buchungen
 
 
@@ -29,19 +25,12 @@ class BuchungenSucheApiTest(unittest.TestCase):
         ).lastrowid
         self.con.commit()
 
-        app = FastAPI()
-        app.include_router(buchungen.router, prefix="/api")
-
-        def override_db():
-            yield self.con
-
-        app.dependency_overrides[db_dep] = override_db
-        self.client = TestClient(app)
-
     def tearDown(self):
-        self.client.close()
         self.con.close()
         self.tempdir.cleanup()
+
+    def _suche(self, q):
+        return buchungen.suche_buchungen(q=q, con=self.con)
 
     def _buchung(self, *, text="", notiz=None, kontakt_id=None, datum="2026-01-01"):
         cur = self.con.execute(
@@ -67,25 +56,22 @@ class BuchungenSucheApiTest(unittest.TestCase):
         )
 
         self.assertEqual(
-            [row["id"] for row in self.client.get("/api/buchungen/suche", params={"q": "\u00f6l"}).json()],
+            [row["id"] for row in self._suche("\u00f6l")],
             [text_id],
         )
         self.assertEqual(
-            [row["id"] for row in self.client.get("/api/buchungen/suche", params={"q": "sonderNOTIZ"}).json()],
+            [row["id"] for row in self._suche("sonderNOTIZ")],
             [notiz_id],
         )
         self.assertEqual(
-            [row["id"] for row in self.client.get("/api/buchungen/suche", params={"q": "\u00e4rZTIN"}).json()],
+            [row["id"] for row in self._suche("\u00e4rZTIN")],
             [kontakt_buchung_id],
         )
 
     def test_liefert_hoechstens_200_neueste_buchungen(self):
         ids = [self._buchung(text="Grenzfall") for _ in range(205)]
 
-        response = self.client.get("/api/buchungen/suche", params={"q": "grenzFALL"})
-
-        self.assertEqual(response.status_code, 200)
-        result = response.json()
+        result = self._suche("grenzFALL")
         self.assertEqual(len(result), 200)
         self.assertEqual([row["id"] for row in result], list(reversed(ids))[:200])
         self.assertIn("zeilen", result[0])
