@@ -10,6 +10,9 @@
 
 **Spec:** `docs/superpowers/specs/2026-07-15-abschlusspaket-design.md` — vor Beginn lesen.
 
+**Umsetzungsstatus (2026-07-16):** Alle fünf Arbeitspakete, die Feedbackschleifen,
+die automatisierten Tests sowie die Desktop- und Mobil-Browserabnahme sind abgeschlossen.
+
 ## Global Constraints
 
 - Beträge immer als Ganzzahl in **Cent** (`betrag_cent`); Anzeige `de-DE`-Format mit €.
@@ -120,6 +123,6 @@
 
 ## Abschluss
 
-- [ ] Alle fünf Bausteine gegen die Spec prüfen (Spec-Abdeckung Punkt für Punkt)
-- [ ] README „Nächste Schritte" aktualisieren (erledigte Punkte streichen)
-- [ ] Finaler Regressionstest der Kernflüsse im Browser
+- [x] Alle fünf Bausteine gegen die Spec prüfen (Spec-Abdeckung Punkt für Punkt)
+- [x] README „Nächste Schritte" aktualisieren (erledigte Punkte streichen)
+- [x] Finaler Regressionstest der Kernflüsse im Browser
