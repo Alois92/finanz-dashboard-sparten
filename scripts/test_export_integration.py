@@ -95,6 +95,27 @@ class ExportTest(unittest.TestCase):
         self.assertTrue(all(isinstance(kategorien.cell(r, c).value, (int, float))
             for r in range(2, kategorien.max_row + 1) for c in range(3, 6)))
 
+    def test_xlsx_neutralisiert_formelpraefixe_in_textzellen(self):
+        sid = self.sparten[0]["id"]
+        dangerous = '=HYPERLINK("https://example.invalid","Klick")'
+        self.req("POST", "/api/buchungen", 201, {
+            "sparte_id": sid,
+            "datum": "2027-01-01",
+            "typ": "ausgabe",
+            "text": dangerous,
+            "zeilen": [{
+                "kategorie_id": self.kategorien[0]["id"],
+                "betrag_cent": 100,
+            }],
+        })
+
+        status, _headers, content = self.raw(
+            "GET", f"/api/export/xlsx?von=2027-01-01&bis=2027-12-31&sparte_id={sid}")
+        self.assertEqual(status, 200, content.decode(errors="replace"))
+        cell = load_workbook(io.BytesIO(content), data_only=False)["Buchungen"]["E2"]
+        self.assertEqual(cell.data_type, "s")
+        self.assertEqual(cell.value, "'" + dangerous)
+
     def test_bericht_ist_druckbar_gefiltert_formatiert_und_escaped(self):
         sid = self.sparten[0]["id"]
         status, headers, content = self.raw("GET", f"/export/bericht?jahr=2026&sparte_id={sid}")

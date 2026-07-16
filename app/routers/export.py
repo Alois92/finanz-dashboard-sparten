@@ -13,6 +13,14 @@ from ..db import db_dep
 router = APIRouter(tags=["export"])
 EURO_FORMAT = '#.##0,00 \u20ac'
 
+def _xlsx_text(value):
+    """Schreibt nutzerkontrollierte Texte als Literal statt als Excel-Formel."""
+    text = "" if value is None else str(value)
+    if text.startswith(("=", "+", "-", "@")):
+        return "'" + text
+    return text
+
+
 def _validate(con, von=None, bis=None, sparte_id=None):
     dates = []
     for value, field in ((von, "von"), (bis, "bis")):
@@ -85,8 +93,9 @@ def export_xlsx(von: str | None = None, bis: str | None = None,
     skipped = 0
     for row in rows:
         try:
-            bookings.append([row["datum"],row["sparte"],row["kategorie"],row["typ"],
-                             row["text"],row["kontakt"],row["betrag_cent"]/100])
+            bookings.append([_xlsx_text(row["datum"]), _xlsx_text(row["sparte"]),
+                             _xlsx_text(row["kategorie"]), _xlsx_text(row["typ"]),
+                             _xlsx_text(row["text"]), _xlsx_text(row["kontakt"]), row["betrag_cent"]/100])
         except (TypeError, ValueError):
             skipped += 1
     _sheet(bookings, ["Datum","Sparte","Kategorie","Typ","Text","Kontakt","Betrag \u20ac"],
@@ -99,13 +108,13 @@ def export_xlsx(von: str | None = None, bis: str | None = None,
     category = wb.create_sheet("Kategorien"); totals, overall = {}, [0, 0]
     for row in cats:
         income, expense = row["ein"] or 0, row["aus"] or 0
-        category.append([row["sparte"],row["kategorie"],income/100,expense/100,
-                         (income-expense)/100])
+        category.append([_xlsx_text(row["sparte"]), _xlsx_text(row["kategorie"]),
+                         income/100, expense/100, (income-expense)/100])
         total = totals.setdefault(row["sparte"], [0, 0])
         total[0] += income; total[1] += expense
         overall[0] += income; overall[1] += expense
     for name, (income, expense) in totals.items():
-        category.append([name,"Gesamt",income/100,expense/100,(income-expense)/100])
+        category.append([_xlsx_text(name),"Gesamt",income/100,expense/100,(income-expense)/100])
     category.append(["Gesamt","Gesamt",overall[0]/100,overall[1]/100,
                      (overall[0]-overall[1])/100])
     _sheet(category, ["Sparte","Kategorie","Einnahmen","Ausgaben","Saldo"],
