@@ -25,6 +25,8 @@ class ParseIn(BaseModel):
 EINNAHME_WORTE = {
     "einnahme", "einnahmen", "gutschrift", "gutschriften", "miete",
     "mieteinnahme", "mieteinnahmen", "eingang", "erstattung", "lohn", "gehalt",
+    "verkauf", "verkauft", "erloes", "erlös", "foerderung", "förderung",
+    "praemie", "prämie", "zinsen", "rueckzahlung", "rückzahlung",
 }
 UMBUCHUNG_WORTE = {
     "umbuchung", "umbuchungen", "transfer", "uebertrag", "übertrag",
