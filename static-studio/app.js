@@ -181,6 +181,8 @@ function ladePage(name) {
   else if (name === "kategorien") ladeKategorienTabelle();
   else if (name === "belege") ladeBelege();
   else if (name === "bankimport") initBankimport();
+  else if (name === "erfassen") { ladeAusgewerteteRechnungen(); starteRaPolling(); }
+  if (name !== "erfassen") stoppeRaPolling();
 }
 $$("[data-page]").forEach((b) => b.addEventListener("click", () => activatePage(b.dataset.page)));
 $("#bb-mehr").addEventListener("click", () => { $("#mehr-sheet").hidden = false; });
@@ -764,22 +766,167 @@ $("#add-zeile").addEventListener("click", addZeile);
 $("#b-sparte").addEventListener("change", () => { erneuereZeilenKategorien(); });
 
 // ---- Foto als Beleg direkt beim Erfassen ----
+// fotoPending (neues Foto, wird nach dem Speichern hochgeladen) und
+// belegPendingId (bereits vorhandener Beleg aus einer Rechnungs-Auswertung,
+// wird nur noch verknüpft) schließen sich gegenseitig aus - das Setzen des
+// einen räumt das andere.
 let fotoPending = null;
-function zeigeFotoInfo() {
+let belegPendingId = null;
+let auswertungPendingId = null;
+function aktualisiereBelegInfo() {
   const info = $("#b-foto-info");
-  if (!fotoPending) { info.innerHTML = ""; return; }
-  info.innerHTML = `${escapeHtml(fotoPending.name)} <button type="button" class="link" id="b-foto-entfernen">✕ entfernen</button>`;
-  $("#b-foto-entfernen").addEventListener("click", () => {
-    fotoPending = null; $("#b-foto").value = ""; zeigeFotoInfo();
-  });
+  if (fotoPending) {
+    info.innerHTML = `${escapeHtml(fotoPending.name)} <button type="button" class="link" id="b-foto-entfernen">✕ entfernen</button>`;
+    $("#b-foto-entfernen").addEventListener("click", () => {
+      fotoPending = null; $("#b-foto").value = ""; aktualisiereBelegInfo();
+    });
+  } else if (belegPendingId) {
+    info.innerHTML = `Beleg aus Rechnungs-Auswertung übernommen <button type="button" class="link" id="b-beleg-entfernen">✕ entfernen</button>`;
+    $("#b-beleg-entfernen").addEventListener("click", () => {
+      belegPendingId = null; auswertungPendingId = null; aktualisiereBelegInfo();
+    });
+  } else {
+    info.innerHTML = "";
+  }
 }
 $("#b-foto-btn").addEventListener("click", () => $("#b-foto").click());
 $("#b-foto").addEventListener("change", () => {
   const datei = $("#b-foto").files[0];
   if (!datei) return;
   fotoPending = datei;
-  zeigeFotoInfo();
+  belegPendingId = null; auswertungPendingId = null;
+  aktualisiereBelegInfo();
 });
+
+// ---- Rechnung fotografieren: Upload + Auswertungsauftrag im Hintergrund ----
+$("#rf-foto-btn").addEventListener("click", () => $("#rf-foto").click());
+$("#rf-foto").addEventListener("change", async () => {
+  const datei = $("#rf-foto").files[0];
+  $("#rf-foto").value = "";
+  if (!datei) return;
+  const msg = $("#rf-msg");
+  msg.className = "msg"; msg.textContent = "Lade hoch …";
+  try {
+    const fd = new FormData();
+    fd.append("datei", datei);
+    fd.append("sparte_id", $("#rf-sparte").value);
+    const beleg = await api("/belege", { method: "POST", body: fd });
+    await api("/belege/" + beleg.id + "/auswerten", { method: "POST" });
+    msg.className = "msg ok";
+    msg.textContent = "Hochgeladen — wird im Hintergrund ausgewertet (dauert ein paar Minuten). Du kannst die App schließen.";
+    ladeAusgewerteteRechnungen();
+  } catch (err) {
+    msg.className = "msg err";
+    msg.textContent = "Fehler: " + err.message;
+  }
+});
+
+// ---- Ausgewertete Rechnungen: Liste + Polling, solange Erfassen aktiv ist ----
+let raPollTimer = null;
+function starteRaPolling() {
+  stoppeRaPolling();
+  raPollTimer = setInterval(() => {
+    if (aktivePage === "erfassen") ladeAusgewerteteRechnungen();
+  }, 20000);
+}
+function stoppeRaPolling() {
+  if (raPollTimer) { clearInterval(raPollTimer); raPollTimer = null; }
+}
+function raStatusLabel(status) {
+  return { offen: "wartet", laeuft: "läuft …", fertig: "fertig", fehler: "Fehler" }[status] || status;
+}
+function renderAuswertungsZeile(a) {
+  const kopf = `<span class="badge ${escapeHtml(a.status)}">${escapeHtml(raStatusLabel(a.status))}</span> <strong>${escapeHtml(a.dateiname)}</strong>`;
+  if (a.status === "fertig" && a.ergebnis) {
+    const e = a.ergebnis;
+    const anzahl = (e.positionen || []).length;
+    const teile = [
+      e.haendler ? escapeHtml(e.haendler) : null,
+      e.datum ? escapeHtml(e.datum) : null,
+      e.gesamt_cent != null ? centToEuro(e.gesamt_cent) : null,
+      anzahl + " Position" + (anzahl === 1 ? "" : "en"),
+    ].filter(Boolean).join(" · ");
+    return `<div class="ra-zeile">
+      <div>${kopf}<div class="hint">${teile}</div></div>
+      <div class="row-actions">
+        <button type="button" class="btn accent" data-ra-uebernehmen="${a.id}">Übernehmen</button>
+        <button type="button" class="link" data-ra-verwerfen="${a.id}">Verwerfen</button>
+      </div>
+    </div>`;
+  }
+  if (a.status === "fehler") {
+    return `<div class="ra-zeile">
+      <div>${kopf}<div class="hint" style="color:var(--aus)">${escapeHtml(a.fehler || "Unbekannter Fehler")}</div></div>
+      <div class="row-actions"><button type="button" class="link" data-ra-verwerfen="${a.id}">Verwerfen</button></div>
+    </div>`;
+  }
+  return `<div class="ra-zeile"><div>${kopf}</div></div>`;
+}
+async function ladeAusgewerteteRechnungen() {
+  const box = $("#ra-liste");
+  let auftraege;
+  try {
+    auftraege = await api("/beleg-auswertungen");
+  } catch (err) {
+    box.innerHTML = "";
+    $("#ra-leer").hidden = false;
+    $("#ra-leer").textContent = "Ausgewertete Rechnungen konnten nicht geladen werden (" + err.message + ").";
+    return;
+  }
+  $("#ra-leer").hidden = auftraege.length > 0;
+  $("#ra-leer").textContent = "Noch keine ausgewerteten Rechnungen.";
+  box.innerHTML = auftraege.map(renderAuswertungsZeile).join("");
+  $$("#ra-liste [data-ra-uebernehmen]").forEach((btn) => btn.addEventListener("click", () => {
+    const a = auftraege.find((x) => String(x.id) === btn.dataset.raUebernehmen);
+    if (a) uebernehmeAuswertung(a);
+  }));
+  $$("#ra-liste [data-ra-verwerfen]").forEach((btn) => btn.addEventListener("click", async () => {
+    if (!confirm("Auswertung wirklich verwerfen?")) return;
+    try {
+      await api("/beleg-auswertungen/" + btn.dataset.raVerwerfen + "/status", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "verworfen" }),
+      });
+      ladeAusgewerteteRechnungen();
+    } catch (err) {
+      alert("Fehler: " + err.message);
+    }
+  }));
+}
+async function uebernehmeAuswertung(a) {
+  activatePage("erfassen");
+  const e = a.ergebnis || {};
+  if (a.sparte_id && sparten.some((s) => String(s.id) === String(a.sparte_id))) {
+    $("#b-sparte").value = String(a.sparte_id);
+  }
+  $("#b-datum").value = e.datum || todayISO();
+  $("#b-text").value = e.haendler || "";
+  await erneuereZeilenKategorien();
+  $("#zeilen").innerHTML = "";
+  const positionen = (e.positionen || []).filter((p) => p.betrag_cent > 0);
+  if (!positionen.length) {
+    addZeile();
+  } else {
+    positionen.forEach((p) => {
+      addZeile();
+      const zeile = $("#zeilen .zeile:last-child");
+      if (p.kategorie_id) {
+        const sel = zeile.querySelector(".z-kat");
+        if ([...sel.options].some((o) => o.value === String(p.kategorie_id))) {
+          sel.value = String(p.kategorie_id);
+        }
+      }
+      zeile.querySelector(".z-betrag").value = centToInput(p.betrag_cent);
+    });
+  }
+  updateSumme();
+  fotoPending = null; $("#b-foto").value = "";
+  belegPendingId = a.beleg_id;
+  auswertungPendingId = a.id;
+  aktualisiereBelegInfo();
+  $("#b-msg").className = "msg ok";
+  $("#b-msg").textContent = "Beleg übernommen — bitte prüfen und speichern.";
+}
 
 // ---- Bearbeiten-Modus ----
 async function starteBearbeitung(b) {
@@ -817,7 +964,9 @@ function beendeBearbeitung() {
   $("#b-datum").value = todayISO();
   $("#zeilen").innerHTML = "";
   addZeile();
-  fotoPending = null; $("#b-foto").value = ""; zeigeFotoInfo();
+  fotoPending = null; $("#b-foto").value = "";
+  belegPendingId = null; auswertungPendingId = null;
+  aktualisiereBelegInfo();
 }
 $("#b-cancel").addEventListener("click", () => { beendeBearbeitung(); $("#b-msg").textContent = ""; });
 
@@ -860,6 +1009,24 @@ $("#form-buchung").addEventListener("submit", async (e) => {
       } catch (fotoErr) {
         msg.className = "msg err";
         msg.textContent = "Buchung gespeichert, aber Beleg-Upload fehlgeschlagen: " + fotoErr.message;
+      }
+    } else if (belegPendingId && created.id) {
+      try {
+        await api("/buchungen/" + created.id + "/belege", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ beleg_id: belegPendingId }),
+        });
+        if (auswertungPendingId) {
+          await api("/beleg-auswertungen/" + auswertungPendingId + "/status", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status: "verbucht" }),
+          });
+        }
+        msg.textContent += " + Beleg verknüpft.";
+        ladeAusgewerteteRechnungen();
+      } catch (belegErr) {
+        msg.className = "msg err";
+        msg.textContent = "Buchung gespeichert, aber Beleg-Verknüpfung fehlgeschlagen: " + belegErr.message;
       }
     }
     beendeBearbeitung();
@@ -1652,6 +1819,7 @@ async function init() {
   const opt = (s) => `<option value="${s.id}">${escapeHtml(s.name)}${s.geschuetzt ? " 🔒" : ""}</option>`;
   const optionen = sparten.map(opt).join("");
   $("#b-sparte").innerHTML = optionen;
+  $("#rf-sparte").innerHTML = optionen;
   $("#k-sparte").innerHTML = optionen;
   $("#xl-sparte").innerHTML = optionen;
   $("#u-von").innerHTML = optionen;

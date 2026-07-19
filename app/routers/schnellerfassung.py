@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from ..db import db_dep
+from ..regeln import finde_regel
 
 router = APIRouter(tags=["schnellerfassung"])
 
@@ -183,6 +184,22 @@ def _parse_einzeltext(text: str, con: sqlite3.Connection) -> dict:
             sparte_name = s["name"] if s else None
     kategorie_id = kategorie["id"] if kategorie else None
     kategorie_name = kategorie["name"] if kategorie else None
+
+    # ---- Merkregeln: greifen nur, wenn der Namensabgleich keine Kategorie fand ----
+    if kategorie_id is None:
+        regel = finde_regel(con, text)
+        if regel and regel["ziel_kategorie_id"]:
+            kategorie_id = regel["ziel_kategorie_id"]
+            kat_row = next((k for k in kategorien if k["id"] == kategorie_id), None)
+            kategorie_name = kat_row["name"] if kat_row else None
+            if regel["ziel_typ"]:
+                typ = regel["ziel_typ"]
+            if sparte_id is None:
+                regel_sparte_id = regel["ziel_sparte_id"] or regel["kat_sparte_id"]
+                if regel_sparte_id:
+                    sparte_id = regel_sparte_id
+                    s = next((x for x in sparten if x["id"] == sparte_id), None)
+                    sparte_name = s["name"] if s else None
 
     # ---- Rest-Text als Beschreibung aufbereiten ----
     beschreibung = re.sub(r"\s+", " ", rest).strip(" ,;.-").strip()

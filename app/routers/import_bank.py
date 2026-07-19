@@ -22,6 +22,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from ..db import db_dep
+from ..regeln import aktive_regeln, normalisiere_regeltext
 
 router = APIRouter(tags=["import"])
 
@@ -350,27 +351,20 @@ def _saldo_pruefen(posten: list[dict], hat_saldo: bool):
 # Umsaetze auflisten
 # ---------------------------------------------------------------------------
 
-def _normalisiere_regeltext(text: Optional[str]) -> str:
-    """Stabilen, klein geschriebenen Regeltext ohne lange Nummern liefern."""
-    wert = re.sub(r"\d{5,}", " ", (text or "").lower())
-    wert = re.sub(r"\s+", " ", wert).strip(" -_,.;:/")
-    return wert[:60].strip()
-
-
 def _regel_text(umsatz) -> str:
     """Empfaenger bevorzugen, sonst den ersten brauchbaren Verwendungszweck."""
-    gegenpartei = _normalisiere_regeltext(umsatz["gegenpartei"])
+    gegenpartei = normalisiere_regeltext(umsatz["gegenpartei"])
     if gegenpartei:
         return gegenpartei
     for teil in re.split(r"[|;/\n]+", umsatz["text"] or ""):
-        kandidat = _normalisiere_regeltext(teil)
+        kandidat = normalisiere_regeltext(teil)
         if len(kandidat) >= 3:
             return kandidat
     return ""
 
 
 def _regel_haystack(umsatz) -> str:
-    return _normalisiere_regeltext(
+    return normalisiere_regeltext(
         f"{umsatz['gegenpartei'] or ''} {umsatz['text'] or ''}"
     )
 
@@ -405,15 +399,6 @@ def delete_regel(regel_id: int, con: sqlite3.Connection = Depends(db_dep)):
     con.commit()
 
 
-def _aktive_regeln(con: sqlite3.Connection):
-    return con.execute(
-        "SELECT r.*, k.sparte_id AS kat_sparte_id FROM regel r "
-        "LEFT JOIN kategorie k ON k.id = r.ziel_kategorie_id "
-        "WHERE r.aktiv = 1 "
-        "ORDER BY r.prioritaet, LENGTH(r.bedingung_text) DESC, r.id"
-    ).fetchall()
-
-
 @router.get("/bankumsaetze")
 def list_bankumsaetze(
     bankkonto_id: Optional[int] = None,
@@ -446,7 +431,7 @@ def list_bankumsaetze(
     # Offenen Umsaetzen den ersten passenden aktiven Regelvorschlag mitgeben.
     offene = [r for r in rows if r["importstatus"] == "offen"]
     if offene:
-        regeln = _aktive_regeln(con)
+        regeln = aktive_regeln(con)
         for u in offene:
             u["vorschlag"] = _vorschlag_fuer_umsatz(con, u, regeln)
     return rows
@@ -458,7 +443,7 @@ def _vorschlag_fuer_umsatz(con, u: dict, regeln) -> Optional[dict]:
     for r in regeln:
         if r["bankkonto_id"] is not None and r["bankkonto_id"] != u["bankkonto_id"]:
             continue
-        if not r["bedingung_text"] or _normalisiere_regeltext(r["bedingung_text"]) not in haystack:
+        if not r["bedingung_text"] or normalisiere_regeltext(r["bedingung_text"]) not in haystack:
             continue
         betrag = abs(u["betrag_cent"])
         if r["bedingung_betrag_von_cent"] is not None and betrag < r["bedingung_betrag_von_cent"]:
@@ -494,7 +479,7 @@ def uebernehme_vorschlaege(
             uebersprungen += 1
             continue
         vorschlag = _vorschlag_fuer_umsatz(
-            con, dict(umsatz), _aktive_regeln(con),
+            con, dict(umsatz), aktive_regeln(con),
         )
         if not vorschlag:
             uebersprungen += 1

@@ -170,6 +170,25 @@
 
       <!-- ============ Erfassen ============ -->
       <section class="page" id="page-erfassen">
+        <div class="card">
+          <div class="card-head"><h2>📷 Rechnung fotografieren</h2>
+            <p class="hint">Foto wird hochgeladen und im Hintergrund lokal ausgewertet (kein Cloud-Dienst) — dauert je nach Gerät ein paar Minuten. Das Ergebnis erscheint unten zur Prüfung.</p></div>
+          <div class="form-grid">
+            <label>Sparte<select id="rf-sparte"></select></label>
+          </div>
+          <div class="form-foot">
+            <button type="button" id="rf-foto-btn" class="btn accent">Foto aufnehmen</button>
+            <input type="file" id="rf-foto" accept="image/*" capture="environment" hidden>
+            <span class="msg" id="rf-msg"></span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h2>Ausgewertete Rechnungen</h2></div>
+          <p class="hint" id="ra-leer" hidden>Noch keine ausgewerteten Rechnungen.</p>
+          <div id="ra-liste"></div>
+        </div>
+
         <div class="card quick-card">
           <div class="card-head"><h2>Schnell erfassen</h2><p class="hint">z. B. „gestern Diesel 82,30 Hof“ — auch mehrere auf einmal, z. B. „Essen 5, Einkaufen 18, Kino 27“. Enter drückt Vorschlag, Shift+Enter Zeilenumbruch</p></div>
           <div class="quick-row">

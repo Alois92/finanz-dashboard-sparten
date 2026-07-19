@@ -90,6 +90,50 @@ Git synchronisiert nur Programm und Konzept – **nicht** den Datenbestand.
 GitHub ist daher **kein Backup** der Buchungen; dafuer den lokalen
 Backup-Weg (NAS/offline) nutzen.
 
+## Lokale Rechnungs-Auswertung (Ollama)
+
+Rechnungen/Kassenbons lassen sich als Foto hochladen und lokal (kein
+Cloud-Dienst) per [Ollama](https://ollama.com) mit einem Vision-Modell
+auswerten: Haendler, Datum, Positionen und Kategorien-Vorschlag werden
+automatisch erkannt und koennen anschliessend als Buchung uebernommen werden.
+
+**Voraussetzung:** Ollama laeuft lokal (oder im Netzwerk erreichbar) mit einem
+Vision-Modell, z. B.:
+
+```powershell
+ollama pull qwen2.5vl:7b
+```
+
+**ENV-Variablen** (optional, mit sinnvollen Defaults):
+
+| Variable              | Default                    | Bedeutung                     |
+|-----------------------|-----------------------------|--------------------------------|
+| `FINANZ_OLLAMA_URL`   | `http://127.0.0.1:11434`   | Basis-URL des Ollama-Servers   |
+| `FINANZ_OLLAMA_MODEL` | `qwen2.5vl:7b`              | zu verwendendes Vision-Modell  |
+
+**Ablauf:**
+
+1. Unter „Erfassen“ → „📷 Rechnung fotografieren“ Sparte waehlen, Foto
+   aufnehmen/auswaehlen (JPG/PNG/WebP). Der Beleg wird sofort hochgeladen und
+   ein Auswertungsauftrag angelegt (Status `offen`).
+2. Ein Hintergrund-Task (`app/auswertung.py::auswertung_schleife`, startet mit
+   dem Server) verarbeitet offene Auftraege alle ~15 Sekunden: laedt das Bild,
+   ruft Ollama lokal auf (Timeout 10 Minuten) und speichert das erkannte
+   Ergebnis (Status `fertig`) bzw. einen Fehlertext (Status `fehler`). Ist
+   Ollama gerade nicht erreichbar, bleibt der Auftrag `offen` und wird spaeter
+   automatisch erneut versucht (bis zu 5 Mal).
+3. Unter „Erfassen“ → „Ausgewertete Rechnungen“ erscheinen offene, laufende,
+   fertige und fehlerhafte Auftraege (Polling alle 20 s). Bei „fertig“:
+   „Übernehmen“ fuellt das Buchungsformular (Sparte, Datum, Text, Positionen
+   inkl. Kategorie-Vorschlag) - nach dem Speichern wird der bereits
+   hochgeladene Beleg nur noch verknuepft (kein erneuter Upload) und der
+   Auftrag auf `verbucht` gesetzt. „Verwerfen“ markiert den Auftrag als
+   `verworfen`, ohne eine Buchung anzulegen.
+
+Die Kategorien-Zuordnung je Position nutzt zuerst den Namensabgleich (nur
+Kategorien der Beleg-Sparte), sonst gelernte Merkregeln (Feature „Merkregeln
+ueberall“) - passend zur Beleg-Sparte.
+
 ## Optionale Zukunftsthemen
 
 - Kontostand-Abgleich und Budgetplanung

@@ -105,6 +105,32 @@ def init_db() -> None:
                 con.execute("UPDATE sparte SET farbe = ? WHERE id = ?",
                             (farbe, row["id"]))
             con.commit()
+
+        # Nachruestung: beleg_auswertung fehlt in Bestands-DBs (aeltere
+        # Schema-Version) - idempotent nachziehen, damit Feature B (lokale
+        # Foto-Auswertung) auch ohne Neuanlage der DB funktioniert.
+        con.execute(
+            "CREATE TABLE IF NOT EXISTS beleg_auswertung ("
+            "id INTEGER PRIMARY KEY, "
+            "beleg_id INTEGER NOT NULL REFERENCES beleg(id) ON DELETE CASCADE, "
+            "status TEXT NOT NULL DEFAULT 'offen' "
+            "  CHECK (status IN ('offen','laeuft','fertig','fehler','verbucht','verworfen')), "
+            "ergebnis_json TEXT, "
+            "fehler TEXT, "
+            "versuche INTEGER NOT NULL DEFAULT 0, "
+            "erstellt TEXT NOT NULL DEFAULT (datetime('now')), "
+            "aktualisiert TEXT"
+            ")"
+        )
+        con.execute(
+            "CREATE INDEX IF NOT EXISTS idx_beleg_auswertung_status "
+            "ON beleg_auswertung (status)"
+        )
+        con.execute(
+            "CREATE INDEX IF NOT EXISTS idx_beleg_auswertung_beleg "
+            "ON beleg_auswertung (beleg_id)"
+        )
+        con.commit()
     finally:
         con.close()
 

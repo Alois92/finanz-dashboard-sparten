@@ -245,7 +245,9 @@ td.num, th.num { text-align: right; font-family: var(--font-num); font-variant-n
 .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: .72rem; font-weight: 600; }
 .badge.einnahme { background: color-mix(in srgb, var(--ein) 16%, transparent); color: var(--ein); }
 .badge.ausgabe { background: color-mix(in srgb, var(--aus) 16%, transparent); color: var(--aus); }
-.badge.umbuchung, .badge.offen { background: var(--panel-2); color: var(--muted); }
+.badge.umbuchung, .badge.offen, .badge.laeuft { background: var(--panel-2); color: var(--muted); }
+.badge.fertig { background: color-mix(in srgb, var(--ein) 16%, transparent); color: var(--ein); }
+.badge.fehler, .badge.verworfen { background: color-mix(in srgb, var(--aus) 16%, transparent); color: var(--aus); }
 .link { border: 0; background: none; color: var(--accent); text-decoration: underline; padding: 0; font-size: .85rem; }
 a { color: var(--accent); }
 td .num.neg, .num.neg { color: var(--aus); }
@@ -311,6 +313,15 @@ textarea { resize: vertical; }
 .foto-row { display: flex; align-items: center; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
 #b-foto-info { font-size: .82rem; color: var(--muted); }
 #b-foto-info .link { margin-left: 8px; }
+
+/* Rechnungs-Auswertung: Liste der hochgeladenen/ausgewerteten Belege */
+#ra-liste { display: flex; flex-direction: column; gap: 10px; }
+.ra-zeile {
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 12px; flex-wrap: wrap; padding: 10px 12px;
+  border: 1px solid var(--border); border-radius: 12px; background: var(--panel-2);
+}
+.ra-zeile .hint { margin-top: 4px; }
 
 .list-filter { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .list-filter input[type="search"] { min-width: 180px; }

@@ -1,5 +1,6 @@
 """Buchungen: erfassen (Kopf + Zeilen), auflisten, bearbeiten, loeschen.
 Dazu Umbuchungen zwischen Sparten (zwei gekoppelte Buchungen)."""
+import logging
 import re
 import sqlite3
 import uuid
@@ -8,9 +9,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from ..db import db_dep
+from ..regeln import normalisiere_regeltext
 from ..schemas import BuchungIn
 
 router = APIRouter(tags=["buchungen"])
+
+log = logging.getLogger("finanz.buchungen")
 
 UMBUCHUNG_KATEGORIE = "Umbuchung"
 
@@ -60,7 +64,46 @@ def create_buchung(b: BuchungIn, con: sqlite3.Connection = Depends(db_dep)):
         con.rollback()
         raise HTTPException(400, f"Datenbankfehler: {e}")
 
+    if b.typ != "umbuchung" and b.text and b.zeilen:
+        _lerne_regel(con, b.text, b.sparte_id, b.zeilen[0].kategorie_id, b.typ)
+
     return _buchung_detail(con, buchung_id)
+
+
+def _lerne_regel(con: sqlite3.Connection, text: str, sparte_id: int,
+                 kategorie_id: int, typ: str) -> None:
+    """Legt/aktualisiert automatisch eine Merkregel aus einer erfassten Buchung.
+
+    Faellt wie das manuelle Lernen beim Bankumsatz-Verbuchen (import_bank.py)
+    auf ein Upsert ueber LOWER(bedingung_text) zurueck. Fehler duerfen das
+    Speichern der Buchung NIE ruecknehmen - daher komplett try/except mit Log,
+    ohne eigenen Commit-/Rollback-Einfluss auf die bereits gespeicherte Buchung.
+    """
+    try:
+        bedingung = normalisiere_regeltext(text)
+        if len(bedingung) < 3:
+            return
+        name = "Gelernt: " + text[:60]
+        vorhanden = con.execute(
+            "SELECT id FROM regel WHERE LOWER(bedingung_text) = ? ORDER BY id LIMIT 1",
+            (bedingung,),
+        ).fetchone()
+        if vorhanden:
+            con.execute(
+                "UPDATE regel SET name = ?, aktiv = 1, ziel_sparte_id = ?, "
+                "ziel_kategorie_id = ?, ziel_typ = ? WHERE id = ?",
+                (name, sparte_id, kategorie_id, typ, vorhanden["id"]),
+            )
+        else:
+            con.execute(
+                "INSERT INTO regel(name, bedingung_text, ziel_sparte_id, "
+                "ziel_kategorie_id, ziel_typ) VALUES(?,?,?,?,?)",
+                (name, bedingung, sparte_id, kategorie_id, typ),
+            )
+        con.commit()
+    except Exception:
+        con.rollback()
+        log.exception("Automatisches Lernen der Regel fehlgeschlagen (Buchung bleibt gespeichert)")
 
 
 @router.get("/buchungen")

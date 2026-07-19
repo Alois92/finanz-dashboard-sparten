@@ -6,10 +6,12 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from .auswertung import auswertung_schleife
 from .backup import backup_schleife
 from .db import init_db
-from .routers import (belege, buchungen, dashboard, export, gruppen, import_bank,
-                      import_excel, schnellerfassung, stammdaten)
+from .routers import (belege, beleg_auswertung, buchungen, dashboard, export,
+                      gruppen, import_bank, import_excel, schnellerfassung,
+                      stammdaten)
 
 STUDIO_DIR = pathlib.Path(__file__).resolve().parent.parent / "static-studio"
 
@@ -18,8 +20,10 @@ STUDIO_DIR = pathlib.Path(__file__).resolve().parent.parent / "static-studio"
 async def lifespan(app: FastAPI):
     init_db()
     sicherung = asyncio.create_task(backup_schleife())
+    auswertung = asyncio.create_task(auswertung_schleife())
     yield
     sicherung.cancel()
+    auswertung.cancel()
 
 
 app = FastAPI(title="Finanz-Dashboard Sparten", version="0.1.0", lifespan=lifespan)
@@ -31,6 +35,7 @@ app.include_router(dashboard.router, prefix="/api")
 app.include_router(gruppen.router, prefix="/api")
 app.include_router(schnellerfassung.router, prefix="/api")
 app.include_router(belege.router, prefix="/api")
+app.include_router(beleg_auswertung.router, prefix="/api")
 app.include_router(import_bank.router, prefix="/api")
 app.include_router(import_excel.router, prefix="/api")
 
