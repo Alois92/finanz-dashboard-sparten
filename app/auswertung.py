@@ -50,9 +50,16 @@ PROMPT = (
     "Antworte AUSSCHLIESSLICH mit einem JSON-Objekt in genau diesem Format, "
     "ohne weiteren Text davor oder danach: "
     '{"haendler": string oder null, "datum": "JJJJ-MM-TT" oder null, '
-    '"positionen": [{"text": string, "betrag_cent": integer}], '
+    '"positionen": [{"text": string, "betrag_cent": integer, '
+    '"mwst_prozent": Zahl oder null}], '
     '"gesamt_cent": integer oder null}. '
     "Betraege sind ganze Zahlen in Cent (z. B. 5,50 EUR -> 550). "
+    "betrag_cent ist der BRUTTO-Endpreis der Position inklusive MwSt, so wie er "
+    "zu zahlen ist. Weist der Beleg Netto-Preise und MwSt getrennt aus, gib "
+    "trotzdem den Brutto-Betrag an. "
+    "mwst_prozent ist der MwSt-Satz der Position als Zahl (z. B. 10, 13, 20), "
+    "falls auf dem Beleg ersichtlich, sonst null. "
+    "gesamt_cent ist der zu zahlende Brutto-Gesamtbetrag. "
     "Rabatte und Abzuege werden als negative Betraege angegeben. "
     "Ist der Beleg unleserlich oder kein Kassenbon/keine Rechnung, liefere "
     "eine leere Positionsliste (\"positionen\": [])."
@@ -150,7 +157,16 @@ def _parse_ergebnis(rohtext: str) -> dict:
             continue
         if not text or betrag == 0:
             continue
-        positionen.append({"text": text, "betrag_cent": betrag})
+        # MwSt-Satz defensiv uebernehmen: nur plausible Werte 0-30, sonst None.
+        mwst = p.get("mwst_prozent")
+        try:
+            mwst = float(mwst) if mwst is not None else None
+        except (TypeError, ValueError):
+            mwst = None
+        if mwst is not None and not (0 <= mwst <= 30):
+            mwst = None
+        positionen.append({"text": text, "betrag_cent": betrag,
+                           "mwst_prozent": mwst})
 
     try:
         gesamt = daten.get("gesamt_cent")
@@ -160,6 +176,84 @@ def _parse_ergebnis(rohtext: str) -> dict:
 
     return {"haendler": haendler, "datum": datum, "positionen": positionen,
             "gesamt_cent": gesamt}
+
+
+# ---------------------------------------------------------------------------
+# Netto->Brutto-Korrektur (rein deterministisch, ohne Modell)
+# ---------------------------------------------------------------------------
+
+def _euro(cent: int) -> str:
+    """Cent-Betrag als deutschen Euro-String formatieren (z. B. 1234 -> '12,34 €')."""
+    return f"{cent / 100:.2f} €".replace(".", ",")
+
+
+def _angleichen(positionen: list, neu: list, gesamt: int) -> None:
+    """Neue Betraege setzen und die Rundungs-Restdifferenz zum Gesamtbetrag auf
+    die betragsgroesste Position schlagen, sodass die Summe exakt gesamt ergibt."""
+    for p, n in zip(positionen, neu):
+        p["betrag_cent"] = n
+    diff = gesamt - sum(neu)
+    if diff and positionen:
+        idx = max(range(len(positionen)),
+                  key=lambda i: positionen[i]["betrag_cent"])
+        positionen[idx]["betrag_cent"] += diff
+
+
+def _brutto_aufschlagen(positionen: list, gesamt: int) -> None:
+    """Netto-Positionen auf Brutto hochrechnen und exakt an gesamt angleichen.
+
+    Bevorzugt die auf dem Beleg ausgewiesenen MwSt-Saetze je Position; nur wenn
+    diese fehlen oder das Ergebnis zu stark abweicht, wird proportional (ueber
+    den gemeinsamen Faktor gesamt/summe) skaliert.
+    """
+    alle_mwst = positionen and all(
+        p.get("mwst_prozent") is not None for p in positionen)
+    if alle_mwst:
+        neu = [round(p["betrag_cent"] * (1 + p["mwst_prozent"] / 100))
+               for p in positionen]
+        if abs(sum(neu) - gesamt) <= 2:
+            _angleichen(positionen, neu, gesamt)
+            return
+
+    # Fallback: proportional ueber den Gesamtfaktor skalieren.
+    faktor = gesamt / sum(p["betrag_cent"] for p in positionen)
+    neu = [round(p["betrag_cent"] * faktor) for p in positionen]
+    _angleichen(positionen, neu, gesamt)
+
+
+def _brutto_abgleich(ergebnis: dict) -> dict:
+    """Positionsbetraege gegen den Gesamtbetrag abgleichen.
+
+    Manche Belege weisen Netto-Positionspreise und die MwSt separat aus, waehrend
+    gesamt_cent bereits brutto ist. Diese Funktion erkennt den Fall deterministisch
+    und rechnet die Positionen auf Brutto hoch (siehe Faelle A/B/C im Code).
+    """
+    positionen = ergebnis.get("positionen") or []
+    gesamt = ergebnis.get("gesamt_cent")
+    summe = sum(p["betrag_cent"] for p in positionen)
+
+    # Fall A: kein Gesamtbetrag oder Summe passt bereits (Rundungstoleranz 2 Cent).
+    if gesamt is None or abs(summe - gesamt) <= 2:
+        return ergebnis
+
+    faktor = gesamt / summe if summe > 0 else 0
+
+    # Fall B: Positionen wirken netto (Gesamt liegt bis 32 % ueber der Summe).
+    if summe > 0 and 1.0 < faktor <= 1.32:
+        _brutto_aufschlagen(positionen, gesamt)
+        ergebnis["hinweis"] = (
+            "Netto-Preise erkannt — MwSt automatisch aufgeschlagen "
+            "(Summe an Gesamtbetrag angeglichen). Bitte prüfen.")
+        ergebnis["brutto_aufgeschlagen"] = True
+        return ergebnis
+
+    # Fall C: Abweichung unplausibel (Modell hat sich wohl verlesen) — Betraege
+    # unveraendert lassen, nur zur Pruefung markieren.
+    if not (0.99 < faktor <= 1.32):
+        ergebnis["hinweis"] = (
+            f"Summe der Positionen ({_euro(summe)}) weicht vom Gesamtbetrag "
+            f"({_euro(gesamt)}) ab — bitte prüfen.")
+    return ergebnis
 
 
 # ---------------------------------------------------------------------------
@@ -239,6 +333,7 @@ def _auswerten(con: sqlite3.Connection, beleg_id: int) -> dict:
     if not rohtext:
         raise ValueError("Ollama-Antwort enthält keinen Inhalt")
     ergebnis = _parse_ergebnis(rohtext)
+    ergebnis = _brutto_abgleich(ergebnis)
 
     for p in ergebnis["positionen"]:
         kat_id, kat_name = _kategorie_fuer_position(con, p["text"], beleg["sparte_id"])

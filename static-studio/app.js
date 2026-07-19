@@ -846,8 +846,10 @@ function renderAuswertungsZeile(a) {
       e.gesamt_cent != null ? centToEuro(e.gesamt_cent) : null,
       anzahl + " Position" + (anzahl === 1 ? "" : "en"),
     ].filter(Boolean).join(" · ");
+    const warnung = e.hinweis
+      ? `<div class="hint" style="color:var(--aus)">⚠ ${escapeHtml(e.hinweis)}</div>` : "";
     return `<div class="ra-zeile">
-      <div>${kopf}<div class="hint">${teile}</div></div>
+      <div>${kopf}<div class="hint">${teile}</div>${warnung}</div>
       <div class="row-actions">
         <button type="button" class="btn accent" data-ra-uebernehmen="${a.id}">Übernehmen</button>
         <button type="button" class="link" data-ra-verwerfen="${a.id}">Verwerfen</button>
