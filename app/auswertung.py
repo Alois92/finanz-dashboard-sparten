@@ -18,6 +18,7 @@ Konfiguration per ENV:
 """
 import asyncio
 import base64
+import datetime as dt
 import json
 import logging
 import os
@@ -130,6 +131,13 @@ def _parse_ergebnis(rohtext: str) -> dict:
 
     haendler = _text_oder_none(daten.get("haendler"))
     datum = _text_oder_none(daten.get("datum"))
+    if datum is not None:
+        # Modelle liefern gelegentlich unmoegliche Daten (z. B. Monat 14) -
+        # dann lieber None, damit das UI auf "heute" zurueckfaellt.
+        try:
+            dt.date.fromisoformat(datum)
+        except ValueError:
+            datum = None
 
     positionen = []
     for p in (daten.get("positionen") or [])[:MAX_POSITIONEN]:
