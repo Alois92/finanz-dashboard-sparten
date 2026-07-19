@@ -75,8 +75,38 @@ def _ollama_aufruf(url: str, body: dict) -> dict:
         return json.loads(resp.read().decode("utf-8"))
 
 
+# Laengste Bildkante fuer den Ollama-Aufruf. Der Vision-Encoder skaliert mit
+# der Pixelzahl: ein 12-MP-Handyfoto braucht auf 2 CPU-Kernen >10 min, auf
+# ~1280 px verkleinert nur einen Bruchteil davon - fuer Kassenbons reicht das.
+BILD_MAX_PX = int(os.environ.get("FINANZ_BILD_MAX_PX", "1280"))
+
+
 def _lade_bild_base64(pfad: pathlib.Path) -> str:
-    return base64.b64encode(pfad.read_bytes()).decode("ascii")
+    """Bild laden und fuer die Vision-Analyse verkleinern.
+
+    Verkleinert wird nur die Kopie fuer den Ollama-Aufruf - der Original-Beleg
+    auf der Platte bleibt unangetastet. Faellt die Verkleinerung aus (Pillow
+    fehlt, kaputte Datei), wird das Original unveraendert geschickt.
+    """
+    roh = pfad.read_bytes()
+    try:
+        import io
+
+        from PIL import Image, ImageOps
+
+        bild = Image.open(io.BytesIO(roh))
+        # Handyfotos tragen die Drehung oft nur im EXIF - vor dem Skalieren anwenden.
+        bild = ImageOps.exif_transpose(bild)
+        if max(bild.size) > BILD_MAX_PX:
+            bild.thumbnail((BILD_MAX_PX, BILD_MAX_PX))
+        if bild.mode not in ("RGB", "L"):
+            bild = bild.convert("RGB")
+        puffer = io.BytesIO()
+        bild.save(puffer, format="JPEG", quality=85)
+        roh = puffer.getvalue()
+    except Exception:
+        log.warning("Bild-Verkleinerung fehlgeschlagen - sende Original", exc_info=True)
+    return base64.b64encode(roh).decode("ascii")
 
 
 def _parse_ergebnis(rohtext: str) -> dict:
