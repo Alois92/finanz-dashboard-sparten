@@ -585,18 +585,33 @@ async function schnellErfassen() {
   const text = input.value.trim();
   if (!text) return;
   msg.className = "quick-msg"; msg.textContent = "Analysiere …";
+  $("#multi-vorschau").hidden = true; $("#multi-vorschau").innerHTML = "";
   try {
-    const v = await api("/parse", {
+    const res = await api("/parse-mehrere", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text }),
     });
-    await fuelleFormular(v);
-    const teile = [];
-    if (v.sparte_name) teile.push(v.sparte_name);
-    if (v.kategorie_name) teile.push(v.kategorie_name);
-    teile.push(centToEuro(v.betrag_cent) + " (" + v.typ + ")");
+    const eintraege = res.eintraege || [];
+    if (eintraege.length === 0) {
+      msg.className = "quick-msg err";
+      msg.textContent = "Nichts erkannt.";
+      return;
+    }
+    if (eintraege.length === 1) {
+      const v = eintraege[0];
+      await fuelleFormular(v);
+      const teile = [];
+      if (v.sparte_name) teile.push(v.sparte_name);
+      if (v.kategorie_name) teile.push(v.kategorie_name);
+      teile.push(centToEuro(v.betrag_cent) + " (" + v.typ + ")");
+      msg.className = "quick-msg ok";
+      msg.textContent = "Übernommen: " + teile.join(" · ") + " — bitte prüfen und speichern.";
+      input.value = "";
+      return;
+    }
     msg.className = "quick-msg ok";
-    msg.textContent = "Übernommen: " + teile.join(" · ") + " — bitte prüfen und speichern.";
+    msg.textContent = eintraege.length + " Positionen erkannt — bitte prüfen.";
+    await renderMultiVorschau(eintraege);
     input.value = "";
   } catch (err) {
     msg.className = "quick-msg err";
@@ -605,8 +620,93 @@ async function schnellErfassen() {
 }
 $("#quick-btn").addEventListener("click", schnellErfassen);
 $("#quick-input").addEventListener("keydown", (e) => {
-  if (e.key === "Enter") { e.preventDefault(); schnellErfassen(); }
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); schnellErfassen(); }
 });
+
+// ---- Sammeltext-Vorschau: mehrere Positionen aus einem Text pruefen/einbuchen ----
+function sparteOptions(selectedId) {
+  return '<option value="">– wählen –</option>' + sparten.map((s) =>
+    `<option value="${s.id}"${String(s.id) === String(selectedId) ? " selected" : ""}>${escapeHtml(s.name)}</option>`
+  ).join("");
+}
+async function renderMultiVorschau(eintraege) {
+  const box = $("#multi-vorschau");
+  box.hidden = false;
+  box.innerHTML = `
+    <div class="mv-kopf">
+      <label>Zahlungsart <select id="mv-zahlungsart">
+        <option value="bar" selected>Bar</option>
+        <option value="bank">Bank</option>
+      </select></label>
+      <button type="button" class="btn accent" id="mv-alle">Alle einbuchen</button>
+      <button type="button" class="btn ghost" id="mv-abbrechen">Abbrechen</button>
+    </div>
+    <div id="mv-zeilen"></div>`;
+  for (const e of eintraege) await addMultiZeile(e);
+  $("#mv-abbrechen").addEventListener("click", () => { box.hidden = true; box.innerHTML = ""; });
+  $("#mv-alle").addEventListener("click", multiAlleEinbuchen);
+}
+async function addMultiZeile(e) {
+  const kats = await ladeKategorien(e.sparte_id);
+  const div = document.createElement("div");
+  div.className = "mv-zeile";
+  div.dataset.typ = e.typ || "ausgabe";
+  div.innerHTML = `
+    <label>Datum<input type="date" class="mv-datum" value="${e.datum || todayISO()}"></label>
+    <label>Text<input type="text" class="mv-text" value="${escapeHtml(e.text || "")}"></label>
+    <label>Sparte<select class="mv-sparte">${sparteOptions(e.sparte_id)}</select></label>
+    <label>Kategorie<select class="mv-kat">${kategorieOptions(kats)}</select></label>
+    <label>Betrag (€)<input type="text" class="mv-betrag" inputmode="decimal" value="${e.betrag_cent ? centToInput(e.betrag_cent) : ""}"></label>
+    <button type="button" class="del" title="Zeile entfernen">✕</button>`;
+  const katSel = div.querySelector(".mv-kat");
+  if (e.kategorie_id && [...katSel.options].some((o) => o.value === String(e.kategorie_id))) {
+    katSel.value = String(e.kategorie_id);
+  }
+  div.querySelector(".mv-sparte").addEventListener("change", async (ev) => {
+    katSel.innerHTML = kategorieOptions(await ladeKategorien(ev.target.value));
+  });
+  div.querySelector(".del").addEventListener("click", () => div.remove());
+  $("#mv-zeilen").appendChild(div);
+}
+async function multiAlleEinbuchen() {
+  const zahlungsart = $("#mv-zahlungsart").value;
+  let gespeichert = 0, unvollstaendig = 0;
+  for (const zeile of $$("#mv-zeilen .mv-zeile")) {
+    const sparteId = zeile.querySelector(".mv-sparte").value;
+    const kategorieId = zeile.querySelector(".mv-kat").value;
+    const betrag = euroToCent(zeile.querySelector(".mv-betrag").value);
+    if (!sparteId || !kategorieId || betrag <= 0) {
+      zeile.classList.add("unvollstaendig");
+      unvollstaendig++;
+      continue;
+    }
+    try {
+      await api("/buchungen", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sparte_id: parseInt(sparteId, 10),
+          datum: zeile.querySelector(".mv-datum").value || todayISO(),
+          typ: zeile.dataset.typ,
+          zahlungsart,
+          text: zeile.querySelector(".mv-text").value || null,
+          zeilen: [{ kategorie_id: parseInt(kategorieId, 10), betrag_cent: betrag }],
+        }),
+      });
+      gespeichert++;
+      zeile.remove();
+    } catch (err) {
+      zeile.classList.add("unvollstaendig");
+      unvollstaendig++;
+    }
+  }
+  const msg = $("#quick-msg");
+  const teile = [];
+  if (gespeichert) teile.push(gespeichert + " Buchungen gespeichert");
+  if (unvollstaendig) teile.push(unvollstaendig + " unvollständig — bitte ergänzen");
+  msg.className = unvollstaendig ? "quick-msg err" : "quick-msg ok";
+  msg.textContent = teile.join(" · ") || "Nichts gespeichert.";
+  if (!$$("#mv-zeilen .mv-zeile").length) { $("#multi-vorschau").hidden = true; $("#multi-vorschau").innerHTML = ""; }
+}
 
 async function fuelleFormular(v) {
   if (v.sparte_id && sparten.some((s) => String(s.id) === String(v.sparte_id))) {
@@ -663,6 +763,24 @@ function updateSumme() {
 $("#add-zeile").addEventListener("click", addZeile);
 $("#b-sparte").addEventListener("change", () => { erneuereZeilenKategorien(); });
 
+// ---- Foto als Beleg direkt beim Erfassen ----
+let fotoPending = null;
+function zeigeFotoInfo() {
+  const info = $("#b-foto-info");
+  if (!fotoPending) { info.innerHTML = ""; return; }
+  info.innerHTML = `${escapeHtml(fotoPending.name)} <button type="button" class="link" id="b-foto-entfernen">✕ entfernen</button>`;
+  $("#b-foto-entfernen").addEventListener("click", () => {
+    fotoPending = null; $("#b-foto").value = ""; zeigeFotoInfo();
+  });
+}
+$("#b-foto-btn").addEventListener("click", () => $("#b-foto").click());
+$("#b-foto").addEventListener("change", () => {
+  const datei = $("#b-foto").files[0];
+  if (!datei) return;
+  fotoPending = datei;
+  zeigeFotoInfo();
+});
+
 // ---- Bearbeiten-Modus ----
 async function starteBearbeitung(b) {
   activatePage("erfassen");
@@ -699,6 +817,7 @@ function beendeBearbeitung() {
   $("#b-datum").value = todayISO();
   $("#zeilen").innerHTML = "";
   addZeile();
+  fotoPending = null; $("#b-foto").value = ""; zeigeFotoInfo();
 }
 $("#b-cancel").addEventListener("click", () => { beendeBearbeitung(); $("#b-msg").textContent = ""; });
 
@@ -727,6 +846,22 @@ $("#form-buchung").addEventListener("submit", async (e) => {
     msg.className = "msg ok";
     msg.textContent = (editId ? "Geändert: " : "Gespeichert: ")
       + `${centToEuro(created.betrag_cent)} (${created.typ}).`;
+    if (fotoPending && created.id) {
+      try {
+        const fd = new FormData();
+        fd.append("datei", fotoPending);
+        fd.append("sparte_id", body.sparte_id);
+        const beleg = await api("/belege", { method: "POST", body: fd });
+        await api("/buchungen/" + created.id + "/belege", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ beleg_id: beleg.id }),
+        });
+        msg.textContent += " + Beleg angehängt.";
+      } catch (fotoErr) {
+        msg.className = "msg err";
+        msg.textContent = "Buchung gespeichert, aber Beleg-Upload fehlgeschlagen: " + fotoErr.message;
+      }
+    }
     beendeBearbeitung();
   } catch (err) {
     msg.className = "msg err";

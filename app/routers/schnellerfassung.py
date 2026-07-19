@@ -80,9 +80,29 @@ def _match_name(text_lower: str, tokens: set[str], rows: list[dict]):
     return best
 
 
+# Trennzeichen fuer die Sammeltext-Erfassung: Zeilenumbruch, Semikolon, sowie
+# Kommas, die NICHT direkt vor einer Ziffer stehen (so bleibt "82,30" als
+# Dezimalzahl zusammen, waehrend "Einkaufen, Kino" getrennt wird).
+_SEGMENT_RE = re.compile(r"[;\n]|,(?!\d)")
+
+
 @router.post("/parse")
 def parse_text(payload: ParseIn, con: sqlite3.Connection = Depends(db_dep)):
     text = (payload.text or "").strip()
+    return _parse_einzeltext(text, con)
+
+
+@router.post("/parse-mehrere")
+def parse_mehrere(payload: ParseIn, con: sqlite3.Connection = Depends(db_dep)):
+    text = (payload.text or "").strip()
+    segmente = [s.strip(" ,;") for s in _SEGMENT_RE.split(text)]
+    eintraege = [
+        _parse_einzeltext(segment, con) for segment in segmente if segment.strip()
+    ]
+    return {"eintraege": eintraege}
+
+
+def _parse_einzeltext(text: str, con: sqlite3.Connection) -> dict:
     heute = dt.date.today()
 
     # Arbeitskopie, aus der erkannte Datums-/Betrags-Teile entfernt werden,

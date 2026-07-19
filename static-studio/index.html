@@ -171,12 +171,13 @@
       <!-- ============ Erfassen ============ -->
       <section class="page" id="page-erfassen">
         <div class="card quick-card">
-          <div class="card-head"><h2>Schnell erfassen</h2><p class="hint">z. B. „gestern Diesel 82,30 Hof“ — Enter drückt Vorschlag</p></div>
+          <div class="card-head"><h2>Schnell erfassen</h2><p class="hint">z. B. „gestern Diesel 82,30 Hof“ — auch mehrere auf einmal, z. B. „Essen 5, Einkaufen 18, Kino 27“. Enter drückt Vorschlag, Shift+Enter Zeilenumbruch</p></div>
           <div class="quick-row">
-            <input type="text" id="quick-input" placeholder="Buchung in einem Satz …">
+            <textarea id="quick-input" rows="2" placeholder="Buchung in einem Satz … oder mehrere, durch Komma/Zeilenumbruch getrennt"></textarea>
             <button id="quick-btn" class="btn accent" type="button">Vorschlag</button>
           </div>
           <p class="quick-msg" id="quick-msg"></p>
+          <div id="multi-vorschau" hidden></div>
         </div>
 
         <div class="card">
@@ -200,6 +201,11 @@
             <div class="zeilen-foot">
               <button type="button" id="add-zeile" class="btn ghost">+ Zeile</button>
               <span id="zeilen-summe" class="num">Summe: 0,00 €</span>
+            </div>
+            <div class="foto-row">
+              <button type="button" id="b-foto-btn" class="btn ghost">📷 Foto aufnehmen / Beleg wählen</button>
+              <input type="file" id="b-foto" accept="image/*,.pdf,.heic,.webp" capture="environment" hidden>
+              <span id="b-foto-info"></span>
             </div>
             <div class="form-foot">
               <button type="submit" class="btn accent" id="b-submit">Buchung speichern</button>

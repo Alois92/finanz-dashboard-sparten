@@ -255,11 +255,13 @@ td .num.neg, .num.neg { color: var(--aus); }
 .form-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
 .form-grid label { display: flex; flex-direction: column; gap: 5px; font-size: .8rem; color: var(--muted); font-weight: 500; }
 .form-grid label.wide { grid-column: span 2; }
-input, select {
+input, select, textarea {
   border: 1px solid var(--border); border-radius: 9px;
   background: var(--bg); padding: 9px 11px; min-height: 40px;
+  font-family: inherit; font-size: inherit; color: inherit;
 }
 input[type="file"] { padding: 7px; background: transparent; }
+textarea { resize: vertical; }
 .btn {
   border: 1px solid var(--border); border-radius: 10px;
   background: var(--panel-2); padding: 10px 18px; font-weight: 600;
@@ -286,10 +288,29 @@ input[type="file"] { padding: 7px; background: transparent; }
 /* Schnellerfassung */
 .quick-card { border-left: 3px solid var(--accent); }
 .quick-row { display: flex; gap: 10px; }
-.quick-row input { flex: 1; }
+.quick-row textarea { flex: 1; }
 .quick-msg { font-size: .85rem; margin: 8px 0 0; min-height: 1.2em; }
 .quick-msg.ok { color: var(--ein); }
 .quick-msg.err { color: var(--aus); }
+
+/* Sammeltext-Vorschau (mehrere Buchungen aus einem Text) */
+#multi-vorschau { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 12px; }
+.mv-kopf { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+.mv-kopf label { display: inline-flex; align-items: center; gap: 6px; font-size: .82rem; color: var(--muted); }
+.mv-zeile {
+  display: grid; grid-template-columns: 130px 2fr 1.2fr 1.2fr 110px auto;
+  gap: 8px; align-items: end; margin-bottom: 8px;
+}
+.mv-zeile label { display: flex; flex-direction: column; gap: 4px; font-size: .72rem; color: var(--muted); }
+.mv-zeile.unvollstaendig select,
+.mv-zeile.unvollstaendig input.z-betrag { border-color: var(--aus); }
+.mv-zeile .del { border: 1px solid var(--border); background: transparent; color: var(--muted); border-radius: 9px; width: 40px; min-height: 40px; }
+.mv-zeile .del:hover { color: var(--aus); border-color: var(--aus); }
+
+/* Foto-Beleg beim Erfassen */
+.foto-row { display: flex; align-items: center; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
+#b-foto-info { font-size: .82rem; color: var(--muted); }
+#b-foto-info .link { margin-left: 8px; }
 
 .list-filter { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .list-filter input[type="search"] { min-width: 180px; }
@@ -359,6 +380,7 @@ input[type="file"] { padding: 7px; background: transparent; }
   .form-grid { grid-template-columns: 1fr; }
   .form-grid label.wide { grid-column: auto; }
   .zeile { grid-template-columns: 1fr 1fr auto; }
+  .mv-zeile { grid-template-columns: 1fr 1fr auto; }
   .fly-row, .fly-head { grid-template-columns: 92px 1fr 84px; gap: 8px; }
   .topbar { position: sticky; top: 0; z-index: 5; background: var(--bg); padding: 6px 0 10px; margin-bottom: 10px; }
 
