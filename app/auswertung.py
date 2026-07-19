@@ -40,7 +40,9 @@ ERLAUBTE_ENDUNGEN = {"jpg", "jpeg", "png", "webp"}
 MAX_VERSUCHE = 5
 MAX_POSITIONEN = 50
 PRUEF_INTERVALL_SEKUNDEN = 15
-OLLAMA_TIMEOUT_SEKUNDEN = 600
+# Auf langsamer CPU (Token-Generierung teils <1 Token/s) braucht ein Bon mit
+# vielen Positionen laenger als 10 min - Timeout deshalb per ENV anpassbar.
+OLLAMA_TIMEOUT_SEKUNDEN = int(os.environ.get("FINANZ_OLLAMA_TIMEOUT", "600"))
 
 PROMPT = (
     "Analysiere den abgebildeten Kassenbon oder die Rechnung. "
