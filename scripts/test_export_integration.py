@@ -5,6 +5,7 @@ from openpyxl import load_workbook
 
 TEMP_DB = tempfile.TemporaryDirectory(prefix="finanz-export-")
 os.environ["FINANZ_DB"] = str(pathlib.Path(TEMP_DB.name) / "test.db")
+os.environ["FINANZ_TEST_AUTH_BYPASS"] = "1"
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 class ExportTest(unittest.TestCase):

@@ -25,6 +25,10 @@ function escapeHtml(s) {
 }
 async function api(path, opts) {
   const res = await fetch("/api" + path, opts);
+  if (res.status === 401) {
+    window.location.replace("/login.html");
+    throw new Error("Sitzung abgelaufen.");
+  }
   if (!res.ok) {
     let detail = res.statusText;
     try { detail = (await res.json()).detail || detail; } catch (e) {}
@@ -1815,6 +1819,20 @@ $("#xl-sparte") && $("#xl-sparte").addEventListener("change", () => {
 // ===========================================================================
 // Init
 // ===========================================================================
+async function logout() {
+  try {
+    await fetch("/api/auth/logout", {
+      method: "POST",
+      credentials: "same-origin",
+    });
+  } finally {
+    window.location.replace("/login.html");
+  }
+}
+
+$("#logout-button").addEventListener("click", logout);
+$$("[data-logout]").forEach((button) => button.addEventListener("click", logout));
+
 async function init() {
   sparten = await api("/sparten");
   buildSparteColors();

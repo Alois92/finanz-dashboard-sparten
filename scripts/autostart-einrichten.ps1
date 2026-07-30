@@ -32,6 +32,7 @@ Register-ScheduledTask -TaskName $name -Action $aktion -Trigger $ausloeser `
     -Settings $einstellungen -Description "Startet das Finanz-Dashboard bei der Anmeldung" -Force | Out-Null
 
 Write-Host "Autostart eingerichtet: '$name' startet das Dashboard bei jeder Anmeldung."
-Write-Host "Hinweis: Fuer Handy-Zugriff im Skript '--host 127.0.0.1' durch '--host 0.0.0.0' ersetzen."
+Write-Host "Handy-Zugriff ausschliesslich ueber die private Tailscale-Adresse:"
+Write-Host "https://finanz.tailb1b087.ts.net"
 Start-ScheduledTask -TaskName $name
 Write-Host "Dashboard gestartet: http://127.0.0.1:8000"

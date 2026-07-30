@@ -88,6 +88,7 @@ class DrilldownApiTest(unittest.TestCase):
         cls.port = _free_port()
         env = os.environ.copy()
         env["FINANZ_DB"] = str(cls.db_path)
+        env["FINANZ_TEST_AUTH_BYPASS"] = "1"
         cls.server = subprocess.Popen(
             [sys.executable, "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1",
              "--port", str(cls.port), "--log-level", "warning"],
