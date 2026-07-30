@@ -157,6 +157,23 @@ class AuthIntegrationTest(unittest.TestCase):
             urllib.request.urlopen(request, timeout=2)
         self.assertEqual(raised.exception.code, 400)
 
+    def test_nicht_freigegebenes_tailscale_geraet_wird_abgewiesen(self):
+        request = urllib.request.Request(
+            f"{self.base_url}/api/health",
+            headers={"X-Forwarded-For": "100.72.201.96"},
+        )
+        with self.assertRaises(urllib.error.HTTPError) as raised:
+            urllib.request.urlopen(request, timeout=2)
+        self.assertEqual(raised.exception.code, 403)
+
+    def test_freigegebenes_tailscale_geraet_erreicht_den_login(self):
+        request = urllib.request.Request(
+            f"{self.base_url}/api/health",
+            headers={"X-Forwarded-For": "100.105.4.18"},
+        )
+        with urllib.request.urlopen(request, timeout=2) as response:
+            self.assertEqual(response.status, 200)
+
     def test_manipuliertes_cookie_wird_abgewiesen(self):
         request = urllib.request.Request(
             f"{self.base_url}/api/sparten",

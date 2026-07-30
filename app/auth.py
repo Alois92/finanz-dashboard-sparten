@@ -22,6 +22,12 @@ BASE = pathlib.Path(__file__).resolve().parent.parent
 CONFIG_FILE = BASE / "instance" / "auth.json"
 COOKIE_NAME = "__Host-finanz_session"
 SESSION_SECONDS = 12 * 60 * 60
+DEFAULT_ALLOWED_CLIENT_IPS = (
+    "127.0.0.1,::1,"
+    "100.96.17.87,fd7a:115c:a1e0::f901:1195,"
+    "100.105.4.18,fd7a:115c:a1e0::5232:414,"
+    "100.126.171.58,fd7a:115c:a1e0::4932:ab3b"
+)
 OEFFENTLICHE_PFADE = frozenset({
     "/api/health",
     "/api/auth/login",
@@ -241,6 +247,18 @@ def _client_key(request: Request) -> str:
     return request.client.host if request.client else "unbekannt"
 
 
+def _client_is_allowed(request: Request) -> bool:
+    allowed = {
+        address.strip()
+        for address in os.environ.get(
+            "FINANZ_ALLOWED_CLIENT_IPS",
+            DEFAULT_ALLOWED_CLIENT_IPS,
+        ).split(",")
+        if address.strip()
+    }
+    return _client_key(request) in allowed
+
+
 @router.post("/api/auth/login", status_code=204)
 async def login(request: Request):
     if not AUTH.settings.configured:
@@ -299,6 +317,12 @@ class AuthMiddleware(BaseHTTPMiddleware):
     """Schuetzt die komplette Oberflaeche und alle Finanz-APIs."""
 
     async def dispatch(self, request: Request, call_next):
+        if not _client_is_allowed(request):
+            response = JSONResponse(
+                {"detail": "Dieses Gerät ist für das Finanzstudio nicht freigegeben."},
+                status_code=403,
+            )
+            return self._secure_headers(response)
         path = request.url.path
         if _test_bypass_enabled():
             response = await call_next(request)

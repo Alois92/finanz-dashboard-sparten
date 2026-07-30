@@ -48,9 +48,16 @@ Vorerst dürfen nur diese drei persönlichen Geräte auf die Finanz-App zugreife
 - Handy `s24-ultra-von-theresia`
 
 Die Tailscale-Zugriffsregel muss HTTPS-Zugriff auf den Knoten `finanz` nur von
-diesen Geräten erlauben. Vor einer Änderung der zentralen Tailscale-Regeln muss
-die vorhandene Konfiguration gesichert und geprüft werden, damit insbesondere
-Home Assistant nicht unbeabsichtigt gesperrt wird.
+diesen Geräten erlauben. Zusätzlich prüft die Anwendung die von Tailscale Serve
+übergebene Geräteadresse selbst. Standardmäßig sind die IPv4- und IPv6-Adressen
+genau dieser drei Geräte sowie die lokale Serveradresse freigegeben. Ein anderes
+Tailnet-Gerät erhält bereits vor der Passwortabfrage HTTP 403.
+
+Falls ein Gerät in Tailscale neu angelegt wird und dadurch eine neue Adresse
+erhält, muss `FINANZ_ALLOWED_CLIENT_IPS` am Dienst aktualisiert werden. Vor einer
+Änderung der zentralen Tailscale-Regeln muss die vorhandene Konfiguration
+gesichert und geprüft werden, damit insbesondere Home Assistant nicht
+unbeabsichtigt gesperrt wird.
 
 ## Kontrolle nach einer Bereitstellung
 
