@@ -53,6 +53,7 @@
     }
     button:disabled { opacity: .65; cursor: wait; }
     #meldung { min-height: 22px; margin: 14px 0 0; color: #ff9d89; font-size: 14px; }
+    .secondary-link { display: inline-block; margin-top: 18px; color: #91a8b7; font-size: 14px; }
     .schutz { margin: 22px 0 0; color: #7f98a8; font-size: 12px; line-height: 1.5; }
   </style>
 </head>
@@ -72,6 +73,7 @@
       <button id="login-button" type="submit">Sicher anmelden</button>
       <p id="meldung" role="alert" aria-live="polite"></p>
     </form>
+    <a class="secondary-link" href="/password-recover.html">Passwort vergessen?</a>
     <p class="schutz">Die Verbindung ist zusätzlich durch dein privates
       Tailscale-Netz und HTTPS geschützt.</p>
   </main>
