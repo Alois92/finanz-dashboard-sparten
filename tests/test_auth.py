@@ -13,6 +13,8 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+from tests._process_cleanup import cleanup_process_tree
+
 
 APP_DIR = Path(__file__).resolve().parents[1]
 PASSWORT = "Korrektes-Testpasswort-2026!"
@@ -45,6 +47,7 @@ class AuthIntegrationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tempdir = tempfile.TemporaryDirectory()
+        cls.addClassCleanup(cls.tempdir.cleanup)
         cls.port = _freier_port()
         cls.base_url = f"http://127.0.0.1:{cls.port}"
         env = os.environ.copy()
@@ -72,6 +75,7 @@ class AuthIntegrationTest(unittest.TestCase):
             stderr=subprocess.PIPE,
             text=True,
         )
+        cls.addClassCleanup(cleanup_process_tree, cls.server)
         for _ in range(100):
             if cls.server.poll() is not None:
                 stdout, stderr = cls.server.communicate()
@@ -86,16 +90,6 @@ class AuthIntegrationTest(unittest.TestCase):
                 time.sleep(0.05)
         else:
             raise RuntimeError("Uvicorn war nicht rechtzeitig bereit.")
-
-    @classmethod
-    def tearDownClass(cls):
-        cls.server.terminate()
-        try:
-            cls.server.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            cls.server.kill()
-            cls.server.wait(timeout=5)
-        cls.tempdir.cleanup()
 
     def test_api_ist_ohne_anmeldung_gesperrt(self):
         with self.assertRaises(urllib.error.HTTPError) as raised:

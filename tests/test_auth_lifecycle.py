@@ -14,6 +14,7 @@ from pathlib import Path
 
 from app.auth import hash_password
 from app.auth_store import AuthConfig, AuthConfigStore
+from tests._process_cleanup import cleanup_process_tree
 
 
 APP_DIR = Path(__file__).resolve().parents[1]
@@ -40,6 +41,7 @@ class _Antwort:
 class AuthLifecycleIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.tempdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tempdir.cleanup)
         self.auth_path = Path(self.tempdir.name) / "auth.json"
         self.store = AuthConfigStore(self.auth_path)
         config = AuthConfig(
@@ -78,6 +80,7 @@ class AuthLifecycleIntegrationTest(unittest.TestCase):
             stderr=subprocess.PIPE,
             text=True,
         )
+        self.addCleanup(cleanup_process_tree, self.server)
         for _ in range(100):
             if self.server.poll() is not None:
                 stdout, stderr = self.server.communicate()
@@ -89,15 +92,6 @@ class AuthLifecycleIntegrationTest(unittest.TestCase):
                 time.sleep(0.05)
         else:
             raise RuntimeError("Uvicorn war nicht rechtzeitig bereit.")
-
-    def tearDown(self):
-        self.server.terminate()
-        try:
-            self.server.communicate(timeout=5)
-        except subprocess.TimeoutExpired:
-            self.server.kill()
-            self.server.communicate(timeout=5)
-        self.tempdir.cleanup()
 
     def request(self, path, payload=None, cookie=None, method=None):
         data = None if payload is None else json.dumps(payload).encode("utf-8")
