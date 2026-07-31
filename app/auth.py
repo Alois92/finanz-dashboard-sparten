@@ -44,6 +44,9 @@ OEFFENTLICHE_PFADE = frozenset({
     "/api/auth/recover",
     "/login.html",
     "/login.js",
+    "/password-recover.html",
+    "/password-recover.js",
+    "/password-common.css",
 })
 INITIAL_SETUP_PATHS = frozenset({
     "/api/auth/state",
@@ -51,6 +54,7 @@ INITIAL_SETUP_PATHS = frozenset({
     "/api/auth/logout",
     "/password-setup.html",
     "/password-setup.js",
+    "/password-common.css",
 })
 
 

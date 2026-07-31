@@ -38,6 +38,11 @@ class _Antwort:
         return json.loads(self.body.decode("utf-8"))
 
 
+class _KeineWeiterleitungen(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, request, fp, code, msg, headers, newurl):
+        return None
+
+
 class AuthLifecycleIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.tempdir = tempfile.TemporaryDirectory()
@@ -88,7 +93,7 @@ class AuthLifecycleIntegrationTest(unittest.TestCase):
             try:
                 if self.request("/api/health").status == 200:
                     break
-            except urllib.error.URLError:
+            except (urllib.error.URLError, TimeoutError):
                 time.sleep(0.05)
         else:
             raise RuntimeError("Uvicorn war nicht rechtzeitig bereit.")
@@ -115,6 +120,27 @@ class AuthLifecycleIntegrationTest(unittest.TestCase):
 
     def get_status(self, path, cookie):
         return self.get(path, cookie).status
+
+    def get_without_redirect(self, path, cookie=None):
+        request = urllib.request.Request(
+            f"{self.base_url}{path}",
+            headers={"Cookie": cookie} if cookie else {},
+        )
+        opener = urllib.request.build_opener(_KeineWeiterleitungen)
+        try:
+            with opener.open(request, timeout=2) as response:
+                return _Antwort(response.status, response.read(), response.headers)
+        except urllib.error.HTTPError as error:
+            return _Antwort(error.code, error.read(), error.headers)
+
+    def assert_static_asset(self, path, expected_content_type, cookie=None):
+        response = self.get_without_redirect(path, cookie)
+        self.assertEqual(response.status, 200, path)
+        actual = response.headers.get_content_type()
+        if expected_content_type == "javascript":
+            self.assertIn(actual, {"text/javascript", "application/javascript"})
+        else:
+            self.assertEqual(actual, expected_content_type)
 
     def post(self, path, payload, cookie):
         return self.request(path, payload, cookie)
@@ -160,6 +186,17 @@ class AuthLifecycleIntegrationTest(unittest.TestCase):
             {"must_change_password": True},
         )
         self.assertEqual(self.get_status("/api/sparten", cookie), 403)
+
+    def test_wiederherstellungsseite_und_assets_sind_oeffentlich(self):
+        self.assert_static_asset("/password-recover.html", "text/html")
+        self.assert_static_asset("/password-recover.js", "javascript")
+        self.assert_static_asset("/password-common.css", "text/css")
+
+    def test_setup_assets_sind_waehrend_ersteinrichtung_erreichbar(self):
+        cookie = self.login(START_PASSWORD)
+        self.assert_static_asset("/password-setup.html", "text/html", cookie)
+        self.assert_static_asset("/password-setup.js", "javascript", cookie)
+        self.assert_static_asset("/password-common.css", "text/css", cookie)
 
     def test_ersteinrichtung_gibt_code_einmal_aus(self):
         cookie = self.login(START_PASSWORD)
