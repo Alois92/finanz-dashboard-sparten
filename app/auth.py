@@ -17,6 +17,8 @@ from fastapi import APIRouter, Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, RedirectResponse, Response
 
+from app.auth_store import AuthConfigStore, validate_password
+
 
 BASE = pathlib.Path(__file__).resolve().parent.parent
 CONFIG_FILE = BASE / "instance" / "auth.json"
@@ -46,8 +48,7 @@ def _b64_decode(value: str) -> bytes:
 
 def hash_password(password: str, *, salt: bytes | None = None) -> str:
     """Erzeugt einen gesalzenen scrypt-Hash ohne Klartextpasswort."""
-    if len(password) < 12:
-        raise ValueError("Das Passwort muss mindestens 12 Zeichen lang sein.")
+    validate_password(password)
     salt = salt or secrets.token_bytes(16)
     digest = hashlib.scrypt(
         password.encode("utf-8"),
@@ -95,9 +96,9 @@ class AuthSettings:
         if password_hash and session_secret and len(session_secret) >= 32:
             return cls(password_hash, session_secret.encode("utf-8"))
         try:
-            config = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
-            password_hash = str(config["password_hash"])
-            session_secret = str(config["session_secret"])
+            config = AuthConfigStore(CONFIG_FILE).load()
+            password_hash = str(config.password_hash)
+            session_secret = str(config.session_secret)
         except (FileNotFoundError, KeyError, TypeError, ValueError, json.JSONDecodeError):
             return cls(None, None)
         if len(session_secret) < 32:
