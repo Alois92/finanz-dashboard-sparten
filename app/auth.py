@@ -11,17 +11,25 @@ import secrets
 import tempfile
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from fastapi import APIRouter, Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, RedirectResponse, Response
 
-from app.auth_store import AuthConfigStore, validate_password
+from app.auth_store import (
+    AuthConfig,
+    AuthConfigStore,
+    generate_recovery_code,
+    validate_password,
+)
 
 
 BASE = pathlib.Path(__file__).resolve().parent.parent
-CONFIG_FILE = BASE / "instance" / "auth.json"
+CONFIG_FILE = pathlib.Path(
+    os.environ.get("FINANZ_AUTH_FILE", BASE / "instance" / "auth.json")
+)
+AUTH_STORE = AuthConfigStore(CONFIG_FILE)
 COOKIE_NAME = "__Host-finanz_session"
 SESSION_SECONDS = 12 * 60 * 60
 DEFAULT_ALLOWED_CLIENT_IPS = (
@@ -33,8 +41,16 @@ DEFAULT_ALLOWED_CLIENT_IPS = (
 OEFFENTLICHE_PFADE = frozenset({
     "/api/health",
     "/api/auth/login",
+    "/api/auth/recover",
     "/login.html",
     "/login.js",
+})
+INITIAL_SETUP_PATHS = frozenset({
+    "/api/auth/state",
+    "/api/auth/initial-password",
+    "/api/auth/logout",
+    "/password-setup.html",
+    "/password-setup.js",
 })
 
 
@@ -96,7 +112,7 @@ class AuthSettings:
         if password_hash and session_secret and len(session_secret) >= 32:
             return cls(password_hash, session_secret.encode("utf-8"))
         try:
-            config = AuthConfigStore(CONFIG_FILE).load()
+            config = AUTH_STORE.load()
             password_hash = str(config.password_hash)
             session_secret = str(config.session_secret)
         except (FileNotFoundError, KeyError, TypeError, ValueError, json.JSONDecodeError):
@@ -104,6 +120,10 @@ class AuthSettings:
         if len(session_secret) < 32:
             return cls(None, None)
         return cls(password_hash, session_secret.encode("utf-8"))
+
+    @classmethod
+    def from_config(cls, config: AuthConfig) -> "AuthSettings":
+        return cls(config.password_hash, config.session_secret.encode("utf-8"))
 
 
 class LoginRateLimiter:
@@ -141,11 +161,32 @@ class LoginRateLimiter:
 
 
 class AuthManager:
-    def __init__(self, settings: AuthSettings):
-        self.settings = settings
+    def __init__(self, settings: AuthSettings | AuthConfig | None = None):
+        self.config: AuthConfig | None = None
+        if isinstance(settings, AuthConfig):
+            self.config = settings
+            self.settings = AuthSettings.from_config(settings)
+        elif isinstance(settings, AuthSettings):
+            self.settings = settings
+        else:
+            try:
+                self.config = AUTH_STORE.load()
+                self.settings = AuthSettings.from_config(self.config)
+            except (FileNotFoundError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+                self.settings = AuthSettings.load()
         self.rate_limiter = LoginRateLimiter()
         self._sessions: dict[str, int] = {}
         self._session_lock = threading.Lock()
+
+    def replace_config(self, config: AuthConfig) -> None:
+        AUTH_STORE.save(config)
+        self.settings = AuthSettings.from_config(config)
+        self.config = config
+        self.revoke_all_sessions()
+
+    def revoke_all_sessions(self) -> None:
+        with self._session_lock:
+            self._sessions.clear()
 
     def create_session(self, now: int | None = None) -> str:
         if not self.settings.session_secret:
@@ -225,7 +266,8 @@ class AuthManager:
             self._sessions.pop(nonce, None)
 
 
-AUTH = AuthManager(AuthSettings.load())
+AUTH = AuthManager()
+RECOVERY_LIMITER = LoginRateLimiter()
 router = APIRouter()
 
 
@@ -314,6 +356,117 @@ async def logout(request: Request):
     return response
 
 
+@router.get("/api/auth/state")
+async def auth_state(request: Request):
+    return {"must_change_password": bool(AUTH.config and AUTH.config.must_change_password)}
+
+
+@router.post("/api/auth/initial-password")
+async def initial_password(request: Request):
+    if not AUTH.config:
+        return JSONResponse(
+            {"detail": "Anmeldung ist noch nicht eingerichtet."}, status_code=503
+        )
+    if not AUTH.config.must_change_password:
+        return JSONResponse(
+            {"detail": "Ersteinrichtung ist bereits abgeschlossen."}, status_code=409
+        )
+    body = await request.json()
+    new_password = body.get("new_password", "")
+    repeat = body.get("repeat_password", "")
+    if new_password != repeat:
+        return JSONResponse(
+            {"detail": "Die Passwoerter stimmen nicht ueberein."}, status_code=422
+        )
+    try:
+        validate_password(new_password)
+    except ValueError as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=422)
+    recovery_code = generate_recovery_code()
+    AUTH.replace_config(
+        AuthConfig(
+            password_hash=hash_password(new_password),
+            session_secret=secrets.token_urlsafe(48),
+            recovery_hash=hash_password(recovery_code),
+            must_change_password=False,
+            version=1,
+        )
+    )
+    return {"recovery_code": recovery_code}
+
+
+@router.post("/api/auth/change-password", status_code=204)
+async def change_password(request: Request):
+    if not AUTH.config:
+        return JSONResponse(
+            {"detail": "Anmeldung ist noch nicht eingerichtet."}, status_code=503
+        )
+    body = await request.json()
+    current = body.get("current_password", "")
+    new = body.get("new_password", "")
+    repeat = body.get("repeat_password", "")
+    if not verify_password(current, AUTH.config.password_hash):
+        return JSONResponse(
+            {"detail": "Anmeldedaten sind nicht korrekt."}, status_code=401
+        )
+    if new != repeat:
+        return JSONResponse(
+            {"detail": "Die Passwoerter stimmen nicht ueberein."}, status_code=422
+        )
+    try:
+        validate_password(new)
+    except ValueError as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=422)
+    AUTH.replace_config(
+        replace(
+            AUTH.config,
+            password_hash=hash_password(new),
+            session_secret=secrets.token_urlsafe(48),
+            must_change_password=False,
+        )
+    )
+    return Response(status_code=204)
+
+
+@router.post("/api/auth/recover")
+async def recover(request: Request):
+    key = _client_key(request)
+    if RECOVERY_LIMITER.is_blocked(key):
+        return JSONResponse({"detail": "Zu viele Fehlversuche."}, status_code=429)
+    body = await request.json()
+    supplied = "".join(str(body.get("recovery_code", "")).upper().split())
+    new = body.get("new_password", "")
+    repeat = body.get("repeat_password", "")
+    if not AUTH.config or (
+        not AUTH.config.recovery_hash
+        or not verify_password(supplied, AUTH.config.recovery_hash)
+    ):
+        RECOVERY_LIMITER.record_failure(key)
+        return JSONResponse(
+            {"detail": "Anmeldedaten sind nicht korrekt."}, status_code=401
+        )
+    if new != repeat:
+        return JSONResponse(
+            {"detail": "Die Passwoerter stimmen nicht ueberein."}, status_code=422
+        )
+    try:
+        validate_password(new)
+    except ValueError as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=422)
+    next_code = generate_recovery_code()
+    AUTH.replace_config(
+        AuthConfig(
+            password_hash=hash_password(new),
+            session_secret=secrets.token_urlsafe(48),
+            recovery_hash=hash_password(next_code),
+            must_change_password=False,
+            version=1,
+        )
+    )
+    RECOVERY_LIMITER.clear(key)
+    return {"recovery_code": next_code}
+
+
 class AuthMiddleware(BaseHTTPMiddleware):
     """Schuetzt die komplette Oberflaeche und alle Finanz-APIs."""
 
@@ -338,6 +491,14 @@ class AuthMiddleware(BaseHTTPMiddleware):
                     )
                 else:
                     response = RedirectResponse("/login.html", status_code=303)
+                return self._secure_headers(response)
+            if AUTH.config and AUTH.config.must_change_password and path not in INITIAL_SETUP_PATHS:
+                if path.startswith("/api/"):
+                    response = JSONResponse(
+                        {"detail": "Ersteinrichtung erforderlich."}, status_code=403
+                    )
+                else:
+                    response = RedirectResponse("/password-setup.html", status_code=303)
                 return self._secure_headers(response)
         response = await call_next(request)
         return self._secure_headers(response)
