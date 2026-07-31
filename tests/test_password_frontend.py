@@ -55,6 +55,12 @@ class PasswordFrontendTest(unittest.TestCase):
             self.assertIn('maxlength="128"', page)
             self.assertIn('autocomplete="new-password"', page)
 
+    def test_aktuelles_passwort_ist_fuer_passwortmanager_gekennzeichnet(self):
+        self.assertRegex(
+            self.change_html,
+            r'id="current-password"[^>]*autocomplete="current-password"',
+        )
+
     def test_recovery_code_wird_nur_in_einem_sicheren_bereich_angeboten(self):
         self.assertIn('id="recovery-code"', self.setup_html)
         self.assertIn('hidden', self.setup_html)
