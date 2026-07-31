@@ -310,6 +310,17 @@ class AuthLifecycleIntegrationTest(unittest.TestCase):
         response = self.post_raw("/api/auth/recover", b"[]")
         self.assertEqual(response.status, 401)
 
+    def test_recovery_lehnt_ungueltiges_utf8_neutral_ab(self):
+        response = self.post_raw("/api/auth/recover", b"\xff")
+        self.assertEqual(response.status, 401)
+
+    def test_recovery_sperrt_nach_fuenf_ungueltigen_payloads(self):
+        for _ in range(5):
+            response = self.post_raw("/api/auth/recover", b"{")
+            self.assertEqual(response.status, 401)
+        blocked = self.post_raw("/api/auth/recover", b"{")
+        self.assertEqual(blocked.status, 429)
+
     def test_ersteinrichtung_lehnt_malformedes_json_ab(self):
         cookie = self.login(START_PASSWORD)
         response = self.post_raw("/api/auth/initial-password", b"{", cookie)
@@ -318,6 +329,11 @@ class AuthLifecycleIntegrationTest(unittest.TestCase):
     def test_ersteinrichtung_lehnt_json_array_ab(self):
         cookie = self.login(START_PASSWORD)
         response = self.post_raw("/api/auth/initial-password", b"[]", cookie)
+        self.assertEqual(response.status, 422)
+
+    def test_ersteinrichtung_lehnt_ungueltiges_utf8_ab(self):
+        cookie = self.login(START_PASSWORD)
+        response = self.post_raw("/api/auth/initial-password", b"\xff", cookie)
         self.assertEqual(response.status, 422)
 
     def test_passwortaenderung_lehnt_malformedes_json_ab(self):
@@ -330,6 +346,12 @@ class AuthLifecycleIntegrationTest(unittest.TestCase):
         self.complete_initial_setup()
         cookie = self.login(INITIAL_PASSWORD)
         response = self.post_raw("/api/auth/change-password", b"[]", cookie)
+        self.assertEqual(response.status, 422)
+
+    def test_passwortaenderung_lehnt_ungueltiges_utf8_ab(self):
+        self.complete_initial_setup()
+        cookie = self.login(INITIAL_PASSWORD)
+        response = self.post_raw("/api/auth/change-password", b"\xff", cookie)
         self.assertEqual(response.status, 422)
 
 

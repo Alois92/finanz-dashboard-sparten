@@ -306,7 +306,7 @@ async def _json_object(request: Request) -> dict | None:
     """Liest einen JSON-Request und akzeptiert nur Objekt-Payloads."""
     try:
         body = await request.json()
-    except json.JSONDecodeError:
+    except (json.JSONDecodeError, UnicodeDecodeError):
         return None
     return body if isinstance(body, dict) else None
 
