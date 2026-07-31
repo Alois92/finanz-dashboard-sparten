@@ -302,6 +302,15 @@ def _client_is_allowed(request: Request) -> bool:
     return _client_key(request) in allowed
 
 
+async def _json_object(request: Request) -> dict | None:
+    """Liest einen JSON-Request und akzeptiert nur Objekt-Payloads."""
+    try:
+        body = await request.json()
+    except json.JSONDecodeError:
+        return None
+    return body if isinstance(body, dict) else None
+
+
 @router.post("/api/auth/login", status_code=204)
 async def login(request: Request):
     if not AUTH.settings.configured:
@@ -371,7 +380,9 @@ async def initial_password(request: Request):
         return JSONResponse(
             {"detail": "Ersteinrichtung ist bereits abgeschlossen."}, status_code=409
         )
-    body = await request.json()
+    body = await _json_object(request)
+    if body is None:
+        return JSONResponse({"detail": "Ungueltige Eingabe."}, status_code=422)
     new_password = body.get("new_password", "")
     repeat = body.get("repeat_password", "")
     if new_password != repeat:
@@ -401,7 +412,9 @@ async def change_password(request: Request):
         return JSONResponse(
             {"detail": "Anmeldung ist noch nicht eingerichtet."}, status_code=503
         )
-    body = await request.json()
+    body = await _json_object(request)
+    if body is None:
+        return JSONResponse({"detail": "Ungueltige Eingabe."}, status_code=422)
     current = body.get("current_password", "")
     new = body.get("new_password", "")
     repeat = body.get("repeat_password", "")
@@ -433,7 +446,12 @@ async def recover(request: Request):
     key = _client_key(request)
     if RECOVERY_LIMITER.is_blocked(key):
         return JSONResponse({"detail": "Zu viele Fehlversuche."}, status_code=429)
-    body = await request.json()
+    body = await _json_object(request)
+    if body is None:
+        RECOVERY_LIMITER.record_failure(key)
+        return JSONResponse(
+            {"detail": "Anmeldedaten sind nicht korrekt."}, status_code=401
+        )
     supplied = "".join(str(body.get("recovery_code", "")).upper().split())
     new = body.get("new_password", "")
     repeat = body.get("repeat_password", "")

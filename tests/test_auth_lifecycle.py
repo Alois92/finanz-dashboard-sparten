@@ -128,6 +128,22 @@ class AuthLifecycleIntegrationTest(unittest.TestCase):
     def post_public(self, path, payload):
         return self.request(path, payload)
 
+    def post_raw(self, path, body, cookie=None):
+        request = urllib.request.Request(
+            f"{self.base_url}{path}",
+            data=body,
+            headers={
+                "Content-Type": "application/json",
+                **({"Cookie": cookie} if cookie else {}),
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=2) as response:
+                return _Antwort(response.status, response.read(), response.headers)
+        except urllib.error.HTTPError as error:
+            return _Antwort(error.code, b"", error.headers)
+
     def login(self, password):
         response = self.post_public("/api/auth/login", {"password": password})
         self.assertEqual(response.status, 204)
@@ -285,6 +301,36 @@ class AuthLifecycleIntegrationTest(unittest.TestCase):
             },
         )
         self.assertEqual(invalid.status, 422)
+
+    def test_recovery_lehnt_malformedes_json_neutral_ab(self):
+        response = self.post_raw("/api/auth/recover", b"{")
+        self.assertEqual(response.status, 401)
+
+    def test_recovery_lehnt_json_array_neutral_ab(self):
+        response = self.post_raw("/api/auth/recover", b"[]")
+        self.assertEqual(response.status, 401)
+
+    def test_ersteinrichtung_lehnt_malformedes_json_ab(self):
+        cookie = self.login(START_PASSWORD)
+        response = self.post_raw("/api/auth/initial-password", b"{", cookie)
+        self.assertEqual(response.status, 422)
+
+    def test_ersteinrichtung_lehnt_json_array_ab(self):
+        cookie = self.login(START_PASSWORD)
+        response = self.post_raw("/api/auth/initial-password", b"[]", cookie)
+        self.assertEqual(response.status, 422)
+
+    def test_passwortaenderung_lehnt_malformedes_json_ab(self):
+        self.complete_initial_setup()
+        cookie = self.login(INITIAL_PASSWORD)
+        response = self.post_raw("/api/auth/change-password", b"{", cookie)
+        self.assertEqual(response.status, 422)
+
+    def test_passwortaenderung_lehnt_json_array_ab(self):
+        self.complete_initial_setup()
+        cookie = self.login(INITIAL_PASSWORD)
+        response = self.post_raw("/api/auth/change-password", b"[]", cookie)
+        self.assertEqual(response.status, 422)
 
 
 if __name__ == "__main__":
