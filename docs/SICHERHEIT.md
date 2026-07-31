@@ -30,7 +30,15 @@ Der Dienst muss produktiv auf die geschützte Auth-Datei zeigen:
 FINANZ_AUTH_FILE=/var/lib/finanz/auth.json
 ```
 
-Danach im Projektverzeichnis ausführen:
+Auf dem Produktivserver aus dem aktiven Release-Verzeichnis ausführen:
+
+```sh
+cd /opt/finanz-app-next-<COMMIT>
+sudo -u finanz env FINANZ_AUTH_FILE=/var/lib/finanz/auth.json \
+  /opt/finanz-app/.venv/bin/python scripts/set_auth_password.py
+```
+
+Nur für die lokale Windows-Entwicklung im Projektverzeichnis ausführen:
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\set_auth_password.py
