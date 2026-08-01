@@ -21,6 +21,7 @@ class PasswordFrontendTest(unittest.TestCase):
         cls.change_js = frontend_file("password-change.js")
         cls.recover_html = frontend_file("password-recover.html")
         cls.recover_js = frontend_file("password-recover.js")
+        cls.common_css = frontend_file("password-common.css")
 
     def test_login_verlinkt_passwort_vergessen(self):
         self.assertIn('href="/password-recover.html"', self.login_html)
@@ -81,6 +82,21 @@ class PasswordFrontendTest(unittest.TestCase):
             self.assertLess(
                 script.index("copyCode.addEventListener"), script.index("downloadCode.addEventListener")
             )
+    def test_kopiermeldung_bleibt_im_sichtbaren_recovery_panel(self):
+        for page, script in (
+            (self.setup_html, self.setup_js),
+            (self.recover_html, self.recover_js),
+        ):
+            panel = page.split('id="recovery-panel"', 1)[1].split("</section>", 1)[0]
+            self.assertIn('id="copy-status"', panel)
+            self.assertIn('role="status"', panel)
+            self.assertIn("copyStatus.textContent", script)
+
+    def test_weiter_zur_anmeldung_ist_vollwertige_aktion(self):
+        self.assertIn('class="secondary-link action-link"', self.setup_html)
+        self.assertIn(".actions .action-link", self.common_css)
+        self.assertIn("min-height: 48px", self.common_css)
+
 
     def test_erfolgsmeldung_ist_fokussierbar_und_fuehrt_zur_anmeldung(self):
         for page, script in (

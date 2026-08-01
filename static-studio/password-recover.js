@@ -10,6 +10,7 @@ const recoveryPanel = document.getElementById("recovery-panel");
 const recoveryCode = document.getElementById("recovery-code");
 const downloadCode = document.getElementById("download-code");
 const copyCode = document.getElementById("copy-code");
+const copyStatus = document.getElementById("copy-status");
 
 function errorMessage(error) {
   return error instanceof TypeError
@@ -27,9 +28,9 @@ function showRecoveryCode(code) {
 copyCode.addEventListener("click", async () => {
   try {
     await navigator.clipboard.writeText(recoveryCode.textContent);
-    message.textContent = "Wiederherstellungscode wurde kopiert.";
+    copyStatus.textContent = "Wiederherstellungscode wurde kopiert.";
   } catch (_error) {
-    message.textContent = "Kopieren war nicht moeglich. Bitte markiere den Code manuell.";
+    copyStatus.textContent = "Kopieren war nicht moeglich. Bitte markiere den Code manuell.";
   }
 });
 
