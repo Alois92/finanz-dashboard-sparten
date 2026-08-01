@@ -52,6 +52,7 @@ class AuthIntegrationTest(unittest.TestCase):
         cls.base_url = f"http://127.0.0.1:{cls.port}"
         env = os.environ.copy()
         env["FINANZ_DB"] = str(Path(cls.tempdir.name) / "test.db")
+        env["FINANZ_AUTH_FILE"] = str(Path(cls.tempdir.name) / "auth.json")
         env["FINANZ_AUTH_PASSWORD_HASH"] = _passwort_hash(PASSWORT)
         env["FINANZ_SESSION_SECRET"] = (
             "testsitzungsschluessel-mit-mindestens-32-zeichen"
