@@ -34,6 +34,10 @@ class PasswordFrontendTest(unittest.TestCase):
     def test_mehr_menue_verlinkt_passwortaenderung(self):
         self.assertIn('href="/password-change.html"', self.index_html)
 
+    def test_desktop_navigation_verlinkt_passwortaenderung(self):
+        sidebar = self.index_html.split("</aside>", 1)[0]
+        self.assertIn('href="/password-change.html"', sidebar)
+
     def test_setup_ruft_initial_password_mit_same_origin_credentials_auf(self):
         self.assertIn('fetch("/api/auth/state"', self.setup_js)
         self.assertIn('fetch("/api/auth/initial-password"', self.setup_js)
@@ -66,6 +70,30 @@ class PasswordFrontendTest(unittest.TestCase):
         self.assertIn('hidden', self.setup_html)
         self.assertIn('text/plain;charset=utf-8', self.setup_js)
         self.assertIn('Hohenegg-Finanzstudio-Wiederherstellungscode.txt', self.setup_js)
+
+    def test_recovery_code_kann_kopiert_werden(self):
+        for page, script in (
+            (self.setup_html, self.setup_js),
+            (self.recover_html, self.recover_js),
+        ):
+            self.assertIn('id="copy-code"', page)
+            self.assertIn("navigator.clipboard.writeText", script)
+
+    def test_erfolgsmeldung_ist_fokussierbar_und_fuehrt_zur_anmeldung(self):
+        for page, script in (
+            (self.setup_html, self.setup_js),
+            (self.recover_html, self.recover_js),
+        ):
+            self.assertIn('aria-live="polite"', page)
+            self.assertIn('tabindex="-1"', page)
+            self.assertIn('href="/login.html"', page)
+            self.assertIn("recoveryPanel.focus()", script)
+
+    def test_netzwerkfehler_werden_verstaendlich_angezeigt(self):
+        for script in (self.setup_js, self.change_js, self.recover_js):
+            self.assertIn("error instanceof TypeError", script)
+            self.assertIn("Der Finanz-Server ist gerade nicht erreichbar.", script)
+
 
 
 if __name__ == "__main__":

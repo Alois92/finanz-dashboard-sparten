@@ -9,6 +9,13 @@ const message = document.getElementById("meldung");
 const recoveryPanel = document.getElementById("recovery-panel");
 const recoveryCode = document.getElementById("recovery-code");
 const downloadCode = document.getElementById("download-code");
+const copyCode = document.getElementById("copy-code");
+
+function errorMessage(error) {
+  return error instanceof TypeError
+    ? "Der Finanz-Server ist gerade nicht erreichbar."
+    : error.message || "Vorgang fehlgeschlagen.";
+}
 
 function showRecoveryCode(code) {
   recoveryCode.textContent = code;
@@ -16,7 +23,17 @@ function showRecoveryCode(code) {
   recoveryPanel.hidden = false;
 }
 
+  recoveryPanel.focus();
 downloadCode.addEventListener("click", () => {
+copyCode.addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText(recoveryCode.textContent);
+    message.textContent = "Wiederherstellungscode wurde kopiert.";
+  } catch (_error) {
+    message.textContent = "Kopieren war nicht m?glich. Bitte markiere den Code manuell.";
+  }
+});
+
   const code = recoveryCode.textContent;
   const blob = new Blob(
     [`Hohenegg Finanzstudio – Wiederherstellungscode\n\n${code}\n`],
@@ -53,7 +70,7 @@ form.addEventListener("submit", async (event) => {
     repeatPassword.value = "";
     showRecoveryCode(body.recovery_code);
   } catch (error) {
-    message.textContent = error.message || "Der Finanz-Server ist gerade nicht erreichbar.";
+    message.textContent = errorMessage(error);
   } finally {
     submitButton.disabled = false;
   }

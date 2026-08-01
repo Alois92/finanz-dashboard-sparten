@@ -345,6 +345,10 @@ class AuthLifecycleIntegrationTest(unittest.TestCase):
         response = self.post_raw("/api/auth/recover", b"\xff")
         self.assertEqual(response.status, 401)
 
+    def test_login_lehnt_ungueltiges_utf8_neutral_ab(self):
+        response = self.post_raw("/api/auth/login", b"\xff")
+        self.assertEqual(response.status, 401)
+
     def test_recovery_sperrt_nach_fuenf_ungueltigen_payloads(self):
         for _ in range(5):
             response = self.post_raw("/api/auth/recover", b"{")

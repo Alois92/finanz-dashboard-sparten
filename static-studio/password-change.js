@@ -6,6 +6,12 @@ const newPassword = document.getElementById("new-password");
 const repeatPassword = document.getElementById("repeat-password");
 const submitButton = document.getElementById("submit-button");
 const message = document.getElementById("meldung");
+function errorMessage(error) {
+  return error instanceof TypeError
+    ? "Der Finanz-Server ist gerade nicht erreichbar."
+    : error.message || "Vorgang fehlgeschlagen.";
+}
+
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -29,7 +35,7 @@ form.addEventListener("submit", async (event) => {
     repeatPassword.value = "";
     window.location.replace("/login.html");
   } catch (error) {
-    message.textContent = error.message || "Der Finanz-Server ist gerade nicht erreichbar.";
+    message.textContent = errorMessage(error);
   } finally {
     submitButton.disabled = false;
   }

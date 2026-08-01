@@ -331,7 +331,7 @@ async def login(request: Request):
     try:
         body = await request.json()
         password = body.get("password", "")
-    except (json.JSONDecodeError, AttributeError):
+    except (json.JSONDecodeError, UnicodeDecodeError, AttributeError):
         password = ""
     if not isinstance(password, str) or not verify_password(
         password, AUTH.settings.password_hash or ""

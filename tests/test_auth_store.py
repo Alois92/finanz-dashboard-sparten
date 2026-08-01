@@ -1,4 +1,6 @@
+import os
 import pathlib
+import stat
 import tempfile
 import unittest
 
@@ -36,11 +38,17 @@ class AuthConfigStoreTest(unittest.TestCase):
         self.assertEqual(store.load(), config)
         self.assertEqual(list(self.path.parent.glob("auth-*.tmp")), [])
 
+    @unittest.skipUnless(os.name == "posix", "POSIX-Dateirechte")
+    def test_store_setzt_dateimodus_0600(self):
+        AuthConfigStore(self.path).save(AuthConfig("hash", "s" * 64, None, True, 1))
+        self.assertEqual(stat.S_IMODE(self.path.stat().st_mode), 0o600)
+
     def test_wiederherstellungscode_hat_mindestens_128_bit(self):
         code = generate_recovery_code()
         self.assertGreaterEqual(len(code.replace("-", "")), 26)
         self.assertNotIn("O", code)
         self.assertNotIn("0", code)
+
 
 
 if __name__ == "__main__":
