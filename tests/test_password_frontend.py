@@ -1,3 +1,4 @@
+import re
 import pathlib
 import unittest
 
@@ -89,13 +90,18 @@ class PasswordFrontendTest(unittest.TestCase):
         ):
             panel = page.split('id="recovery-panel"', 1)[1].split("</section>", 1)[0]
             self.assertIn('id="copy-status"', panel)
+            self.assertIn('class="copy-status no-print"', panel)
+            panel_opening = panel.split(">", 1)[0]
+            self.assertNotIn('aria-live=', panel_opening)
             self.assertIn('role="status"', panel)
             self.assertIn("copyStatus.textContent", script)
 
     def test_weiter_zur_anmeldung_ist_vollwertige_aktion(self):
         self.assertIn('class="secondary-link action-link"', self.setup_html)
         self.assertIn(".actions .action-link", self.common_css)
-        self.assertIn("min-height: 48px", self.common_css)
+        rule = re.search(r"\.actions \.action-link\s*\{([^}]*)\}", self.common_css)
+        self.assertIsNotNone(rule)
+        self.assertIn("min-height: 48px", rule.group(1))
 
 
     def test_erfolgsmeldung_ist_fokussierbar_und_fuehrt_zur_anmeldung(self):
