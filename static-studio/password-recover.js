@@ -21,19 +21,19 @@ function showRecoveryCode(code) {
   recoveryCode.textContent = code;
   form.hidden = true;
   recoveryPanel.hidden = false;
+  recoveryPanel.focus();
 }
 
-  recoveryPanel.focus();
-downloadCode.addEventListener("click", () => {
 copyCode.addEventListener("click", async () => {
   try {
     await navigator.clipboard.writeText(recoveryCode.textContent);
     message.textContent = "Wiederherstellungscode wurde kopiert.";
   } catch (_error) {
-    message.textContent = "Kopieren war nicht m?glich. Bitte markiere den Code manuell.";
+    message.textContent = "Kopieren war nicht moeglich. Bitte markiere den Code manuell.";
   }
 });
 
+downloadCode.addEventListener("click", () => {
   const code = recoveryCode.textContent;
   const blob = new Blob(
     [`Hohenegg Finanzstudio – Wiederherstellungscode\n\n${code}\n`],

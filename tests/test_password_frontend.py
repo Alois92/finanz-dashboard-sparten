@@ -78,6 +78,9 @@ class PasswordFrontendTest(unittest.TestCase):
         ):
             self.assertIn('id="copy-code"', page)
             self.assertIn("navigator.clipboard.writeText", script)
+            self.assertLess(
+                script.index("copyCode.addEventListener"), script.index("downloadCode.addEventListener")
+            )
 
     def test_erfolgsmeldung_ist_fokussierbar_und_fuehrt_zur_anmeldung(self):
         for page, script in (
@@ -88,6 +91,11 @@ class PasswordFrontendTest(unittest.TestCase):
             self.assertIn('tabindex="-1"', page)
             self.assertIn('href="/login.html"', page)
             self.assertIn("recoveryPanel.focus()", script)
+            show_start = script.index("function showRecoveryCode")
+            show_end = script.index("copyCode.addEventListener")
+            focus = script.index("recoveryPanel.focus()")
+            self.assertLess(show_start, focus)
+            self.assertLess(focus, show_end)
 
     def test_netzwerkfehler_werden_verstaendlich_angezeigt(self):
         for script in (self.setup_js, self.change_js, self.recover_js):
