@@ -45,24 +45,28 @@ Nur für die lokale Windows-Entwicklung im Projektverzeichnis ausführen:
 ```
 
 Für die lokale Entwicklung speichert das Skript ausschließlich
-einen mit scrypt abgeleiteten Passwortwert sowie ein zufälliges Sitzungsgeheimnis
-in `instance/auth.json`. Diese Datei ist durch `.gitignore` vom Repository
-ausgeschlossen und darf nicht per E-Mail, Messenger oder Git weitergegeben
-werden.
+mit scrypt abgeleitete Hashes von Passwort und Wiederherstellungscode sowie
+ein zufälliges Sitzungsgeheimnis in `instance/auth.json`. Diese Datei ist
+durch `.gitignore` vom Repository ausgeschlossen und darf nicht per E-Mail,
+Messenger oder Git weitergegeben werden.
 
 Produktiv ein Startpasswort mit **6 bis 128 Zeichen** zweimal verdeckt eingeben.
-Das Skript setzt `must_change_password` und speichert in
-`/var/lib/finanz/auth.json` nur scrypt-Hashes und ein zufälliges
-Sitzungsgeheimnis, niemals das Passwort im Klartext. Die Datei gehört dem
-Dienstbenutzer `finanz`, muss Dateimodus `0600` haben und darf nicht per E-Mail,
-Messenger oder Git weitergegeben werden. Beim ersten Login muss ein eigenes
-Passwort gesetzt werden.
+Das Skript setzt `must_change_password`, erzeugt zusätzlich einen zufälligen
+Wiederherstellungscode und speichert in `/var/lib/finanz/auth.json` nur
+scrypt-Hashes von Passwort und Code sowie ein zufälliges Sitzungsgeheimnis,
+niemals Passwort oder Code im Klartext. Die Datei gehört dem Dienstbenutzer
+`finanz`, muss Dateimodus `0600` haben und darf nicht per E-Mail, Messenger
+oder Git weitergegeben werden. Beim ersten Login muss ein eigenes Passwort
+gesetzt werden.
 
 Danach den Anwendungsdienst neu starten. Beim Öffnen der produktiven Adresse
 muss anschließend die Login-Seite erscheinen.
-Nach der Passwortwahl zeigt die Anwendung den **Wiederherstellungscode** genau
-einmal an. Den Code sofort kopieren oder drucken und sicher offline verwahren;
-er lässt sich später nicht aus der Auth-Datei zurücklesen.
+Nach dem Setzen des Passworts zeigt das Skript den **Wiederherstellungscode**
+genau einmal auf der Konsole an (ebenso zeigt die Anwendung ihn nach der
+Web-Ersteinrichtung genau einmal an). Den Code sofort kopieren oder drucken
+und sicher offline verwahren — getrennt von der Auth-Datei und getrennt vom
+Passwort selbst, z. B. in einem Passwort-Manager oder ausgedruckt in einem
+Safe. Er lässt sich später nicht aus der Auth-Datei zurücklesen.
 
 
 ## Freigegebene Geräte
@@ -102,8 +106,42 @@ Auf der Login-Seite **Passwort vergessen** wählen, den Wiederherstellungscode
 und das neue Passwort eingeben. Nach erfolgreicher Wiederherstellung wird der
 alte Code ungültig und ein neuer Wiederherstellungscode einmalig angezeigt.
 
+Diese Funktion setzt voraus, dass in `auth.json` überhaupt ein
+Wiederherstellungscode hinterlegt ist. `scripts/set_auth_password.py` erzeugt
+seit der Einführung des `--nur-recovery-code`-Flags bei jedem normalen
+Passwort-Setzen automatisch einen neuen Code. Fehlt er dennoch (z. B. weil die
+Datei mit einer älteren Skriptversion angelegt wurde), auf dem Produktivserver
+ausführen:
+
+```sh
+cd /opt/finanz-app-next-<COMMIT>
+sudo -u finanz env FINANZ_AUTH_FILE=/var/lib/finanz/auth.json \
+  /opt/finanz-app/.venv/bin/python scripts/set_auth_password.py --nur-recovery-code
+```
+
+Auf einem Windows-Rechner (Betrieb direkt aus dem Projektordner, `auth.json`
+liegt dann unter `instance\auth.json`) lautet derselbe Aufruf in PowerShell:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\set_auth_password.py --nur-recovery-code
+```
+
+Das Passwort und das Sitzungsgeheimnis bleiben dabei unverändert, nur der
+Wiederherstellungscode wird neu erzeugt und einmalig auf der Konsole angezeigt.
+Diesen Code sofort sicher notieren — er lässt sich danach nicht mehr aus
+`auth.json` zurücklesen. Ein eventuell zuvor vorhandener alter Code wird durch
+den neuen ungültig.
+
 Alternativ kann ein Administrator die Ersteinrichtung neu starten:
 Falls das Passwort vergessen wurde, auf dem Produktivserver das
-Passwortskript erneut ausführen und den Dienst neu starten. Vor Änderungen an
-Tailscale immer zuerst die bestehende Zugriffsregel exportieren bzw. kopieren.
-Die Finanzdatenbank wird von der Passwort-Einrichtung nicht verändert.
+Passwortskript ohne `--nur-recovery-code` erneut ausführen (setzt ein neues
+Passwort **und** einen neuen Wiederherstellungscode) und den Dienst neu
+starten. Vor Änderungen an Tailscale immer zuerst die bestehende
+Zugriffsregel exportieren bzw. kopieren. Die Finanzdatenbank wird von der
+Passwort-Einrichtung nicht verändert.
+
+Sind weder das Passwort noch der Wiederherstellungscode bekannt, gibt es
+keinen Weg über die Anwendung selbst zurück in die Anmeldung: Nur der direkte
+Serverzugriff (SSH bzw. lokaler Zugriff auf den Produktivserver) erlaubt es,
+`scripts/set_auth_password.py` erneut auszuführen und damit ein neues
+Passwort und einen neuen Code zu setzen.
