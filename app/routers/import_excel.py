@@ -150,6 +150,7 @@ def _parse_kassabuch(blaetter: list[tuple[str, list[list]]]) -> dict:
     posten: list[dict] = []
     warnungen: list[str] = []
     monate_mit_daten = 0
+    kopfzeile_gefunden = False
 
     def warne(msg: str):
         if len(warnungen) < MAX_WARNUNGEN:
@@ -167,6 +168,7 @@ def _parse_kassabuch(blaetter: list[tuple[str, list[list]]]) -> dict:
                 break
         if kopf_idx is None:
             continue  # kein Kassabuch-Blatt
+        kopfzeile_gefunden = True
 
         kopf = zeilen[kopf_idx]
         kategorien: list[tuple[int, str]] = []
@@ -248,6 +250,19 @@ def _parse_kassabuch(blaetter: list[tuple[str, list[list]]]) -> dict:
 
         if blatt_hat_daten:
             monate_mit_daten += 1
+
+    if not posten:
+        if not kopfzeile_gefunden:
+            warne(
+                "Keine Kopfzeile ('Dat.' in Spalte A) in einem der Blaetter "
+                "gefunden - die Datei ist vermutlich kein Kassabuch im "
+                "erwarteten Layout."
+            )
+        else:
+            warne(
+                "Keine einzige Buchungszeile mit Betrag gefunden - die Datei "
+                "enthaelt keine Buchungen (z. B. eine leere Vorlage)."
+            )
 
     return {"posten": posten, "warnungen": warnungen,
             "monate_mit_daten": monate_mit_daten}
