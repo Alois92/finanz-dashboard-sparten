@@ -70,6 +70,22 @@ laufender Server sieht Laufwerksbuchstaben, die im Kontext eines angemeldeten
 Benutzers eingerichtet wurden, oft nicht - der UNC-Pfad funktioniert
 unabhaengig davon.
 
+Laeuft das Dashboard als systemd-Dienst (produktiv: LXC-Container CT 101),
+gehoert die Variable in ein Drop-In statt in die Shell - eine im Terminal
+gesetzte Variable erreicht den Dienst nicht:
+
+```ini
+# /etc/systemd/system/finanz.service.d/backup-ziel2.conf
+[Service]
+Environment=FINANZ_BACKUP_ZIEL2=/mnt/nas-backup/finanz
+```
+
+Danach `systemctl daemon-reload && systemctl restart finanz`. Das NAS muss im
+Container vorher dauerhaft eingehaengt sein (z. B. per `/etc/fstab`-Eintrag
+oder Mountpoint vom Proxmox-Host durchgereicht) und fuer den Dienstbenutzer
+beschreibbar sein - ein nicht schreibbares Ziel wird sonst bei jeder Sicherung
+nur als Warnung geloggt.
+
 ## Einrichten (einmalig, je PC)
 
 ```powershell
