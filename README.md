@@ -48,6 +48,28 @@ $env:FINANZ_DB = "D:\Privat\Finanzen\finanz.db"
 Die DB nutzt bewusst **kein WAL**, damit der Speicherort auch auf einem
 Netzlaufwerk (SMB/NAS) zuverlaessig funktioniert.
 
+### Zweites Sicherungsziel (optional, z. B. NAS)
+
+Die automatische Sicherung (`app/backup.py`) legt ihre Tageskopien standardmaessig
+direkt neben der Datenbank ab (`<DB-Ordner>/backup/`). Liegt die Datenbank auf
+demselben Geraet wie der Server (z. B. dem ThinkCentre), waere bei dessen
+Verlust auch die Sicherung weg. Mit `FINANZ_BACKUP_ZIEL2` laesst sich ein
+zweites Verzeichnis angeben, in das nach jeder erfolgreichen Erstkopie
+zusaetzlich gesichert wird (gleiches Dateinamensschema, gleiche Aufbewahrung
+von 30 Kopien). Ist das Zweitziel gerade nicht erreichbar (z. B. NAS kurz
+offline), wird das nur geloggt - die eigentliche Sicherung schlaegt dadurch
+nie fehl.
+
+```powershell
+$env:FINANZ_BACKUP_ZIEL2 = "\\192.168.1.119\Daten\finanz-backup"
+```
+
+**Wichtig:** Hier bewusst den UNC-Pfad (`\\192.168.1.119\Daten\...`) verwenden,
+nicht den zugeordneten Laufwerksbuchstaben (z. B. `Z:\...`). Ein als Dienst
+laufender Server sieht Laufwerksbuchstaben, die im Kontext eines angemeldeten
+Benutzers eingerichtet wurden, oft nicht - der UNC-Pfad funktioniert
+unabhaengig davon.
+
 ## Einrichten (einmalig, je PC)
 
 ```powershell
