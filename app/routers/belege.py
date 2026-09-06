@@ -54,6 +54,35 @@ def _medientyp(dateiname: str) -> str:
     return typ or MEDIENTYP_FALLBACK.get(endung, "application/octet-stream")
 
 
+# Nur diese beiden Zustaende fuehrt die Automatik; alle weiteren Werte der
+# CHECK-Liste in db/schema.sql sind manuelle Einstufungen (siehe unten).
+AUTOMATISCHE_BELEGSTATUS = frozenset({"beleg_fehlt", "beleg_vorhanden"})
+
+
+def _aktualisiere_belegstatus(con: sqlite3.Connection, buchung_id: int) -> None:
+    """Leitet den belegstatus einer Buchung aus buchung_beleg neu ab.
+
+    Nur die beiden automatisch fuehrbaren Zustaende werden angefasst:
+    mindestens ein verknuepfter Beleg vorhanden -> 'beleg_vorhanden',
+    sonst -> 'beleg_fehlt'. 'kein_beleg_noetig', 'eigenbeleg' und
+    'beleg_unklar' sind bewusste manuelle Einstufungen und bleiben stehen,
+    damit die Automatik keine Handarbeit ueberschreibt.
+    """
+    row = con.execute(
+        "SELECT belegstatus FROM buchung WHERE id = ?", (buchung_id,)
+    ).fetchone()
+    if not row or row["belegstatus"] not in AUTOMATISCHE_BELEGSTATUS:
+        return
+    hat_beleg = con.execute(
+        "SELECT 1 FROM buchung_beleg WHERE buchung_id = ?", (buchung_id,)
+    ).fetchone()
+    neuer_status = "beleg_vorhanden" if hat_beleg else "beleg_fehlt"
+    con.execute(
+        "UPDATE buchung SET belegstatus = ? WHERE id = ?",
+        (neuer_status, buchung_id),
+    )
+
+
 @router.post("/belege", status_code=201)
 def upload_beleg(
     datei: UploadFile = File(...),
@@ -170,7 +199,17 @@ def delete_beleg(beleg_id: int, con: sqlite3.Connection = Depends(db_dep)):
     ).fetchone()
     if not row:
         raise HTTPException(404, "Beleg nicht gefunden")
+    # Betroffene Buchungen vor dem Loeschen ermitteln, da die Verknuepfungen
+    # per CASCADE mitgeloescht werden.
+    betroffene_buchungen = [
+        r["buchung_id"]
+        for r in con.execute(
+            "SELECT buchung_id FROM buchung_beleg WHERE beleg_id = ?", (beleg_id,)
+        ).fetchall()
+    ]
     con.execute("DELETE FROM beleg WHERE id = ?", (beleg_id,))  # Verknuepfungen via CASCADE
+    for buchung_id in betroffene_buchungen:
+        _aktualisiere_belegstatus(con, buchung_id)
     con.commit()
     # Datei nach erfolgreichem DB-Loeschen entfernen (falls vorhanden).
     if row["pfad"]:
@@ -204,6 +243,7 @@ def verknuepfe_beleg(
         "INSERT OR IGNORE INTO buchung_beleg(buchung_id, beleg_id) VALUES(?,?)",
         (buchung_id, body.beleg_id),
     )
+    _aktualisiere_belegstatus(con, buchung_id)
     con.commit()
     return {"buchung_id": buchung_id, "beleg_id": body.beleg_id, "verknuepft": True}
 
@@ -220,6 +260,7 @@ def loese_verknuepfung(
         "DELETE FROM buchung_beleg WHERE buchung_id = ? AND beleg_id = ?",
         (buchung_id, beleg_id),
     )
+    _aktualisiere_belegstatus(con, buchung_id)
     con.commit()
 
 

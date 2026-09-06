@@ -87,14 +87,46 @@ def list_globalgruppen(con: sqlite3.Connection = Depends(db_dep)):
     return [_gruppe(con, gruppe_id) for gruppe_id in ids]
 
 
+def _pruefe_kategorie_ids(con: sqlite3.Connection, kategorie_ids: list[int]) -> None:
+    if not kategorie_ids:
+        return
+    marks = ",".join("?" for _ in kategorie_ids)
+    vorhanden = {r["id"] for r in con.execute(
+        f"SELECT id FROM kategorie WHERE aktiv = 1 AND id IN ({marks})",
+        kategorie_ids,
+    ).fetchall()}
+    fehlend = [kategorie_id for kategorie_id in kategorie_ids
+               if kategorie_id not in vorhanden]
+    if fehlend:
+        raise HTTPException(404, f"Kategorie {fehlend[0]} nicht gefunden")
+
+
+def _speichere_globalgruppe_kategorien(
+    con: sqlite3.Connection, gruppe_id: int, kategorie_ids: list[int],
+) -> None:
+    con.execute("DELETE FROM kategorie_globalgruppe WHERE globalgruppe_id = ?",
+                (gruppe_id,))
+    con.executemany(
+        "INSERT INTO kategorie_globalgruppe(kategorie_id, globalgruppe_id) VALUES(?, ?)",
+        [(kategorie_id, gruppe_id) for kategorie_id in kategorie_ids],
+    )
+
+
 @router.post("/globalgruppen", status_code=201)
 def create_globalgruppe(gruppe: GruppeIn, con: sqlite3.Connection = Depends(db_dep)):
     name, beschreibung = _werte(gruppe)
-    cur = con.execute(
-        "INSERT INTO globale_kategoriegruppe(name, beschreibung) VALUES(?, ?)",
-        (name, beschreibung),
-    )
-    con.commit()
+    kategorie_ids = sorted(set(gruppe.kategorie_ids))
+    _pruefe_kategorie_ids(con, kategorie_ids)
+    try:
+        cur = con.execute(
+            "INSERT INTO globale_kategoriegruppe(name, beschreibung) VALUES(?, ?)",
+            (name, beschreibung),
+        )
+        _speichere_globalgruppe_kategorien(con, cur.lastrowid, kategorie_ids)
+        con.commit()
+    except sqlite3.IntegrityError as error:
+        con.rollback()
+        raise HTTPException(400, f"Datenbankfehler: {error}") from error
     return _gruppe(con, cur.lastrowid)
 
 
@@ -104,27 +136,13 @@ def update_globalgruppe(gruppe_id: int, gruppe: GruppeIn,
     _gruppe(con, gruppe_id)
     name, beschreibung = _werte(gruppe)
     kategorie_ids = sorted(set(gruppe.kategorie_ids))
-    if kategorie_ids:
-        marks = ",".join("?" for _ in kategorie_ids)
-        vorhanden = {r["id"] for r in con.execute(
-            f"SELECT id FROM kategorie WHERE aktiv = 1 AND id IN ({marks})",
-            kategorie_ids,
-        ).fetchall()}
-        fehlend = [kategorie_id for kategorie_id in kategorie_ids
-                   if kategorie_id not in vorhanden]
-        if fehlend:
-            raise HTTPException(404, f"Kategorie {fehlend[0]} nicht gefunden")
+    _pruefe_kategorie_ids(con, kategorie_ids)
     try:
         con.execute(
             "UPDATE globale_kategoriegruppe SET name = ?, beschreibung = ? WHERE id = ?",
             (name, beschreibung, gruppe_id),
         )
-        con.execute("DELETE FROM kategorie_globalgruppe WHERE globalgruppe_id = ?",
-                    (gruppe_id,))
-        con.executemany(
-            "INSERT INTO kategorie_globalgruppe(kategorie_id, globalgruppe_id) VALUES(?, ?)",
-            [(kategorie_id, gruppe_id) for kategorie_id in kategorie_ids],
-        )
+        _speichere_globalgruppe_kategorien(con, gruppe_id, kategorie_ids)
         con.commit()
     except sqlite3.IntegrityError as error:
         con.rollback()

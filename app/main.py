@@ -4,7 +4,10 @@ import os
 import pathlib
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
@@ -54,6 +57,32 @@ app.include_router(belege.router, prefix="/api")
 app.include_router(beleg_auswertung.router, prefix="/api")
 app.include_router(import_bank.router, prefix="/api")
 app.include_router(import_excel.router, prefix="/api")
+
+
+def _saubere_validierungswert(wert):
+    """Ersetzt nicht JSON-serialisierbare Werte (z.B. rohe Bytes aus Multipart-
+    Uploads) in Validierungsfehlern durch eine unschaedliche Platzhalter-Beschreibung.
+    """
+    if isinstance(wert, bytes):
+        return f"<binaere Daten, {len(wert)} Bytes>"
+    if isinstance(wert, dict):
+        return {schluessel: _saubere_validierungswert(teilwert)
+                for schluessel, teilwert in wert.items()}
+    if isinstance(wert, (list, tuple)):
+        return [_saubere_validierungswert(teilwert) for teilwert in wert]
+    try:
+        jsonable_encoder(wert)
+    except Exception:
+        return f"<nicht darstellbare Daten: {type(wert).__name__}>"
+    return wert
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    # Den ganzen Eintrag bereinigen, nicht nur 'input': auch 'ctx' kann bei
+    # eigenen Validatoren nicht serialisierbare Objekte (z.B. ValueError) fuehren.
+    fehler = [_saubere_validierungswert(dict(eintrag)) for eintrag in exc.errors()]
+    return JSONResponse(status_code=422, content={"detail": jsonable_encoder(fehler)})
 
 
 @app.get("/api/health")
