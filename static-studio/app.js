@@ -185,7 +185,7 @@ function ladePage(name) {
   else if (name === "kategorien") ladeKategorienTabelle();
   else if (name === "belege") ladeBelege();
   else if (name === "bankimport") initBankimport();
-  else if (name === "erfassen") { ladeAusgewerteteRechnungen(); starteRaPolling(); }
+  else if (name === "erfassen") { ladeAusgewerteteRechnungen(); ladeOllamaStatus(); starteRaPolling(); }
   if (name !== "erfassen") stoppeRaPolling();
 }
 $$("[data-page]").forEach((b) => b.addEventListener("click", () => activatePage(b.dataset.page)));
@@ -830,11 +830,33 @@ let raPollTimer = null;
 function starteRaPolling() {
   stoppeRaPolling();
   raPollTimer = setInterval(() => {
-    if (aktivePage === "erfassen") ladeAusgewerteteRechnungen();
+    if (aktivePage === "erfassen") { ladeAusgewerteteRechnungen(); ladeOllamaStatus(); }
   }, 20000);
 }
 function stoppeRaPolling() {
   if (raPollTimer) { clearInterval(raPollTimer); raPollTimer = null; }
+}
+async function ladeOllamaStatus() {
+  const el = $("#rf-ollama-status");
+  let status;
+  try {
+    status = await api("/auswertung/status");
+  } catch (err) {
+    el.hidden = true; // Statuspruefung selbst ist nicht kritisch - im Zweifel nichts anzeigen
+    return;
+  }
+  if (!status.erreichbar) {
+    el.hidden = false;
+    el.style.color = "var(--aus)";
+    el.textContent = "⚠ Lokale Rechnungsauswertung ist derzeit nicht verfügbar (Ollama unter " + status.url + " nicht erreichbar). Fotos können trotzdem hochgeladen werden und werden automatisch verarbeitet, sobald der Dienst wieder läuft.";
+  } else if (!status.modell_vorhanden) {
+    el.hidden = false;
+    el.style.color = "var(--aus)";
+    el.textContent = "⚠ Ollama läuft, aber das Modell „" + status.modell + "“ fehlt. Auf dem Ollama-Rechner ausführen: ollama pull " + status.modell;
+  } else {
+    el.hidden = true;
+    el.textContent = "";
+  }
 }
 function raStatusLabel(status) {
   return { offen: "wartet", laeuft: "läuft …", fertig: "fertig", fehler: "Fehler" }[status] || status;
@@ -1290,7 +1312,7 @@ $("#form-globalgruppe").addEventListener("submit", async (e) => {
   e.preventDefault(); const msg = $("#gg-msg"); const body = { name: $("#gg-name").value.trim(), beschreibung: $("#gg-beschreibung").value.trim() || null, kategorie_ids: $$("#gg-kategorien input:checked").map((input) => parseInt(input.value, 10)) };
   try {
     if (gruppeEditId) await api("/globalgruppen/" + gruppeEditId, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    else { const erstellt = await api("/globalgruppen", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: body.name, beschreibung: body.beschreibung }) }); if (body.kategorie_ids.length) await api("/globalgruppen/" + erstellt.id, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); }
+    else await api("/globalgruppen", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     msg.className = "msg ok"; msg.textContent = "Gruppe gespeichert."; resetGruppenForm(); await ladeGlobalgruppen();
   } catch (err) { msg.className = "msg err"; msg.textContent = "Fehler: " + err.message; }
 });

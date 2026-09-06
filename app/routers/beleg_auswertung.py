@@ -8,17 +8,27 @@ Endpunkte:
   POST /api/belege/{beleg_id}/auswerten     - Auswertungsauftrag anlegen (dedupliziert)
   GET  /api/beleg-auswertungen              - Auftraege auflisten (neueste zuerst)
   POST /api/beleg-auswertungen/{id}/status  - Status auf verworfen/verbucht setzen
+  GET  /api/auswertung/status               - Erreichbarkeit des Ollama-Servers pruefen
 """
 import json
 import sqlite3
+import urllib.error
+import urllib.request
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from ..auswertung import OLLAMA_MODEL, OLLAMA_URL
 from ..db import db_dep
 
 router = APIRouter(tags=["beleg-auswertung"])
+
+# Kurzes Timeout fuer die reine Erreichbarkeitspruefung - das ist kein
+# Ollama-Aufruf mit Bildanalyse, sondern nur ein GET auf /api/tags, das
+# die Oberflaeche niemals haengen lassen soll (siehe OLLAMA_TIMEOUT_SEKUNDEN
+# in app/auswertung.py fuer den eigentlichen, viel laengeren Timeout).
+STATUS_TIMEOUT_SEKUNDEN = 3
 
 
 class AuswertungStatusIn(BaseModel):
@@ -96,3 +106,30 @@ def setze_auswertungsstatus(
     )
     con.commit()
     return {"id": auswertung_id, "status": body.status}
+
+
+@router.get("/auswertung/status")
+def auswertung_status():
+    """Erreichbarkeit des konfigurierten Ollama-Servers pruefen.
+
+    Liefert immer einen regulaeren Antwortkoerper - ist der Server nicht
+    erreichbar, ist das ein normaler Zustand (keine Exception/kein 500er),
+    damit die Oberflaeche das dem Nutzer erklaeren kann statt nur stumm zu
+    haengen.
+    """
+    ergebnis = {
+        "erreichbar": False,
+        "url": OLLAMA_URL,
+        "modell": OLLAMA_MODEL,
+        "modell_vorhanden": False,
+    }
+    try:
+        request = urllib.request.Request(OLLAMA_URL + "/api/tags", method="GET")
+        with urllib.request.urlopen(request, timeout=STATUS_TIMEOUT_SEKUNDEN) as resp:
+            daten = json.loads(resp.read().decode("utf-8"))
+        ergebnis["erreichbar"] = True
+        modelle = [m.get("name") for m in daten.get("models", []) if isinstance(m, dict)]
+        ergebnis["modell_vorhanden"] = OLLAMA_MODEL in modelle
+    except (urllib.error.URLError, OSError, ValueError, TimeoutError):
+        pass
+    return ergebnis
