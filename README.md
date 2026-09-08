@@ -6,6 +6,11 @@ Auswertung. Konzept siehe [Projektkonzept](Projektkonzept_Finanz_Dashboard_Spart
 **Status:** Das Abschlusspaket ist umgesetzt. Das Studio deckt Stammdaten,
 Buchungen, Importe, Auswertungen, Suche, Export und automatische Sicherungen ab.
 
+> **Neu hier? Zuerst lesen:** [`docs/BETRIEB-UND-ARCHITEKTUR.md`](docs/BETRIEB-UND-ARCHITEKTUR.md)
+> — wo die App produktiv läuft (Proxmox/CT 101), wie man zugreift (Tailscale),
+> wie sicher sie ist, welche lokalen Modelle laufen und wie man produktiv updatet.
+> Pflichtlektüre für jede neue Sitzung / jeden neuen Agenten.
+
 ## Technik
 
 - **Backend:** Python + FastAPI (`app/`)
