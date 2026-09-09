@@ -398,3 +398,30 @@ CREATE TABLE buchung_bewegung (
 CREATE INDEX idx_bewegung_konto_datum ON bewegung (konto_id, datum);
 CREATE INDEX idx_bewegung_transfer ON bewegung (transfer_id);
 CREATE INDEX idx_buchung_bewegung_bewegung ON buchung_bewegung (bewegung_id);
+
+-- P13: Tagesendstaende und Kassazaehlungen.
+CREATE TABLE kontostand_anker (
+    id          INTEGER PRIMARY KEY,
+    konto_id    INTEGER NOT NULL REFERENCES bankkonto(id),
+    stichtag    TEXT NOT NULL,
+    saldo_cent  INTEGER NOT NULL,
+    quelle      TEXT NOT NULL CHECK (quelle IN ('auszug','manuell','import')),
+    beleg_id    INTEGER REFERENCES beleg(id),
+    notiz       TEXT,
+    erstellt_am TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (konto_id, stichtag)
+);
+CREATE TABLE kassazaehlung (
+    id             INTEGER PRIMARY KEY,
+    konto_id       INTEGER NOT NULL REFERENCES bankkonto(id),
+    datum          TEXT NOT NULL,
+    gerechnet_cent INTEGER NOT NULL,
+    gezaehlt_cent  INTEGER NOT NULL,
+    differenz_cent INTEGER NOT NULL,
+    status         TEXT NOT NULL DEFAULT 'offen' CHECK (status IN ('offen','geklaert')),
+    notiz          TEXT,
+    buchung_id     INTEGER REFERENCES buchung(id),
+    erstellt_am    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX idx_kontostand_anker_konto_stichtag ON kontostand_anker (konto_id, stichtag);
+CREATE INDEX idx_kassazaehlung_konto_datum ON kassazaehlung (konto_id, datum);

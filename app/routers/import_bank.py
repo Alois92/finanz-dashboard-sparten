@@ -241,6 +241,14 @@ def import_csv(
         neu += cur.rowcount
         import_bewegung(con, cur.lastrowid, bereich)
     con.execute("UPDATE import_batch SET anzahl_neu = ?, anzahl_dubletten = ? WHERE id = ?", (neu, dubletten, batch_id))
+    if spalten["saldo"] is not None:
+        letzter = max(posten, key=lambda posten: (posten["datum"], posten["csv_zeile"]))
+        con.execute(
+            "INSERT OR IGNORE INTO kontostand_anker(konto_id,stichtag,saldo_cent,quelle,notiz) "
+            "VALUES(?,?,?,'import',?)",
+            (bankkonto_id, letzter["datum"], letzter["saldo_cent"],
+             f"CSV-Import {datei.filename}"),
+        )
     con.commit()
     erkannt = {**erkannt_basis, "zeilen_gesamt": len(zeilen) - 1, "zeilen_ungueltig": ungueltig}
     return {"batch_id": batch_id, "neu": neu, "dubletten": dubletten, "gesamt": len(posten), "saldo_ok": saldo_ok, "saldo_hinweis": saldo_hinweis, "erkannt": erkannt}
