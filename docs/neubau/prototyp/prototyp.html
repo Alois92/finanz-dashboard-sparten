@@ -1,0 +1,1854 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hohenegg Finanzstudio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* =====================================================================
+   Hohenegg Finanzstudio — Klickprototyp (Demo-Zahlen, echte Struktur)
+   Dunkel zuerst. Farbe ist für Daten reserviert: Sparten-Identität und
+   Einnahmen/Ausgaben. Bedienelemente sind Tinte auf Anthrazit.
+   ===================================================================== */
+:root {
+  color-scheme: dark;
+  --bg: #171A21; --panel: #1F232C; --panel-2: #272C37; --panel-3: #2E3440;
+  --line: #313847; --line-strong: #414A5B; --grid: #2A303B;
+  --ink: #EEF0F4; --ink-2: #B7BFCB; --muted: #99A3B2;
+  --ein: #1AA890; --aus: #E85F5F;
+  --ein-soft: rgba(26,168,144,.16); --aus-soft: rgba(232,95,95,.16);
+  --s-hm: #8E7CF2; --s-fk: #178DA9; --s-hof: #C98500; --s-zina: #7C8797; --s-al: #3987E5; --s-th: #D55181;
+  --good: #22B35B; --warn: #FAB219; --crit: #E14B4B; --info: #5FA8F5;
+  --btn: #EEF0F4; --btn-ink: #171A21;
+  --shadow: 0 1px 0 rgba(0,0,0,.25), 0 10px 30px rgba(0,0,0,.35);
+  --font-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --r-sm: 6px; --r: 10px; --r-lg: 16px;
+  --side-w: 244px;
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #F3F4F6; --panel: #FFFFFF; --panel-2: #EEF0F3; --panel-3: #E4E7EC;
+  --line: #DDE1E7; --line-strong: #C6CCD6; --grid: #E7EAEF;
+  --ink: #14181F; --ink-2: #3F4753; --muted: #5B6472;
+  --ein: #0B7A61; --aus: #C43A4E;
+  --ein-soft: rgba(15,143,114,.12); --aus-soft: rgba(214,69,90,.12);
+  --s-hm: #6D5FD6; --s-fk: #0E8DA8; --s-hof: #B37400; --s-zina: #6B7482; --s-al: #2A78D6; --s-th: #C93F72;
+  --good: #158A43; --warn: #B7790A; --crit: #C43333; --info: #2A78D6;
+  --btn: #14181F; --btn-ink: #FFFFFF;
+  --shadow: 0 1px 0 rgba(20,24,31,.04), 0 8px 24px rgba(20,24,31,.08);
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 14px/1.5 var(--font-body); font-variant-numeric: tabular-nums;
+}
+a { color: inherit; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; border-radius: 4px; }
+h1, h2, h3 { margin: 0; font-family: var(--font-display); text-wrap: balance; }
+h1 { font-size: 26px; font-weight: 600; letter-spacing: -.01em; }
+h2 { font-size: 16px; font-weight: 600; }
+h3 { font-size: 14px; font-weight: 600; }
+p { margin: 0; }
+.muted { color: var(--muted); }
+.ink2 { color: var(--ink-2); }
+.num { font-variant-numeric: tabular-nums; }
+.ein { color: var(--ein); } .aus { color: var(--aus); }
+.right { text-align: right; }
+
+/* ---------- Grundgerüst ---------- */
+.app { display: grid; grid-template-columns: var(--side-w) 1fr; min-height: 100vh; }
+.side {
+  position: sticky; top: 0; height: 100vh; overflow: auto;
+  background: var(--panel); border-right: 1px solid var(--line);
+  display: flex; flex-direction: column; padding: 18px 14px;
+}
+.brand { display: flex; align-items: center; gap: 10px; padding: 4px 8px 18px; }
+.brand-mark {
+  width: 34px; height: 34px; border-radius: 9px; background: var(--ink); color: var(--bg);
+  display: grid; place-items: center; font-family: var(--font-display); font-weight: 700; font-size: 17px;
+}
+.brand-name { font-family: var(--font-display); font-weight: 600; font-size: 16px; line-height: 1.1; }
+.brand-sub { font-size: 11.5px; color: var(--muted); }
+.nav-group { margin-bottom: 14px; }
+.nav-label { font-size: 11.5px; color: var(--muted); padding: 8px 10px 4px; }
+.nav-item {
+  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+  padding: 8px 10px; border: 0; background: transparent; border-radius: var(--r-sm);
+  color: var(--ink-2);
+}
+.nav-item:hover { background: var(--panel-2); color: var(--ink); }
+.nav-item.active { background: var(--panel-3); color: var(--ink); font-weight: 500; }
+.nav-item .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--dot); flex: 0 0 auto; }
+.nav-item .cnt { margin-left: auto; font-size: 11.5px; color: var(--muted); }
+.nav-item.sub { padding-left: 24px; font-size: 13.5px; }
+.side-foot { margin-top: auto; display: grid; gap: 6px; padding-top: 12px; border-top: 1px solid var(--line); }
+.side-foot .nav-item { font-size: 13px; }
+.nav-label.tog { display: flex; justify-content: space-between; align-items: center; width: 100%; border: 0; background: transparent; text-align: left; cursor: pointer; }
+.nav-label.tog:hover { color: var(--ink-2); }
+.foot-row { display: flex; gap: 14px; padding: 2px 10px 0; }
+
+main { min-width: 0; padding: 22px 30px 60px; }
+.wrap { max-width: 1380px; margin: 0 auto; }
+.top {
+  display: flex; align-items: flex-end; justify-content: space-between; gap: 16px;
+  flex-wrap: wrap; margin-bottom: 20px;
+}
+.top-title .scope { color: var(--muted); margin-top: 2px; }
+.top-tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+/* Segmentierte Jahreswahl */
+.scope-sel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 8px 10px; color: var(--ink); max-width: 240px; font-weight: 500; }
+.seg { display: inline-flex; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 3px; }
+.seg button { border: 0; background: transparent; padding: 6px 12px; border-radius: 7px; color: var(--ink-2); }
+.seg button.active { background: var(--panel-3); color: var(--ink); font-weight: 500; }
+.seg button .est { font-size: 11px; color: var(--muted); margin-left: 4px; }
+.seg.small button { padding: 4px 10px; font-size: 12.5px; }
+.btn {
+  display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line);
+  background: var(--panel); color: var(--ink); border-radius: var(--r); padding: 7px 12px;
+}
+.btn:hover { background: var(--panel-2); }
+.btn.primary { background: var(--btn); color: var(--btn-ink); border-color: var(--btn); font-weight: 500; }
+.btn.primary:hover { opacity: .92; }
+.btn.small { padding: 4px 9px; font-size: 12.5px; border-radius: var(--r-sm); }
+.btn.ghost { border-color: transparent; background: transparent; color: var(--ink-2); }
+.btn.ghost:hover { background: var(--panel-2); color: var(--ink); }
+.filters { display: none; gap: 10px; flex-wrap: wrap; margin: -8px 0 18px; padding: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); }
+.filters.open { display: flex; }
+.field { display: grid; gap: 4px; font-size: 12.5px; color: var(--muted); }
+.field select, .field input {
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--r-sm);
+  padding: 7px 9px; color: var(--ink); min-width: 150px;
+}
+
+/* ---------- Seiten ---------- */
+.page { display: grid; gap: 18px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 18px 20px; }
+.card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+.card-head .hint { color: var(--muted); font-size: 12.5px; }
+.grid { display: grid; gap: 18px; }
+.g3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.g2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.g2-1 { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); }
+.g1-2 { grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr); }
+
+/* Kennzahlen */
+.kpi { display: grid; gap: 4px; align-content: start; padding: 18px 20px 14px; }
+.kpi .lbl { color: var(--muted); font-size: 12.5px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.kpi .val { font-family: var(--font-display); font-size: 34px; font-weight: 600; letter-spacing: -.02em; line-height: 1.05; margin-top: 4px; white-space: nowrap; }
+.kpi .delta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 8px; font-size: 12.5px; color: var(--ink-2); }
+.kpi .delta b { font-weight: 600; color: var(--ink); }
+.kpi svg { width: 100%; height: 44px; display: block; margin-top: 10px; }
+.pill { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 500; }
+.pill.up { background: var(--ein-soft); color: var(--ein); }
+.pill.down { background: var(--aus-soft); color: var(--aus); }
+.pill.flat { background: var(--panel-2); color: var(--ink-2); }
+.pill.est { background: var(--panel-2); color: var(--muted); font-weight: 400; }
+
+/* Hinweise */
+.hints { display: grid; gap: 8px; }
+.hint-row {
+  display: grid; grid-template-columns: 18px 1fr auto auto; gap: 12px; align-items: center;
+  padding: 10px 12px; background: var(--panel-2); border-radius: var(--r); border-left: 3px solid var(--hc, var(--info));
+}
+.hint-row .ic { width: 16px; height: 16px; color: var(--hc, var(--info)); }
+.hint-row .go { font-size: 12.5px; color: var(--ink-2); background: transparent; border: 0; text-decoration: underline; text-underline-offset: 3px; }
+.hint-row .go:hover { color: var(--ink); }
+.hint-row .x { border: 0; background: transparent; color: var(--muted); font-size: 17px; line-height: 1; padding: 0 2px; position: relative; }
+.hint-row .x:hover { color: var(--ink); }
+/* Mindest-Klickfläche 32×32px als unsichtbare Überlagerung, ohne die sichtbare Größe zu ändern. */
+.hint-row .x::before { content: ""; position: absolute; top: 50%; left: 50%; width: 32px; height: 32px; transform: translate(-50%, -50%); }
+.hints-foot { padding: 4px 2px 0; }
+
+/* Kontostände */
+.konten { display: grid; gap: 10px; }
+.konto { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; padding: 10px 12px; background: var(--panel-2); border-radius: var(--r); }
+.konto .kn { font-weight: 500; }
+.konto .ks { color: var(--muted); font-size: 12px; }
+.konto .kv { font-family: var(--font-display); font-size: 18px; font-weight: 600; text-align: right; }
+.konto .kd { color: var(--muted); font-size: 12px; text-align: right; }
+.konto .tag { font-size: 11px; color: var(--muted); border: 1px solid var(--line-strong); border-radius: 4px; padding: 0 5px; margin-left: 6px; vertical-align: middle; }
+.konto .kd .pill { margin-left: 6px; }
+.kassa { display: grid; gap: 5px; }
+.kassa .big { font-family: var(--font-display); font-size: 30px; font-weight: 600; letter-spacing: -.02em; margin-bottom: 4px; }
+.kassa .ln { display: flex; justify-content: space-between; gap: 12px; color: var(--ink-2); font-size: 13px; }
+.kassa .ln b { color: var(--ink); font-weight: 500; }
+.ausl { display: grid; grid-template-columns: 1fr auto; gap: 4px 14px; padding: 10px 12px; background: var(--panel-2); border-radius: var(--r); align-items: center; }
+.ausl .kn { font-weight: 500; } .ausl .ks { color: var(--muted); font-size: 12px; }
+.ausl .ar { display: grid; gap: 6px; justify-items: end; }
+.ausl .kv { font-family: var(--font-display); font-size: 18px; font-weight: 600; }
+.ausl .ab { display: flex; gap: 6px; }
+.settle { display: flex; gap: 12px; align-items: end; flex-wrap: wrap; width: 100%; }
+.settle .field select, .settle .field input { min-width: 150px; }
+.lnk { border: 0; background: transparent; color: var(--ink-2); text-decoration: underline; text-underline-offset: 3px; font-size: 12.5px; padding: 0; position: relative; }
+.lnk:hover { color: var(--ink); }
+/* Mindest-Klickfläche 32×32px als unsichtbare Überlagerung, ohne die sichtbare Größe zu ändern. */
+.lnk::before { content: ""; position: absolute; top: 50%; left: 50%; width: 32px; height: 32px; transform: translate(-50%, -50%); }
+
+/* Verlauf-Diagramm */
+.chart { position: relative; }
+.chart svg { width: 100%; height: 260px; display: block; overflow: visible; }
+.chart .tip {
+  position: absolute; pointer-events: none; background: var(--panel-3); border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm); padding: 8px 10px; font-size: 12.5px; box-shadow: var(--shadow); display: none; z-index: 5; min-width: 150px;
+}
+.chart .tip b { display: block; margin-bottom: 4px; }
+.chart .tip .row { display: flex; justify-content: space-between; gap: 14px; }
+.legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12.5px; color: var(--ink-2); margin-top: 8px; }
+.legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; background: var(--lc); vertical-align: -1px; }
+.legend .line::before { height: 3px; border-radius: 2px; vertical-align: 3px; }
+
+/* Balkenlisten */
+.hbars { display: grid; gap: 8px; }
+.hbar { display: grid; grid-template-columns: minmax(120px, 1.1fr) minmax(0, 2fr) 92px 52px; gap: 12px; align-items: center; padding: 4px 0; border-radius: var(--r-sm); cursor: pointer; }
+.hbar:hover { background: var(--panel-2); }
+.hbar .name { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.hbar .name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hbar .name .tag { font-size: 11px; color: var(--muted); }
+.hbar .track { height: 10px; background: var(--panel-2); border-radius: 4px; overflow: hidden; }
+.hbar .fill { height: 100%; border-radius: 4px; background: var(--fc, var(--aus)); }
+.hbar .v { text-align: right; font-weight: 500; }
+.hbar .p { text-align: right; color: var(--muted); font-size: 12.5px; }
+.sdot { width: 8px; height: 8px; border-radius: 50%; background: var(--dot); flex: 0 0 auto; }
+
+/* Sparten-Kacheln */
+.tiles { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; }
+.tile {
+  text-align: left; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-lg);
+  padding: 14px 16px; display: grid; gap: 6px; position: relative; overflow: hidden;
+}
+.tile::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--dot); }
+.tile:hover { border-color: var(--line-strong); background: var(--panel-2); }
+.tile .tn { font-weight: 500; display: flex; align-items: center; gap: 8px; }
+.tile .tn small { color: var(--muted); font-weight: 400; }
+.tile .tv { font-family: var(--font-display); font-size: 24px; font-weight: 600; letter-spacing: -.02em; }
+.tile .tea { display: flex; gap: 12px; font-size: 12.5px; color: var(--ink-2); }
+.tile .bar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; gap: 2px; background: transparent; }
+.tile .bar i { display: block; height: 100%; }
+.tile.zina { grid-column: 1 / -1; grid-template-columns: auto 1fr auto; align-items: center; opacity: .85; }
+.tile.zina .tv { font-size: 20px; }
+
+/* Matrix */
+.tbl { width: 100%; border-collapse: collapse; }
+.tbl th, .tbl td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+.tbl th { color: var(--muted); font-weight: 500; font-size: 12px; }
+.tbl th:first-child, .tbl td:first-child { text-align: left; }
+.tbl td.cell { cursor: pointer; }
+.tbl td.cell:hover { background: var(--panel-2); }
+.tbl tr.sum td { font-weight: 600; border-top: 2px solid var(--line-strong); }
+.tbl tr.group td { color: var(--muted); font-size: 12px; padding-top: 14px; border-bottom: 0; }
+.tbl .est { color: var(--muted); font-size: 11px; margin-left: 3px; }
+.tbl .share { display: inline-block; height: 6px; background: var(--aus-soft); border-radius: 3px; vertical-align: middle; margin-right: 6px; }
+.tbl .share i { display: block; height: 100%; background: var(--aus); border-radius: 3px; }
+.tbl .delta { font-size: 12px; }
+.tbl .cat { display: inline-flex; align-items: center; gap: 8px; }
+.tbl tr.inactive td { color: var(--muted); }
+.tscroll { overflow-x: auto; }
+.tbl.sticky th:first-child, .tbl.sticky td:first-child { position: sticky; left: 0; background: var(--panel); z-index: 1; }
+.tbl.sticky tr.group td:first-child { background: var(--panel); }
+.yearpick { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel-2); font-size: 12.5px; color: var(--ink-2); }
+.chip.on { background: var(--panel-3); color: var(--ink); border-color: var(--line-strong); }
+.chip.kw { background: transparent; }
+.chip .x { border: 0; background: transparent; color: var(--muted); padding: 0; line-height: 1; }
+.chip .x:hover { color: var(--ink); }
+
+/* Eigene Kennzahlen */
+.kz { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.kzc { background: var(--panel-2); border-radius: var(--r); padding: 14px 16px; display: grid; gap: 4px; }
+.kzc .n { font-weight: 500; }
+.kzc .f { color: var(--muted); font-size: 12px; }
+.kzc .v { font-family: var(--font-display); font-size: 26px; font-weight: 600; letter-spacing: -.02em; margin-top: 4px; }
+.kzc.add { border: 1px dashed var(--line-strong); background: transparent; place-content: center; text-align: center; color: var(--ink-2); cursor: pointer; }
+.kzc.add:hover { background: var(--panel-2); color: var(--ink); }
+
+/* Erfassen */
+.quick { display: grid; gap: 10px; }
+.quick textarea {
+  width: 100%; min-height: 78px; resize: vertical; background: var(--panel-2); border: 1px solid var(--line);
+  border-radius: var(--r); padding: 12px 14px; font-size: 16px; color: var(--ink);
+}
+.quick textarea::placeholder { color: var(--muted); }
+.sugg { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-height: 34px; }
+.sugg .sg { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; background: var(--panel-3); border: 1px solid var(--line-strong); }
+.sugg .sg b { font-weight: 600; }
+.sugg .why { font-size: 11.5px; color: var(--muted); border: 1px solid var(--line-strong); border-radius: 4px; padding: 0 5px; }
+.sugg .amt { font-family: var(--font-display); font-weight: 600; font-size: 18px; }
+.form { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.form .field { color: var(--muted); }
+.form .field select, .form .field input { min-width: 0; width: 100%; }
+.form .span2 { grid-column: span 2; }
+.form .span4 { grid-column: 1 / -1; }
+.katline { display: flex; gap: 8px; align-items: center; }
+.katline select { flex: 1; }
+.newcat { display: none; gap: 8px; align-items: end; padding: 12px; background: var(--panel-2); border-radius: var(--r); grid-column: 1 / -1; }
+.newcat.open { display: flex; flex-wrap: wrap; }
+.recent { display: grid; gap: 0; }
+.recent .r { display: grid; grid-template-columns: 62px 1fr auto; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); align-items: center; }
+.recent .r:last-child { border-bottom: 0; }
+.recent .d { color: var(--muted); font-size: 12.5px; }
+.recent .t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recent .t small { color: var(--muted); margin-left: 6px; }
+.photo { display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: center; }
+.photo .cam { width: 56px; height: 56px; border-radius: 14px; background: var(--panel-3); display: grid; place-items: center; }
+.photo .cam svg { width: 26px; height: 26px; }
+.toast { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); background: var(--btn); color: var(--btn-ink); padding: 10px 16px; border-radius: 999px; font-weight: 500; box-shadow: var(--shadow); opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 60; }
+.toast.show { opacity: 1; }
+
+/* Handy-Mock (statisch, zeigt das Konzept am PC) */
+.phone-wrap { display: grid; grid-template-columns: 300px 1fr; gap: 22px; align-items: start; }
+.phone { width: 300px; border: 8px solid var(--panel-3); border-radius: 34px; background: var(--bg); overflow: hidden; box-shadow: var(--shadow); }
+.phone .pbar { display: flex; justify-content: space-between; padding: 8px 18px 0; font-size: 11px; color: var(--muted); }
+.phone .pin { padding: 12px 14px 8px; display: grid; gap: 10px; }
+.phone .ptitle { font-family: var(--font-display); font-weight: 600; font-size: 18px; }
+.phone .pfield { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px; font-size: 15px; min-height: 64px; }
+.phone .pfield .cur { display: inline-block; width: 1px; height: 16px; background: var(--ink); vertical-align: -3px; margin-left: 1px; animation: blink 1s steps(2) infinite; }
+@keyframes blink { to { visibility: hidden; } }
+.phone .prow { display: flex; gap: 8px; align-items: center; }
+.phone .prow .sg { flex: 1; }
+.phone .pcam { width: 46px; height: 46px; border-radius: 12px; background: var(--panel-3); display: grid; place-items: center; flex: 0 0 auto; }
+.phone .pcam svg { width: 22px; height: 22px; }
+.phone .psave { background: var(--btn); color: var(--btn-ink); border-radius: 12px; padding: 12px; text-align: center; font-weight: 600; }
+.phone .plist { display: grid; gap: 0; font-size: 12.5px; }
+.phone .plist .r { display: grid; grid-template-columns: 1fr auto; padding: 7px 0; border-bottom: 1px solid var(--line); }
+.phone .plist .r small { color: var(--muted); display: block; }
+.phone .pnav { display: grid; grid-template-columns: repeat(5, 1fr); border-top: 1px solid var(--line); background: var(--panel); padding: 8px 6px 14px; font-size: 10.5px; text-align: center; color: var(--muted); }
+.phone .pnav .plus { margin: -22px auto 0; width: 44px; height: 44px; border-radius: 50%; background: var(--btn); color: var(--btn-ink); display: grid; place-items: center; font-size: 24px; font-weight: 600; }
+.phone .pnav .on { color: var(--ink); }
+.notes { display: grid; gap: 10px; }
+.notes li { margin: 0 0 4px; }
+
+/* Kategorien */
+.kattabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.kattabs button { border: 1px solid var(--line); background: var(--panel-2); color: var(--ink-2); border-radius: 999px; padding: 5px 12px; display: inline-flex; gap: 8px; align-items: center; }
+.kattabs button.active { background: var(--panel-3); color: var(--ink); border-color: var(--line-strong); }
+.kwedit { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; min-width: 340px; white-space: normal; }
+.kwedit input { background: transparent; border: 1px dashed var(--line-strong); border-radius: 999px; padding: 2px 10px; font-size: 12.5px; width: 120px; color: var(--ink); }
+.kwedit input::placeholder { color: var(--muted); }
+.act { display: inline-flex; gap: 6px; }
+.act button { border: 0; background: transparent; color: var(--ink-2); text-decoration: underline; text-underline-offset: 3px; font-size: 12.5px; padding: 0 2px; }
+.act button:hover { color: var(--ink); }
+.name-edit { background: var(--panel-2); border: 1px solid var(--line-strong); border-radius: var(--r-sm); padding: 3px 8px; color: var(--ink); width: 180px; }
+
+/* Buchungen */
+.bfilters { display: flex; gap: 10px; flex-wrap: wrap; align-items: end; }
+.bfilters .field input { min-width: 220px; }
+.btable td.t { white-space: normal; max-width: 420px; }
+.btable .zk { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; border-radius: 999px; background: var(--panel-2); font-size: 12.5px; }
+.btable .belegic { color: var(--muted); }
+.btable .belegic.has { color: var(--ink-2); }
+.btable tr:hover td { background: var(--panel-2); }
+.exbar { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; padding: 10px 12px; background: var(--panel-2); border-radius: var(--r); position: sticky; top: 0; z-index: 2; }
+.exbar .cnt b { font-family: var(--font-display); font-size: 18px; }
+.exbar .sp { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; }
+.btable tr.ex-off td { opacity: .45; }
+.btable tr.ex-off td.t { text-decoration: line-through; }
+.btable input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--ink); cursor: pointer; }
+
+/* Drilldown */
+.dd-back { position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 40; display: none; }
+.dd-back.open { display: block; }
+.dd { position: fixed; top: 0; right: 0; bottom: 0; width: min(720px, 94vw); background: var(--panel); border-left: 1px solid var(--line); z-index: 41; transform: translateX(100%); transition: transform .22s; overflow: auto; padding: 20px 22px; box-shadow: var(--shadow); }
+.dd.open { transform: none; }
+.dd-head { display: flex; justify-content: space-between; align-items: start; gap: 12px; margin-bottom: 8px; }
+.dd-sum { display: flex; gap: 18px; color: var(--ink-2); margin-bottom: 12px; font-size: 13px; }
+.dd-sum b { color: var(--ink); }
+.close { border: 1px solid var(--line); background: var(--panel-2); border-radius: 50%; width: 32px; height: 32px; display: grid; place-items: center; }
+
+/* Bankimport */
+.acct { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.acct .a { background: var(--panel-2); border-radius: var(--r); padding: 14px 16px; display: grid; gap: 4px; }
+.acct .a .an { font-weight: 500; display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+.acct .a .kind { font-size: 11px; color: var(--muted); border: 1px solid var(--line-strong); border-radius: 4px; padding: 0 5px; }
+.acct .a .ai { color: var(--muted); font-size: 12px; }
+.acct .a .av { font-family: var(--font-display); font-size: 22px; font-weight: 600; margin-top: 4px; }
+.st { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 500; }
+.st::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.st.auto { background: var(--ein-soft); color: var(--ein); }
+.st.vor { background: rgba(250,178,25,.14); color: var(--warn); }
+.st.offen { background: var(--panel-3); color: var(--ink-2); }
+.st.umb { background: rgba(95,168,245,.14); color: var(--info); }
+.drop { border: 1px dashed var(--line-strong); border-radius: var(--r); padding: 26px; text-align: center; color: var(--ink-2); background: var(--panel-2); cursor: pointer; }
+
+/* Belege */
+.belege { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; }
+.beleg { display: grid; gap: 6px; cursor: pointer; }
+.beleg .thumb { aspect-ratio: 3 / 4; border-radius: var(--r-sm); background: #F7F5EF; border: 1px solid var(--line); padding: 12px 10px; display: grid; align-content: start; gap: 5px; position: relative; overflow: hidden; }
+.beleg .thumb i { display: block; height: 4px; background: #C9C4B6; border-radius: 2px; }
+.beleg .thumb i.w { width: 55%; } .beleg .thumb i.s { width: 35%; } .beleg .thumb i.h { background: #8E877A; height: 6px; width: 70%; margin-bottom: 4px; }
+.beleg .thumb .tot { position: absolute; left: 10px; right: 10px; bottom: 10px; display: flex; justify-content: space-between; font-family: var(--font-display); font-weight: 700; color: #3B3830; font-size: 12px; }
+.beleg .bn { font-weight: 500; font-size: 13px; }
+.beleg .bm { font-size: 12px; color: var(--muted); display: flex; justify-content: space-between; }
+
+/* Mobil */
+.bnav { display: none; }
+.sheet-back { display: none; }
+@media (max-width: 980px) {
+  .g3, .g2, .g2-1, .g1-2 { grid-template-columns: 1fr; }
+  .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .kz { grid-template-columns: 1fr 1fr; }
+  .acct { grid-template-columns: 1fr; }
+  .form { grid-template-columns: 1fr 1fr; }
+  .phone-wrap { grid-template-columns: 1fr; }
+}
+@media (max-width: 760px) {
+  .app { grid-template-columns: 1fr; }
+  .side { display: none; }
+  main { padding: 16px 14px 90px; }
+  h1 { font-size: 22px; }
+  .kpi .val { font-size: 28px; }
+  .tiles { grid-template-columns: 1fr; }
+  .kz, .form { grid-template-columns: 1fr; }
+  .form .span2 { grid-column: auto; }
+  .hbar { grid-template-columns: minmax(90px, 1fr) minmax(0, 1.4fr) 84px 44px; gap: 8px; }
+  .bnav { display: grid; grid-template-columns: repeat(5, 1fr); position: fixed; left: 0; right: 0; bottom: 0; background: var(--panel); border-top: 1px solid var(--line); padding: 6px 4px 10px; z-index: 30; }
+  .bnav button { border: 0; background: transparent; color: var(--muted); font-size: 11px; display: grid; justify-items: center; gap: 2px; padding: 4px 0; }
+  .bnav button.active { color: var(--ink); }
+  .bnav button svg { width: 20px; height: 20px; }
+  .bnav .plus { width: 46px; height: 46px; border-radius: 50%; background: var(--btn); color: var(--btn-ink); display: grid; place-items: center; font-size: 26px; margin-top: -22px; box-shadow: var(--shadow); }
+  .sheet-back { position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 31; display: none; }
+  .sheet-back.open { display: block; }
+  .sheet { position: fixed; left: 0; right: 0; bottom: 0; background: var(--panel); border-radius: 18px 18px 0 0; padding: 14px 14px 24px; z-index: 32; display: grid; gap: 4px; transform: translateY(100%); transition: transform .2s; }
+  .sheet.open { transform: none; }
+  .phone-wrap .phone { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dd, .sheet, .toast { transition: none; }
+  .phone .pfield .cur { animation: none; }
+}
+</style>
+
+<div class="app">
+  <aside class="side">
+    <div class="brand">
+      <div class="brand-mark">H</div>
+      <div><div class="brand-name">Hohenegg</div><div class="brand-sub">Finanzstudio</div></div>
+    </div>
+    <div class="nav-group">
+      <button class="nav-item" data-go="uebersicht">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="1.5" y="1.5" width="5.5" height="5.5" rx="1"/><rect x="9" y="1.5" width="5.5" height="5.5" rx="1"/><rect x="1.5" y="9" width="5.5" height="5.5" rx="1"/><rect x="9" y="9" width="5.5" height="5.5" rx="1"/></svg>
+        Übersicht
+      </button>
+      <button class="nav-item" data-go="buchungen">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 4h12M2 8h12M2 12h8"/></svg>
+        Buchungen
+      </button>
+      <button class="nav-item" data-go="erfassen">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 2v12M2 8h12"/></svg>
+        Erfassen
+      </button>
+    </div>
+    <div class="nav-group">
+      <div class="nav-label">Sparten</div>
+      <div id="nav-sparten"></div>
+      <div class="nav-label">Zusammen</div>
+      <div id="nav-gruppen"></div>
+      <button class="nav-item sub" id="nav-gruppe-neu" style="color:var(--muted)">+ Gruppe anlegen</button>
+    </div>
+    <div class="nav-group">
+      <button class="nav-label tog" id="tools-toggle" aria-expanded="true">Werkzeuge <span class="chev">▾</span></button>
+      <div id="nav-tools">
+        <button class="nav-item" data-go="kategorien">Kategorien</button>
+        <button class="nav-item" data-go="belege">Belege</button>
+        <button class="nav-item" data-go="bankimport">Bankimport <span class="cnt">14 offen</span></button>
+        <button class="nav-item" data-go="excel">Excel-Import</button>
+        <button class="nav-item" data-go="export">Export</button>
+      </div>
+    </div>
+    <div class="side-foot">
+      <button class="nav-item" id="theme-toggle">Hell / Dunkel</button>
+      <div class="foot-row"><button class="lnk" type="button">Passwort ändern</button><button class="lnk" type="button">Abmelden</button></div>
+    </div>
+  </aside>
+
+  <main>
+    <div class="wrap">
+      <div class="top">
+        <div class="top-title">
+          <h1 id="page-title">Übersicht</h1>
+          <div class="scope" id="page-scope"></div>
+        </div>
+        <div class="top-tools" id="top-tools">
+          <select id="scopesel" class="scope-sel" aria-label="Sparte wählen"></select>
+          <div class="seg" id="yearseg"></div>
+          <button class="btn" id="filter-toggle" aria-expanded="false">Mehr Filter</button>
+        </div>
+      </div>
+      <div class="filters" id="filters">
+        <label class="field">Richtung
+          <select id="f-richtung"><option value="">Einnahmen und Ausgaben</option><option value="einnahme">Nur Einnahmen</option><option value="ausgabe">Nur Ausgaben</option></select>
+        </label>
+        <label class="field">Zahlungsart
+          <select id="f-zahlung"><option value="">Alle</option><option value="bank">Bank</option><option value="bar">Bar</option><option value="karte">Karte</option></select>
+        </label>
+        <label class="field">Kategorie
+          <select id="f-kat"><option value="">Alle</option></select>
+        </label>
+        <button class="btn ghost" id="filter-reset" style="align-self:end">Zurücksetzen</button>
+      </div>
+
+      <!-- ================= ÜBERSICHT ================= -->
+      <section class="page" id="page-uebersicht">
+        <div class="grid g3" id="kpis"></div>
+        <div class="muted" id="filter-note" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12.5px" hidden></div>
+        <div>
+          <div class="card-head" style="margin-bottom:10px"><h2 id="tiles-title">Sparten</h2><span class="hint">Saldo im gewählten Jahr · Klick öffnet die Sparte</span></div>
+          <div class="tiles" id="tiles"></div>
+        </div>
+        <div class="grid g2-1">
+          <div class="card">
+            <div class="card-head"><h2>Woran du dich kümmern solltest</h2><span class="hint">aus deinen Zahlen gerechnet · × blendet aus, bis sich die Zahl ändert</span></div>
+            <div class="hints" id="hints"></div>
+          </div>
+          <div class="grid">
+            <div class="card">
+              <div class="card-head"><h2>Konten und Kassen <span class="pill est">Beispiel</span></h2><span class="hint">Bank: Saldo laut Auszug plus Umsätze seither · Kassa: gerechnet</span></div>
+              <div class="konten" id="konten"></div>
+            </div>
+            <div class="card">
+              <div class="card-head"><h2>Offene Auslagen</h2><span class="hint">privat bezahlt für Hof oder Ferienhaus</span></div>
+              <div class="konten" id="auslagen"></div>
+            </div>
+          </div>
+        </div>
+        <div class="grid g2">
+          <div class="card">
+            <div class="card-head"><h2>Verlauf über das Jahr</h2><span class="hint" id="verlauf-hint"></span></div>
+            <div class="chart" id="verlauf"></div>
+            <div class="legend"><span style="--lc:var(--ein)">Einnahmen</span><span style="--lc:var(--aus)">Ausgaben</span><span class="line" style="--lc:var(--ink)">Saldo je Monat</span></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><h2>Größte Posten nach Kategorie</h2><div class="seg small" id="topseg"><button data-t="ausgabe" class="active" aria-pressed="true">Ausgaben</button><button data-t="einnahme" aria-pressed="false">Einnahmen</button></div></div>
+            <div class="hbars" id="top"></div>
+            <p class="muted" id="top-hint" style="margin-top:10px;font-size:12.5px"></p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= SPARTE ================= -->
+      <section class="page" id="page-sparte" hidden>
+        <div class="grid g3" id="s-kpis"></div>
+        <div class="card">
+          <div class="card-head"><h2>Eigene Kennzahlen</h2><span class="hint">frei definierbar: Kategorien addieren und abziehen</span></div>
+          <div class="kz" id="s-kz"></div>
+        </div>
+        <div class="grid g1-2">
+          <div class="card">
+            <div class="card-head"><h2>Barkassa</h2><span class="hint">gerechnet, nicht gezählt</span></div>
+            <div id="s-kassa"></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><h2>Auslagen</h2><span class="hint">privat bezahlt, Geld noch nicht zurück · Ausgleich bucht eine Umbuchung, die Kosten bleiben in der Sparte</span></div>
+            <div class="konten" id="s-auslagen"></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head">
+            <h2>Kategorien im Jahresvergleich</h2>
+            <div class="yearpick" id="s-years"></div>
+          </div>
+          <div class="tscroll"><table class="tbl sticky" id="s-matrix"></table></div>
+        </div>
+        <div class="grid g2">
+          <div class="card">
+            <div class="card-head"><h2>Wohin das Geld geht</h2><span class="hint" id="s-aus-hint"></span></div>
+            <div class="hbars" id="s-top-aus"></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><h2>Verlauf über das Jahr</h2><span class="hint" id="s-verlauf-hint"></span></div>
+            <div class="chart" id="s-verlauf"></div>
+            <div class="legend"><span style="--lc:var(--ein)">Einnahmen</span><span style="--lc:var(--aus)">Ausgaben</span><span class="line" style="--lc:var(--ink)">Saldo je Monat</span></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= ERFASSEN ================= -->
+      <section class="page" id="page-erfassen" hidden>
+        <div class="grid g2-1">
+          <div class="grid">
+            <div class="card">
+              <div class="card-head"><h2 id="b-title">Erfassen</h2><span class="hint" id="b-hint">Ein Satz reicht. Enter speichert, Pfeil ↑↓ wechselt die Kategorie</span></div>
+              <div class="quick">
+                <label for="q-text" class="muted" style="font-size:12.5px">Was hast du bezahlt oder bekommen?</label>
+                <textarea id="q-text" placeholder="z. B. Mittagessen Gasthof 14,80 oder Lagerhaus Kraftfutter 612"></textarea>
+                <div class="sugg" id="q-sugg"></div>
+              </div>
+              <div style="display:flex;gap:10px;align-items:center;margin-top:12px;flex-wrap:wrap">
+                <button type="button" class="btn primary" id="b-save2">Speichern</button>
+                <button type="button" class="btn small" id="b-details" aria-expanded="false">Details anpassen ▾</button>
+                <span class="muted" id="b-summary" style="font-size:12.5px" aria-live="polite"></span>
+              </div>
+              <form class="form" id="b-form" style="margin-top:14px" hidden>
+                <label class="field">Sparte<select id="b-sparte"></select></label>
+                <label class="field">Datum<input type="date" id="b-datum" value="2026-09-08"></label>
+                <label class="field">Richtung<select id="b-typ"><option value="ausgabe">Ausgabe</option><option value="einnahme">Einnahme</option></select></label>
+                <label class="field">Zahlungsart<select id="b-zahlung"><option value="bar">Bar</option><option value="bank">Bank</option><option value="karte">Karte</option></select></label>
+                <label class="field span2">Kategorie
+                  <div class="katline"><select id="b-kat"></select><button type="button" class="btn small" id="b-newcat">+ Neue</button></div>
+                </label>
+                <label class="field">Betrag in €<input id="b-betrag" inputmode="decimal" placeholder="0,00"></label>
+                <label class="field">Bezahlt von<select id="b-von"></select></label>
+                <div class="field span4"><span class="muted">Privat bezahlt für eine andere Sparte? Dann steht es unter „Offene Auslagen“ und kommt per Ausgleich zurück. Die Kosten bleiben bei der Sparte.</span></div>
+                <input type="hidden" id="b-text">
+                <div class="newcat" id="newcat">
+                  <label class="field">Name der neuen Kategorie<input id="nc-name" placeholder="z. B. Brennholz"></label>
+                  <label class="field">Richtung<select id="nc-richtung"><option value="ausgabe">Ausgabe</option><option value="einnahme">Einnahme</option><option value="beides">Beides</option></select></label>
+                  <button type="button" class="btn primary" id="nc-save">Kategorie anlegen</button>
+                  <button type="button" class="btn ghost" id="nc-cancel">Abbrechen</button>
+                </div>
+                <div class="span4" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+                  <button type="submit" class="btn primary" id="b-save">Buchung speichern</button>
+                  <button type="button" class="btn ghost" id="b-cancel" hidden>Abbrechen</button>
+                  <button type="button" class="btn" id="b-beleg">Beleg anhängen</button>
+                  <span class="muted" id="b-learn">Beim Speichern merkt sich die App Text und Kategorie.</span>
+                </div>
+              </form>
+            </div>
+          </div>
+          <div class="grid">
+            <div class="card">
+              <div class="card-head"><h2>Rechnung fotografieren <span class="pill est">Beispiel</span></h2></div>
+              <div class="photo">
+                <div class="cam"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></div>
+                <div><p>Foto wird lokal ausgewertet, ohne Cloud. Das dauert ein paar Minuten, die App darf zu sein.</p><p class="muted" style="margin-top:4px">2 Rechnungen warten auf deine Prüfung</p></div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-head"><h2>Zuletzt erfasst</h2></div>
+              <div class="recent" id="recent"></div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>So sieht Erfassen am Handy aus</h2><span class="hint">Öffne diesen Link am Handy, dann siehst du es echt</span></div>
+          <div class="phone-wrap">
+            <div class="phone">
+              <div class="pbar"><span>9:41</span><span>Tailscale · 100 %</span></div>
+              <div class="pin">
+                <div class="ptitle">Erfassen <span class="muted" style="font-size:13px;font-weight:400">· Hechenegg Hof</span></div>
+                <div class="pfield">Lagerhaus Kraftfutter 612<span class="cur"></span></div>
+                <div class="prow">
+                  <div class="sg" style="display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:999px;background:var(--panel-3);border:1px solid var(--line-strong);font-size:13px"><span class="sdot" style="--dot:var(--s-hof)"></span><b>Futtermittel</b><span class="why">gelernt</span></div>
+                  <div class="pcam"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></div>
+                </div>
+                <div class="psave">612,00 € als Ausgabe speichern</div>
+                <div class="plist">
+                  <div class="r"><div>Diesel Tankstelle Kirchbichl<small>Maschinen · 6. Sept.</small></div><div class="aus">−82,30 €</div></div>
+                  <div class="r"><div>Tierarzt Dr. Huber<small>Tierarzt · 4. Sept.</small></div><div class="aus">−148,00 €</div></div>
+                  <div class="r"><div>Verkauf 2 Kälber<small>Einnahmen Tier · 2. Sept.</small></div><div class="ein">+1.640,00 €</div></div>
+                </div>
+              </div>
+              <div class="pnav"><div>Übersicht</div><div>Sparten</div><div><div class="plus">+</div></div><div>Buchungen</div><div>Mehr</div></div>
+            </div>
+            <ul class="notes ink2">
+              <li><b>Das Textfeld steht oben</b>, die Kamera direkt daneben. Ein Satz, ein Tipp auf den Vorschlag, fertig.</li>
+              <li><b>Die Sparte bleibt gemerkt.</b> Wer am Hof bucht, bleibt am Hof, bis er wechselt.</li>
+              <li><b>Der Speichern-Knopf sagt, was passiert:</b> Betrag, Richtung, sonst nichts zu lesen.</li>
+              <li><b>Unten die Navigation</b> mit dem Plus in der Mitte. Auswertungen gibt es auch am Handy, aber vereinfacht.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= BUCHUNGEN ================= -->
+      <section class="page" id="page-buchungen" hidden>
+        <div class="card">
+          <div class="bfilters">
+            <label class="field">Sparte<select id="bu-scope"></select></label>
+            <label class="field">Suche<input id="bu-q" placeholder="Text, Betrag oder Kategorie"></label>
+            <label class="field">Kategorie<select id="bu-kat"><option value="">Alle</option></select></label>
+            <label class="field">Richtung<select id="bu-typ"><option value="">Alle</option><option value="einnahme">Einnahmen</option><option value="ausgabe">Ausgaben</option></select></label>
+            <label class="field">Zahlungsart<select id="bu-zahl"><option value="">Alle</option><option value="bank">Bank</option><option value="bar">Bar</option><option value="karte">Karte</option></select></label>
+            <span class="muted" id="bu-count" style="align-self:center"></span>
+          </div>
+        </div>
+        <div class="card">
+          <div class="tscroll"><table class="tbl btable" id="bu-table"></table></div>
+          <div style="margin-top:12px;display:flex;justify-content:center"><button class="btn" id="bu-more">Weitere 100 anzeigen</button></div>
+        </div>
+      </section>
+
+      <!-- ================= KATEGORIEN ================= -->
+      <section class="page" id="page-kategorien" hidden>
+        <div class="card">
+          <div class="card-head">
+            <div class="kattabs" id="k-tabs"></div>
+            <button class="btn primary" id="k-new">+ Neue Kategorie</button>
+          </div>
+          <p class="muted" style="margin-bottom:12px">Stichwörter sind Merkregeln: Steht eines davon im Buchungstext, schlägt die App diese Kategorie vor. Was du beim Erfassen bestätigst, lernt sie dazu.</p>
+          <div class="tscroll"><table class="tbl" id="k-table"></table></div>
+        </div>
+        <div class="grid g2">
+          <div class="card">
+            <div class="card-head"><h2>Gruppen über Sparten hinweg</h2><span class="hint">bündeln gleichartige Kategorien</span></div>
+            <div class="hbars" id="k-gruppen"></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><h2>Gelernte Merkregeln <span class="pill est">Beispiel</span></h2><span class="hint">verbuchen Bankumsätze automatisch</span></div>
+            <div class="tscroll"><table class="tbl" id="k-regeln"></table></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= BELEGE ================= -->
+      <section class="page" id="page-belege" hidden>
+        <div class="card">
+          <div class="card-head"><h2>Belege <span class="pill est">Beispiel</span></h2><span class="hint">Klick öffnet das Bild groß · Betrag und Datum aus der Foto-Auswertung</span></div>
+          <div class="belege" id="belege"></div>
+        </div>
+      </section>
+
+      <!-- ================= BANKIMPORT ================= -->
+      <section class="page" id="page-bankimport" hidden>
+        <div class="card">
+          <div class="card-head"><h2>Konten <span class="pill est">Beispiel</span></h2><button class="btn small" type="button" id="acct-new">+ Konto anlegen</button></div>
+          <div class="acct" id="acct"></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Kontoauszug einspielen</h2><span class="hint">PDF-Auszug: alter und neuer Saldo werden übernommen · George-CSV: nur Umsätze, den Saldo gibst du einmal ein · Kodierung und Spalten werden erkannt</span></div>
+          <div class="drop" id="drop-bank" tabindex="0" role="button">Datei hierher ziehen oder klicken<br><span class="muted" style="font-size:12.5px">Du siehst zuerst einen Prüfbericht, eingespielt wird erst auf Knopfdruck</span></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Umsätze <span class="pill est">Beispiel</span></h2><span class="hint">gelernte Regeln verbuchen automatisch · Stichwort-Treffer sind nur Vorschläge · Unsicheres bleibt offen</span></div>
+          <div class="tscroll"><table class="tbl" id="umsaetze"></table></div>
+        </div>
+      </section>
+
+      <!-- ================= EXCEL / EXPORT ================= -->
+      <section class="page" id="page-excel" hidden>
+        <div class="card">
+          <div class="card-head"><h2>Alte Excel-Kassabücher einspielen <span class="pill est">Beispiel</span></h2><span class="hint">eine Datei je Jahr, Aufbau wie dein Kassabuch-Muster</span></div>
+          <div class="drop" id="drop-excel" tabindex="0" role="button">Dateien hierher ziehen oder klicken<br><span class="muted" style="font-size:12.5px">Zuerst Prüfbericht, dann einspielen</span></div>
+          <p class="muted" style="margin-top:12px">Bleibt wie heute, nur im neuen Kleid. Nach dem Einspielen erscheinen die Jahre automatisch im Jahresvergleich.</p>
+        </div>
+      </section>
+      <section class="page" id="page-export" hidden>
+        <div class="card">
+          <div class="card-head"><h2>Jahres-Export für die Steuerberaterin</h2><span class="hint">Excel, CSV oder Bericht zum Drucken</span></div>
+          <div class="bfilters">
+            <label class="field">Jahr<select id="ex-jahr"><option>2026</option><option selected>2025</option><option>2024</option><option>2023</option><option>2022</option><option>2021</option><option>2020</option></select></label>
+            <label class="field">Sparte<select id="ex-sparte"></select></label>
+            <label class="field">Format<select id="ex-format"><option>Excel (.xlsx)</option><option>CSV</option><option>Bericht (PDF)</option></select></label>
+            <label class="field">Suche<input id="ex-q" placeholder="Text oder Betrag"></label>
+          </div>
+          <p class="muted" style="margin-top:12px">Alles ist vorausgewählt. Klick eine Kategorie weg, dann fliegt sie ganz raus. Einzelne Buchungen nimmst du mit dem Häkchen heraus. Was du wegklickst, merkt sich die App fürs nächste Mal.</p>
+          <div class="kattabs" id="ex-kats" style="margin-top:10px"></div>
+        </div>
+        <div class="card">
+          <div class="exbar" id="ex-bar"></div>
+          <div class="tscroll"><table class="tbl btable" id="ex-table"></table></div>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<!-- Drilldown -->
+<div class="dd-back" id="dd-back"></div>
+<aside class="dd" id="dd" role="dialog" aria-modal="true" aria-labelledby="dd-title" hidden inert>
+  <div class="dd-head"><div><h2 id="dd-title">Buchungen</h2><div class="muted" id="dd-sub"></div></div><button class="close" id="dd-close" aria-label="Schließen">×</button></div>
+  <div class="dd-sum" id="dd-sum"></div>
+  <div class="tscroll"><table class="tbl btable" id="dd-table"></table></div>
+</aside>
+
+<!-- Mobile Navigation -->
+<nav class="bnav" id="bnav">
+  <button data-go="uebersicht"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="1.5" y="1.5" width="5.5" height="5.5" rx="1"/><rect x="9" y="1.5" width="5.5" height="5.5" rx="1"/><rect x="1.5" y="9" width="5.5" height="5.5" rx="1"/><rect x="9" y="9" width="5.5" height="5.5" rx="1"/></svg>Übersicht</button>
+  <button id="bn-sparten"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="4" cy="4" r="2"/><circle cx="12" cy="4" r="2"/><circle cx="4" cy="12" r="2"/><circle cx="12" cy="12" r="2"/></svg>Sparten</button>
+  <button data-go="erfassen"><span class="plus">+</span></button>
+  <button data-go="buchungen"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 4h12M2 8h12M2 12h8"/></svg>Buchungen</button>
+  <button id="bn-mehr"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="3" cy="8" r="1.2"/><circle cx="8" cy="8" r="1.2"/><circle cx="13" cy="8" r="1.2"/></svg>Mehr</button>
+</nav>
+<div class="sheet-back" id="sheet-back"></div>
+<div class="sheet" id="sheet" hidden inert></div>
+<div class="toast" id="toast" role="status" aria-live="polite">Gespeichert</div>
+
+<script>
+/* =====================================================================
+   DEMO-DATEN. Alle Beträge sind erfunden. Sparten und Kategorien
+   entsprechen der echten Struktur (Kinder ist bereits „Kinder").
+   ===================================================================== */
+const HEUTE = new Date(2026, 8, 8);            // 8. September 2026
+const JAHRE = [2020, 2021, 2022, 2023, 2024, 2025, 2026];
+const CUT_MD = "09-08";                        // Stichtag (Monat-Tag) für die Saison-Hochrechnung
+const HEUTE_ISO = "2026-09-08";                // derselbe Stichtag als ISO-Datum, für Datumsprüfungen
+const MONATE_VERGANGEN = 8 + 8 / 30;           // für Monatsdurchschnitte
+const MON = ["Jän", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"];
+const MON_LANG = ["Jänner", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"];
+
+const SPARTEN = [
+  { id: 1, k: "HM", name: "Vermietung Haus Münster", typ: "vermietung", c: "var(--s-hm)" },
+  { id: 2, k: "FK", name: "Ferienhaus Köcken", typ: "vermietung", c: "var(--s-fk)" },
+  { id: 3, k: "HOF", name: "Hechenegg Hof", typ: "hof", c: "var(--s-hof)" },
+  { id: 4, k: "Verein", name: "Verein", typ: "verein", c: "var(--s-zina)", verein: true },
+  { id: 5, k: "AL", name: "Privat A", typ: "privat", c: "var(--s-al)" },
+  { id: 6, k: "TH", name: "Privat B", typ: "privat", c: "var(--s-th)" },
+];
+// Gruppen = Auswertungsgruppen: mehrere Sparten zusammen betrachten. Eigene Gruppen legt der Nutzer über „+ Gruppe anlegen“ an.
+const GRUPPEN = [
+  { id: "g-privat", name: "Privat gesamt", sparten: [5, 6] },
+  { id: "g-vermietung", name: "Vermietung gesamt", sparten: [1, 2] },
+  { id: "g-hof", name: "Hechenegg und Köcken gesamt", sparten: [2, 3] },
+  { id: "g-betrieb", name: "Betrieb gesamt", sparten: [1, 2, 3] },
+];
+const S = Object.fromEntries(SPARTEN.map(s => [s.id, s]));
+
+// Kategorie-Definitionen: Profil erzeugt Buchungen je Jahr.
+// each = [min,max] je Monat · months = nur diese Monate · count = n-mal im Jahr in range
+// fixed = feste Termine · texts = Buchungstexte · kw = Stichwörter (Merkregeln)
+let KID = 0;
+const KATS = [];
+function kat(sparte, name, richtung, prof) { KATS.push(Object.assign({ id: ++KID, sparte, name, richtung, aktiv: true, kw: [], texts: [name] }, prof)); }
+const g = (y) => ({ 2020: 0.82, 2021: 0.85, 2022: 0.88, 2023: 0.91, 2024: 0.95, 2025: 1.0, 2026: 1.04 })[y];
+
+// Hechenegg Hof
+kat(3, "Einnahmen Tier", "einnahme", { count: 5, range: [1400, 4600], texts: ["Verkauf 2 Kälber", "Viehhandel Mair Stierkalb", "Verkauf Kuh Schlachthof", "Verkauf 3 Kälber", "Zuchtvieh Versteigerung"], kw: ["kalb", "kälber", "viehhandel", "stier", "schlachthof"] });
+kat(3, "Förderungen", "einnahme", { fixed: [[3, 6400], [11, 8900]], texts: ["AMA Direktzahlung", "AMA Ausgleichszulage"], kw: ["ama", "förderung", "direktzahlung"] });
+kat(3, "Obst/Schnaps", "beides", { count: 4, range: [220, 780], months: [9, 10, 11, 12], texts: ["Schnapsverkauf Hofladen", "Most Verkauf", "Obstverkauf Markt"], kw: ["schnaps", "most", "obst"] });
+kat(3, "Familie von uns", "beides", { count: 3, range: [80, 260], typ: "ausgabe", texts: ["Familie Auslage", "Familie Einkauf"], kw: ["margarete"] });
+kat(3, "Futtermittel", "ausgabe", { each: [560, 880], winter: 1.35, y: { 2026: 1.31 }, texts: ["Lagerhaus Kraftfutter", "Raiffeisen Lagerhaus Mineralstoff", "Garant Futtermittel Lieferung", "Lagerhaus Kälberstarter"], kw: ["lagerhaus", "kraftfutter", "futter", "garant", "mineralstoff", "heu"] });
+kat(3, "Tierarzt", "ausgabe", { count: 14, range: [70, 420], texts: ["Tierarzt Dr. Huber", "Tierarzt Dr. Huber Bestandsbetreuung", "Tierärztin Dr. Steiner Notdienst"], kw: ["tierarzt", "huber", "steiner", "impfung"] });
+kat(3, "Tiere", "ausgabe", { count: 2, range: [900, 2300], texts: ["Zukauf Kalbin", "Zukauf Jungstier"], kw: ["zukauf", "kalbin"] });
+kat(3, "Maschinen", "ausgabe", { count: 7, range: [95, 890], big: [2026, 5, 2480, "Traktorreparatur Lagerhaus Werkstatt"], texts: ["Diesel Tankstelle Kirchbichl", "Landmaschinen Huber Ersatzteil", "Diesel Hoftankstelle", "Service Ladewagen"], kw: ["diesel", "traktor", "landmaschinen", "ersatzteil", "ladewagen", "mähwerk"] });
+kat(3, "Stall", "ausgabe", { each: [110, 210], texts: ["Stallbedarf Lagerhaus", "Einstreu Sägespäne", "Melktechnik Wartung"], kw: ["stall", "einstreu", "melk", "sägespäne"] });
+kat(3, "Gebäude/Instandhaltung", "ausgabe", { count: 5, range: [180, 1900], texts: ["Baustoffe Hofdach", "Elektriker Stall", "Zimmerei Reparatur Tenne", "Baumarkt Material"], kw: ["baustoffe", "elektriker", "zimmerei", "dach", "baumarkt"] });
+kat(3, "Fixkosten", "ausgabe", { each: [300, 330], texts: ["Strom Hof TIWAG", "Wasser Gemeinde", "Telefon Hof"], kw: ["tiwag", "strom hof", "wasser"] });
+kat(3, "Versicherungen", "ausgabe", { fixed: [[1, 640], [7, 640]], texts: ["Hagelversicherung", "Betriebshaftpflicht Tiroler Versicherung"], kw: ["hagel", "haftpflicht", "tiroler versicherung"] });
+kat(3, "Steuer", "ausgabe", { fixed: [[2, 1100], [8, 1100]], texts: ["Grundsteuer Gemeinde", "Sozialversicherung SVS"], kw: ["grundsteuer", "svs", "sozialversicherung"] });
+kat(3, "Mitarbeiter Lohn", "ausgabe", { each: [860, 940], months: [6, 7, 8, 9], texts: ["Lohn Aushilfe Heuernte", "Lohn Erntehelfer"], kw: ["lohn aushilfe", "erntehelfer"] });
+
+// Vermietung Haus Münster
+kat(1, "Miete", "einnahme", { each: [850, 850], day: 3, skip: [[2026, 9]], texts: ["Miete Fam. Gruber"], kw: ["miete", "gruber"] });
+kat(1, "Umbau", "ausgabe", { count: 6, range: [400, 3200], years: [2024], texts: ["Installateur Bad", "Fliesen Baumarkt", "Tischler Küche", "Malerarbeiten"], kw: ["installateur", "fliesen", "tischler", "maler"] });
+kat(1, "Versicherung", "ausgabe", { fixed: [[3, 480]], texts: ["Gebäudeversicherung Uniqa"], kw: ["uniqa", "gebäudeversicherung"] });
+kat(1, "Kontoführung", "ausgabe", { each: [12, 12], texts: ["Kontoführung Sparkasse"], kw: ["kontoführung", "spesen"] });
+kat(1, "Strom", "ausgabe", { each: [58, 66], texts: ["Strom Allgemein TIWAG"], kw: ["tiwag münster"] });
+kat(1, "Steuer", "ausgabe", { fixed: [[2, 380], [5, 380], [8, 380], [11, 380]], texts: ["ESt-Vorauszahlung Vermietung"], kw: ["finanzamt", "est"] });
+kat(1, "Heizung", "ausgabe", { each: [130, 160], months: [1, 2, 3, 10, 11, 12], texts: ["Pellets Lieferung", "Heizung Wartung"], kw: ["pellets", "heizung"] });
+kat(1, "Kreditrückzahlung", "ausgabe", { each: [420, 420], texts: ["Kreditrate Sparkasse"], kw: ["kreditrate", "darlehen"] });
+kat(1, "Gemeinde", "ausgabe", { fixed: [[1, 249], [4, 249], [7, 249], [10, 249]], texts: ["Gemeinde Münster Kanal/Müll"], kw: ["gemeinde", "kanal", "müll"] });
+kat(1, "Fixkosten", "ausgabe", { each: [34, 36], texts: ["Rauchfangkehrer", "Internet Haus"], kw: ["rauchfangkehrer", "internet"] });
+
+// Ferienhaus Köcken — Wunsch aus dem Prototyp-Kommentar: Instandhaltung Gebäude, Fixkosten/Versicherungen,
+// Energie/Heizen, Möbel und Einrichtung. Die übrigen sind Vorschläge zum Streichen oder Behalten.
+kat(2, "Übernachtungen", "einnahme", { count: 9, range: [640, 2400], months: [5, 6, 7, 8, 9, 12], texts: ["Booking.com Auszahlung", "Gäste Fam. Weber bar", "Airbnb Auszahlung", "Gäste Fam. Schmidt"], kw: ["booking", "gäste", "airbnb", "übernachtung"] });
+kat(2, "Endreinigung weiterverrechnet", "einnahme", { count: 8, range: [60, 90], months: [5, 6, 7, 8, 9, 12], texts: ["Endreinigung Gäste"], kw: ["endreinigung"] });
+kat(2, "Instandhaltung Gebäude", "ausgabe", { count: 4, range: [120, 1400], texts: ["Reparatur Geschirrspüler", "Installateur Boiler", "Dachrinne Spengler", "Malerarbeiten Schlafzimmer"], kw: ["reparatur", "installateur", "spengler", "maler", "instandhaltung"] });
+kat(2, "Fixkosten und Versicherungen", "ausgabe", { each: [40, 48], fixed: [[3, 380, "Gebäudeversicherung Ferienhaus"]], texts: ["Kanal/Müll Gemeinde", "Internet Ferienhaus"], kw: ["kanal", "müll", "internet", "versicherung", "rauchfangkehrer"] });
+kat(2, "Energie und Heizen", "ausgabe", { each: [55, 140], winter: 1.6, texts: ["Strom Ferienhaus TIWAG", "Pellets Ferienhaus", "Wasser Ferienhaus"], kw: ["strom", "pellets", "heizung", "wasser", "tiwag"] });
+kat(2, "Möbel und Einrichtung", "ausgabe", { count: 3, range: [90, 900], texts: ["IKEA Bettwäsche und Lampen", "Möbelhaus Couch", "Küchengeräte Elektro Huber"], kw: ["ikea", "möbel", "couch", "bettwäsche", "einrichtung"] });
+kat(2, "Reinigung und Wäsche", "ausgabe", { count: 12, range: [45, 140], months: [5, 6, 7, 8, 9, 12], texts: ["Reinigung Frau Kofler", "Wäscherei Kufstein"], kw: ["reinigung", "kofler", "wäscherei"] });
+kat(2, "Verbrauchsmaterial", "ausgabe", { count: 8, range: [15, 60], texts: ["Seife, Klopapier, Kaffee", "Willkommenskorb"], kw: ["seife", "klopapier", "kaffee", "willkommen"] });
+kat(2, "Provisionen Buchungsportale", "ausgabe", { count: 9, range: [90, 330], months: [5, 6, 7, 8, 9, 12], texts: ["Booking.com Provision", "Airbnb Servicegebühr"], kw: ["provision", "servicegebühr"] });
+kat(2, "Ortstaxe", "ausgabe", { fixed: [[1, 95], [4, 60], [7, 210], [10, 180]], texts: ["Ortstaxe Gemeinde Abrechnung"], kw: ["ortstaxe", "kurtaxe", "nächtigungstaxe"] });
+kat(2, "Garten und Winterdienst", "ausgabe", { count: 4, range: [60, 240], texts: ["Rasenmähen Nachbar", "Schneeräumung", "Heckenschnitt"], kw: ["rasen", "schnee", "hecke", "garten"] });
+kat(2, "Steuer", "ausgabe", { fixed: [[2, 260], [8, 260]], texts: ["ESt-Vorauszahlung Ferienhaus"], kw: ["finanzamt", "est"] });
+
+// Verein (Verein; hat in der echten Datenbank noch keine Kategorien, hier Beispiele)
+kat(4, "Mitgliedsbeiträge", "einnahme", { fixed: [[1, 1200], [2, 340]], texts: ["Mitgliedsbeiträge Sammeleinzug"], kw: ["mitgliedsbeitrag"] });
+kat(4, "Veranstaltungen", "beides", { count: 4, range: [120, 900], texts: ["Sommerfest Einnahmen", "Sommerfest Getränke", "Adventfeier"], kw: ["sommerfest", "adventfeier"] });
+kat(4, "Material", "ausgabe", { count: 5, range: [40, 260], texts: ["Bastelmaterial", "Druck Flyer", "Vereinsbedarf"], kw: ["flyer", "bastel"] });
+
+// Privat A
+kat(5, "Lohn", "einnahme", { each: [2640, 2640], day: 1, extra: [[6, 2640], [11, 2640]], texts: ["Gehalt"], kw: ["gehalt", "lohn"] });
+kat(5, "Essen", "ausgabe", { spread: [380, 520], parts: 6, texts: ["Spar Kirchbichl", "Billa Wörgl", "Mittagessen Gasthof Post", "Bäckerei Ruetz", "Hofer", "M-Preis"], kw: ["spar", "billa", "hofer", "mpreis", "m-preis", "bäcker", "mittagessen", "gasthof", "essen", "lebensmittel"] });
+kat(5, "Auto", "ausgabe", { each: [95, 140], count: 3, range: [180, 620], texts: ["Diesel OMV", "Tankstelle Turmöl", "Service Autohaus Unterberger", "Reifen Wechsel", "Vignette"], kw: ["omv", "tankstelle", "autohaus", "reifen", "vignette", "auto", "unterberger"] });
+kat(5, "Motorrad", "ausgabe", { count: 5, range: [40, 260], months: [4, 5, 6, 7, 8, 9], texts: ["Motorrad Benzin", "Motorrad Service", "Motorrad Reifen"], kw: ["motorrad", "benzin"] });
+kat(5, "Versicherungen", "ausgabe", { fixed: [[1, 890], [7, 210]], texts: ["Uniqa Haushalt/Unfall", "Kfz-Versicherung"], kw: ["versicherung", "kfz"] });
+kat(5, "Weiterbildung", "ausgabe", { count: 2, range: [220, 640], texts: ["LFI Kurs Klauenpflege", "Seminar Betriebsführung"], kw: ["lfi", "kurs", "seminar"] });
+kat(5, "Kino", "ausgabe", { count: 20, range: [18, 34], texts: ["Cineplexx Wörgl", "Kino Kufstein"], kw: ["kino", "cineplexx"] });
+kat(5, "Telering", "ausgabe", { each: [29, 29], texts: ["Telering Handy"], kw: ["telering", "handy", "a1", "magenta"] });
+kat(5, "Fixkosten", "ausgabe", { each: [135, 150], texts: ["ORF-Beitrag", "Netflix", "Bankspesen"], kw: ["orf", "netflix", "bankspesen"] });
+kat(5, "Entgasse", "ausgabe", { each: [85, 95], texts: ["Entgasse Betriebskosten"], kw: ["entgasse"] });
+kat(5, "Hohenegg", "ausgabe", { each: [190, 210], texts: ["Hohenegg Haushalt"], kw: ["hohenegg"] });
+kat(5, "Kinder", "ausgabe", { each: [130, 180], texts: ["Kinder Kleidung", "Kinder Schulsachen", "Kinder Musikschule"], kw: ["kinder", "schule", "musikschule", "kleidung"] });
+
+// Privat B
+kat(6, "Lohn", "einnahme", { each: [1980, 1980], day: 1, extra: [[6, 1980], [11, 1980]], texts: ["Gehalt"], kw: ["gehalt", "lohn"] });
+kat(6, "Essen", "ausgabe", { spread: [280, 360], parts: 4, texts: ["Spar", "Billa", "Bäckerei", "Mittagessen Kantine"], kw: ["spar", "billa", "bäcker", "mittagessen", "kantine"] });
+kat(6, "Auto", "ausgabe", { each: [80, 105], texts: ["Tankstelle Diesel", "Vignette"], kw: ["tankstelle", "diesel", "vignette"] });
+kat(6, "Motorrad", "ausgabe", {});
+kat(6, "Versicherungen", "ausgabe", { fixed: [[1, 420]], texts: ["Uniqa Unfall"], kw: ["uniqa", "versicherung"] });
+kat(6, "Weiterbildung", "ausgabe", { count: 1, range: [180, 380], texts: ["Fortbildung Pflege"], kw: ["fortbildung", "kurs"] });
+kat(6, "Kino", "ausgabe", { count: 10, range: [18, 30], texts: ["Kino Kufstein"], kw: ["kino"] });
+kat(6, "Telering", "ausgabe", { each: [19, 19], texts: ["Telering Handy"], kw: ["telering", "handy"] });
+kat(6, "Fixkosten", "ausgabe", { each: [105, 115], texts: ["Zeitschriften-Abo", "Fitnessstudio"], kw: ["abo", "fitness"] });
+kat(6, "Entgasse", "ausgabe", { each: [55, 65], texts: ["Entgasse Anteil"], kw: ["entgasse"] });
+kat(6, "Hohenegg", "ausgabe", { each: [140, 160], texts: ["Hohenegg Haushalt"], kw: ["hohenegg"] });
+kat(6, "Kinder", "ausgabe", { each: [130, 170], texts: ["Kinder Kleidung", "Kinder Sport"], kw: ["kinder", "sport", "kleidung"] });
+
+const K = Object.fromEntries(KATS.map(k => [k.id, k]));
+// Kategorie „Umbuchung“ je Sparte, wie im echten System (wird bei Bedarf angelegt)
+function umbKat(sparte) { let k = KATS.find(x => x.sparte === sparte && x.name === "Umbuchung"); if (!k) { kat(sparte, "Umbuchung", "beides", { texts: ["Umbuchung"] }); k = KATS[KATS.length - 1]; K[k.id] = k; } return k; }
+
+// Deterministischer Zufall, damit die Demo bei jedem Öffnen gleich aussieht
+function rng(seed) { let a = seed >>> 0; return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const R = rng(20260908);
+const rnd = (a, b) => a + R() * (b - a);
+const pick = (arr) => arr[Math.floor(R() * arr.length)];
+const daysIn = (y, m) => new Date(y, m, 0).getDate();
+const iso = (y, m, d) => `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+
+let BID = 0;
+const BUCHUNGEN = [];
+function add(k, y, m, d, betrag, text, typ, zahl) {
+  const date = new Date(y, m - 1, d);
+  if (date > HEUTE) return;
+  // Zahlungsart: Einnahmen kommen über die Bank (Lohn, Miete, Förderung), außer Hofladen und Feriengäste.
+  // Ausgaben: privat je ein Drittel Bank, Karte, Bar; Betriebe ein Viertel bar.
+  const zahlDefault = () => typ === "einnahme"
+    ? ((k.sparte === 3 && k.name === "Obst/Schnaps") || (k.sparte === 2 && R() < 0.3) ? "bar" : "bank")
+    : (k.sparte === 5 || k.sparte === 6 ? pick(["bank", "karte", "bar"]) : k.sparte === 1 ? "bank" : pick(["bank", "bank", "bank", "bar"]));
+  BUCHUNGEN.push({ id: ++BID, sparte: k.sparte, kat: k.id, datum: iso(y, m, d), y, m, typ, cent: Math.round(betrag * 100), text, zahl: zahl || zahlDefault(), beleg: R() < 0.3 });
+}
+for (const k of KATS) {
+  const typDefault = k.richtung === "einnahme" ? "einnahme" : (k.typ || "ausgabe");
+  for (const y of JAHRE) {
+    if (k.years && !k.years.includes(y)) continue;
+    const f = g(y) * ((k.y && k.y[y]) || 1);
+    const monate = k.months || [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+    if (k.each) for (const m of monate) {
+      if (k.skip && k.skip.some(([sy, sm]) => sy === y && sm === m)) continue;
+      const w = k.winter && [1, 2, 3, 11, 12].includes(m) ? k.winter : 1;
+      add(k, y, m, k.day || Math.ceil(rnd(1, daysIn(y, m))), rnd(k.each[0], k.each[1]) * f * w, pick(k.texts), typDefault);
+    }
+    if (k.extra) for (const [m, a] of k.extra) add(k, y, m, 1, a * f, k.texts[0] + " Sonderzahlung", typDefault);
+    if (k.spread) for (const m of monate) { const tot = rnd(k.spread[0], k.spread[1]) * f; for (let i = 0; i < k.parts; i++) add(k, y, m, Math.ceil(rnd(1, daysIn(y, m))), tot / k.parts * rnd(.6, 1.4), pick(k.texts), typDefault); }
+    if (k.count) for (let i = 0; i < k.count; i++) {
+      const m = pick(monate); let typ = typDefault;
+      if (k.richtung === "beides" && !k.typ) typ = R() < 0.75 ? "einnahme" : "ausgabe";
+      add(k, y, m, Math.ceil(rnd(1, daysIn(y, m))), rnd(k.range[0], k.range[1]) * f, pick(k.texts), typ);
+    }
+    if (k.fixed) for (const [m, a, t] of k.fixed) add(k, y, m, 15, a * f, t || k.texts[k.fixed.indexOf(k.fixed.find(x => x[0] === m)) % k.texts.length] || k.texts[0], typDefault, "bank");
+    if (k.big && k.big[0] === y) add(k, y, k.big[1], 12, k.big[2], k.big[3], "ausgabe", "bank");
+  }
+}
+// Bargeld: Bankomat-Abhebungen sind Umbuchungen Bank → Kassa, zählen also nicht als Ausgabe
+const ABHEBUNG = { 5: [600, 5], 6: [400, 5], 3: [900, 10] };
+for (const [sid, [amt, day]] of Object.entries(ABHEBUNG)) { const k = umbKat(+sid); for (const y of JAHRE) for (let m = 1; m <= 12; m++) { if (new Date(y, m - 1, day) > HEUTE) continue; BUCHUNGEN.push({ id: ++BID, sparte: +sid, kat: k.id, datum: iso(y, m, day), y, m, typ: "umbuchung", umb: "rein", cent: amt * 100, text: "Bankomat Abhebung", zahl: "bar", beleg: false }); } }
+BUCHUNGEN.sort((a, b) => b.datum.localeCompare(a.datum) || b.id - a.id);
+
+/* ---------- Auslagen: privat bezahlt für Hof oder Ferienhaus ----------
+   Die Buchung liegt bei der Sparte, der die Kosten gehören (z. B. Hof, Futtermittel),
+   trägt aber „bezahlt von Privat A“. Solange kein Ausgleich gebucht ist, schuldet
+   der Hof den Betrag. „Ausgleich buchen“ erzeugt eine Umbuchung Hof → Privat A;
+   Umbuchungen zählen weder als Einnahme noch als Ausgabe. */
+for (const b of BUCHUNGEN) {
+  const n = K[b.kat].name;
+  if (b.y !== 2026 || b.typ !== "ausgabe") continue;
+  if (b.sparte === 3 && ["Futtermittel", "Tierarzt", "Maschinen", "Stall"].includes(n) && b.cent < 150000 && R() < 0.35) b.bezahltVon = 5;
+  else if (b.sparte === 2 && ["Verbrauchsmaterial", "Reinigung und Wäsche", "Garten und Winterdienst"].includes(n) && R() < 0.5) b.bezahltVon = 5;
+  else if (b.sparte === 3 && n === "Stall" && R() < 0.5) b.bezahltVon = 6;
+}
+// Je Auslage merkt „ausglCent“, wie viel davon schon zurückgezahlt ist.
+// Offen ist immer der Rest; „ausgeglichen“ (Datum) gilt erst bei offen = 0.
+const offenCent = (b) => b.cent - (b.ausglCent || 0);
+function auslagenOffen(filterSparte) {
+  const g = {};
+  for (const b of BUCHUNGEN) {
+    if (!b.bezahltVon) continue;
+    const offen = offenCent(b);
+    if (offen <= 0) continue;
+    if (filterSparte && b.sparte !== filterSparte && b.bezahltVon !== filterSparte) continue;
+    b.offen = offen;
+    const key = b.bezahltVon + "|" + b.sparte;
+    g[key] = g[key] || { von: b.bezahltVon, fuer: b.sparte, cent: 0, rows: [] };
+    g[key].cent += offen; g[key].rows.push(b);
+  }
+  return Object.values(g).sort((a, b) => b.cent - a.cent);
+}
+function renderAuslagen(el, filterSparte) {
+  const list = auslagenOffen(filterSparte);
+  el.innerHTML = list.length ? list.map((a, i) => `<div class="ausl"><div><div class="kn">${esc(S[a.von].name)} hat für ${esc(S[a.fuer].name)} ausgelegt</div><div class="ks">${a.rows.length} Buchungen · älteste vom ${fmtDate(a.rows[a.rows.length - 1].datum)}</div></div><div class="ar"><div class="kv">${fmtEur(a.cent)}</div><div class="ab"><button class="btn small" data-show="${i}">Buchungen</button><button class="btn small primary" data-settle="${i}">Ausgleich buchen</button></div></div></div>`).join("") : '<p class="muted">Keine offenen Auslagen. Alles ausgeglichen.</p>';
+  el.querySelectorAll("[data-show]").forEach(b => b.addEventListener("click", () => { const a = list[+b.dataset.show]; drill({ rows: a.rows, title: "Offene Auslagen", sub: `${S[a.von].name} für ${S[a.fuer].name} · noch nicht ausgeglichen` }); }));
+  el.querySelectorAll("[data-settle]").forEach(b => b.addEventListener("click", () => openSettle(list[+b.dataset.settle])));
+}
+// Ausgleich-Dialog: welche Auslagen werden jetzt bezahlt, bar oder per Überweisung, an welchem Tag
+function openSettle(a) {
+  $("#dd-title").textContent = "Ausgleich buchen";
+  $("#dd-sub").textContent = `${S[a.fuer].name} zahlt an ${S[a.von].name} · Teilbeträge sind erlaubt, der Rest bleibt offen`;
+  $("#dd-sum").innerHTML = `<div class="settle"><label class="field">Wie<select id="st-zahl"><option value="bar">Bar übergeben</option><option value="bank">Überweisung</option></select></label><label class="field">Datum<input type="date" id="st-datum" value="${HEUTE_ISO}" max="${HEUTE_ISO}"></label><label class="field">Betrag in €<input id="st-betrag" inputmode="decimal"></label><div class="field"><span>offen, angehakt</span><b id="st-sum" style="font-size:20px;font-family:var(--font-display)">${fmtEur(a.cent)}</b></div><button class="btn primary" id="st-go" style="margin-left:auto">Ausgleich buchen</button><div id="st-warn" style="flex-basis:100%;color:var(--crit);font-size:12.5px" hidden></div></div>`;
+  $("#dd-table").innerHTML = `<thead><tr><th><input type="checkbox" id="st-all" checked aria-label="alle"></th><th>Datum</th><th>Text</th><th>Kategorie</th><th>offen</th></tr></thead><tbody>` + a.rows.map(b => `<tr><td><input type="checkbox" checked data-id="${b.id}" aria-label="Buchung ${esc(b.text)} ${fmtEur(offenCent(b))} auswählen"></td><td class="muted">${fmtDate(b.datum)}</td><td class="t">${esc(b.text)}</td><td><span class="zk">${esc(K[b.kat].name)}</span></td><td class="aus" style="font-weight:500">${fmtEur(offenCent(b))}${(b.ausglCent || 0) > 0 ? ` <span class="muted" style="font-weight:400;font-size:11px">von ${fmtEur(b.cent)}</span>` : ""}</td></tr>`).join("") + `</tbody>`;
+  const selected = () => [...$("#dd-table").querySelectorAll("tbody input:checked")].map(cb => a.rows.find(r => r.id === +cb.dataset.id)).filter(Boolean);
+  // Warnung, wenn die Kassa den Barausgleich nicht deckt: erklären, nicht sperren.
+  const warnen = () => {
+    const b = parseBetrag($("#st-betrag").value); const cent = b == null ? 0 : Math.round(b * 100);
+    const stand = kassaStand(a.fuer); const eng = $("#st-zahl").value === "bar" && cent > 0 && stand < cent;
+    $("#st-warn").hidden = !eng;
+    $("#st-warn").textContent = eng ? `Kassa ${S[a.fuer].name} hat nur ${fmtEur(stand)}, der Ausgleich macht sie negativ. Überweisung wählen oder trotzdem bar buchen.` : "";
+    $("#st-go").textContent = eng ? "Trotzdem bar buchen" : "Ausgleich buchen";
+  };
+  const upd = () => { const s = selected(); const summe = s.reduce((x, r) => x + offenCent(r), 0); $("#st-sum").textContent = fmtEur(summe); $("#st-betrag").value = summe > 0 ? fmtBetragFeld(summe / 100) : ""; $("#st-go").disabled = !s.length; warnen(); };
+  $("#dd-table").querySelectorAll("tbody input").forEach(cb => cb.addEventListener("change", upd));
+  $("#st-all").addEventListener("change", e => { $("#dd-table").querySelectorAll("tbody input").forEach(cb => cb.checked = e.target.checked); upd(); });
+  $("#st-betrag").addEventListener("input", warnen);
+  $("#st-zahl").addEventListener("change", warnen);
+  upd();
+  $("#st-go").addEventListener("click", () => settle(a, selected(), $("#st-zahl").value, $("#st-datum").value, parseBetrag($("#st-betrag").value)));
+  openDD();
+}
+/* Zahlt einen Betrag auf die angehakten Auslagen an, älteste zuerst. Erzeugt genau
+   ein Umbuchungspaar über den wirklich verteilten Betrag; ein zweiter Aufruf mit
+   denselben Zeilen findet nichts Offenes mehr und bucht nicht noch einmal. */
+function settle(a, rows, zahl, datum, betrag) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(datum || ""))) { toast("Bitte ein gültiges Datum wählen"); return; }
+  if (datum > HEUTE_ISO) { toast("Zukunftsbuchungen gibt es hier nicht"); return; }
+  const offene = (rows || []).filter(r => r && offenCent(r) > 0).sort((x, z) => x.datum.localeCompare(z.datum) || x.id - z.id);
+  const summe = offene.reduce((x, r) => x + offenCent(r), 0);
+  if (!summe) { toast("Hier ist nichts mehr offen"); return; }
+  const cent = betrag == null ? summe : Math.round(betrag * 100);
+  if (!Number.isFinite(cent) || cent <= 0) { toast("Betrag fehlt oder ist ungültig"); return; }
+  if (cent > summe) { toast(`Höchstens ${fmtEur(summe)} sind hier offen`); return; }
+  let rest = cent, n = 0;
+  for (const r of offene) {
+    if (rest <= 0) break;
+    const teil = Math.min(offenCent(r), rest);
+    r.ausglCent = (r.ausglCent || 0) + teil; rest -= teil; n++;
+    r.ausgeglichen = offenCent(r) === 0 ? datum : null;
+  }
+  const gebucht = cent - rest;
+  const [y, m] = datum.split("-").map(Number);
+  const umb = (sparte, text, richtung) => BUCHUNGEN.unshift({ id: ++BID, sparte, kat: umbKat(sparte).id, datum, y, m, typ: "umbuchung", umb: richtung, cent: gebucht, text, zahl, beleg: false });
+  umb(a.fuer, `Ausgleich Auslagen an ${S[a.von].name} (${n} Buchungen)`, "raus");
+  umb(a.von, `Ausgleich Auslagen von ${S[a.fuer].name} (${n} Buchungen)`, "rein");
+  closeDrill();
+  toast(`${zahl === "bar" ? "Bar" : "Überweisung"}: ${S[a.fuer].k} → ${S[a.von].k} über ${fmtEur(gebucht)} gebucht${gebucht < summe ? `, ${fmtEur(summe - gebucht)} bleiben offen` : ""}`);
+  render();
+}
+
+/* ---------- Barkassa je Sparte ----------
+   Gerechnet: Anfangsstand + Bankomat-Abhebungen + Bareinnahmen − Barausgaben ± Ausgleiche bar.
+   Wer privat bar für den Hof zahlt, belastet die eigene Kassa, nicht die des Hofs. */
+function kassaFluss(id, y) {
+  const f = { ein: 0, aus: 0, ab: 0, ausgl: 0 };
+  for (const b of BUCHUNGEN) {
+    if (b.y !== y || b.zahl !== "bar") continue;
+    if (b.typ === "einnahme" && b.sparte === id) f.ein += b.cent;
+    else if (b.typ === "ausgabe" && (b.bezahltVon || b.sparte) === id) f.aus += b.cent;
+    else if (b.typ === "umbuchung" && b.sparte === id) { if (b.text.startsWith("Bankomat")) f.ab += b.cent; else f.ausgl += b.umb === "rein" ? b.cent : -b.cent; }
+  }
+  return f;
+}
+// Anfangsstand 1. Jän. so gesetzt, dass die Demo-Kassa nie unter Null fällt
+const KASSA_START = {};
+for (const s of SPARTEN) {
+  let bal = 0, min = 0;
+  for (const b of BUCHUNGEN.filter(b => b.y === 2026 && b.zahl === "bar").sort((a, c) => a.datum.localeCompare(c.datum))) {
+    if (b.typ === "einnahme" && b.sparte === s.id) bal += b.cent;
+    else if (b.typ === "ausgabe" && (b.bezahltVon || b.sparte) === s.id) bal -= b.cent;
+    else if (b.typ === "umbuchung" && b.sparte === s.id) bal += b.umb === "rein" ? b.cent : -b.cent;
+    if (bal < min) min = bal;
+  }
+  KASSA_START[s.id] = Math.max(0, -min) + { 1: 0, 2: 4000, 3: 350000, 4: 30000, 5: 8000, 6: 6000 }[s.id];
+}
+function kassaStand(id) { const f = kassaFluss(id, 2026); return KASSA_START[id] + f.ein - f.aus + f.ab + f.ausgl; }
+function kassaHtml(id, compact) {
+  const f = kassaFluss(id, 2026), st = kassaStand(id);
+  if (compact) return `<div class="konto"><div><div class="kn">Kassa ${esc(S[id].name)}</div><div class="ks">Anfangsstand + Bankomat + Bareinnahmen − Barausgaben</div></div><div><div class="kv">${fmtEur(st)}</div><div class="kd">gerechnet, heute</div></div></div>`;
+  return `<div class="kassa"><div class="big">${fmtEur(st)}</div><div class="ln"><span>Anfangsstand 1. Jän. 2026</span><b>${fmtEur(KASSA_START[id])}</b></div><div class="ln"><span>+ Bankomat-Abhebungen</span><b>${fmtEur(f.ab)}</b></div><div class="ln"><span>+ Bareinnahmen</span><b>${fmtEur(f.ein)}</b></div><div class="ln"><span>− Barausgaben, auch privat vorgestreckte</span><b>${fmtEur(f.aus)}</b></div>${f.ausgl ? `<div class="ln"><span>± Ausgleiche bar</span><b>${fmtEur(f.ausgl, true)}</b></div>` : ""}<div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap"><button class="btn small" data-kassa="start">Anfangsstand ändern</button><button class="btn small" data-kassa="zaehlen">Kassa gezählt, Differenz buchen</button></div></div>`;
+}
+function wireKassa(el) { el.querySelectorAll("[data-kassa]").forEach(b => b.addEventListener("click", () => toast(b.dataset.kassa === "start" ? "Im echten System: Betrag und Datum eingeben, ab dort wird neu gerechnet" : "Im echten System: gezählten Betrag eingeben, die Differenz wird als „Kassadifferenz“ gebucht"))); }
+
+/* ---------- Formatierung ---------- */
+// Ein Formatierer für die ganze Datei statt einer pro Zahl: bei tausenden Zeilen spürbar.
+const EUR_FMT = new Intl.NumberFormat("de-AT", { style: "currency", currency: "EUR" });
+const fmtEur = (cent, sign) => { const v = cent / 100; const s = EUR_FMT.format(Math.abs(v)); return (sign && v > 0 ? "+" : v < 0 ? "−" : "") + s; };
+const fmtK = (cent) => { const v = cent / 100; return Math.abs(v) >= 1000 ? (v / 1000).toLocaleString("de-AT", { maximumFractionDigits: 1 }) + " k" : v.toLocaleString("de-AT", { maximumFractionDigits: 0 }); };
+const fmtPct = (p) => (p > 0 ? "+" : "") + Math.round(p * 100) + " %";
+const fmtDate = (isoS) => { const [y, m, d] = isoS.split("-"); return `${+d}. ${MON[+m - 1]} ${y.slice(2)}`; };
+const esc = (s) => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+/* Ein einziger Betragsparser für Schnellerfassung, Detailformular und Ausgleich.
+   Deutsch/österreichisch: „1.250“ = 1250, „14,80“ = 14,8. Ein einzelner Punkt mit
+   ein bis zwei Nachkommastellen wird als Dezimalpunkt gelesen („14.80“ = 14,8).
+   Tausenderpunkte gelten nur, wenn jede Gruppe genau drei Ziffern hat. */
+function parseBetrag(str) {
+  if (str == null) return null;
+  let s = String(str).replace(/\s+/g, "").replace(/(?:€|eur)$/i, "");
+  if (!s || !/^\d+(?:[.,]\d+)*$/.test(s)) return null;
+  const tausender = (t) => {
+    if (!t.includes(".")) return Number(t);
+    const p = t.split(".");
+    if (p[0].length < 1 || p[0].length > 3) return null;
+    for (let i = 1; i < p.length; i++) if (p[i].length !== 3) return null;
+    return Number(p.join(""));
+  };
+  const kommas = (s.match(/,/g) || []).length;
+  if (kommas > 1) return null;
+  if (kommas === 1) {
+    const [ganz, dez] = s.split(",");
+    if (!/^\d{1,2}$/.test(dez)) return null;
+    const g = tausender(ganz);
+    return g == null ? null : g + Number(dez) / Math.pow(10, dez.length);
+  }
+  const punkte = (s.match(/\./g) || []).length;
+  if (punkte === 0) return Number(s);
+  if (punkte === 1) { const [ganz, dez] = s.split("."); if (/^\d{1,2}$/.test(dez)) return Number(ganz) + Number(dez) / Math.pow(10, dez.length); }
+  return tausender(s);
+}
+const fmtBetragFeld = (euro) => euro.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+// Nicht-native klickbare Flächen (div/td/svg-g mit role="button") bekommen dieselbe
+// Tastaturbedienung wie ein echter Button: Enter oder Leertaste lösen den Klick aus.
+function alsButton(el, handler) {
+  el.addEventListener("click", handler);
+  el.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " " || e.key === "Spacebar") { e.preventDefault(); handler(e); } });
+}
+
+/* ---------- Zustand ---------- */
+const state = { page: "uebersicht", scope: "alle", jahr: 2026, richtung: "", zahl: "", kat: "", hideYears: new Set(JAHRE.slice(0, -4)), buLimit: 100, drillLimit: 300, quickSparte: 3, topTyp: "ausgabe", manualKat: false, katBestaetigt: false, betragManuell: false, hintsAlle: false, editId: null };
+
+function scopeSparten() {
+  if (state.scope === "alle") return SPARTEN.filter(s => !s.verein).map(s => s.id);
+  if (String(state.scope).startsWith("g-")) return GRUPPEN.find(g => g.id === state.scope).sparten;
+  return [+state.scope];
+}
+function scopeName() {
+  if (state.scope === "alle") return "Alle Sparten ohne Verein";
+  if (String(state.scope).startsWith("g-")) return GRUPPEN.find(g => g.id === state.scope).name;
+  return S[+state.scope].name;
+}
+function rows(opts = {}) {
+  const sp = opts.sparten || scopeSparten();
+  return BUCHUNGEN.filter(b => sp.includes(b.sparte) && (opts.includeUmb || b.typ !== "umbuchung") && (opts.jahr == null || b.y === opts.jahr) && (opts.ignoreFilter || ((!state.richtung || b.typ === state.richtung) && (!state.zahl || b.zahl === state.zahl) && (!state.kat || b.kat === +state.kat))) && (!opts.kat || b.kat === opts.kat) && (!opts.typ || b.typ === opts.typ) && (!opts.monat || b.m === opts.monat));
+}
+// „aktiv“ gilt nur für die Auswahl bei neuen Buchungen. Stillgelegte Kategorien
+// bleiben in Summen, Listen und Filtern, solange es Buchungen dazu gibt.
+const katStillPill = (k) => k.aktiv ? "" : ' <span class="pill est">stillgelegt</span>';
+const hatBuchungen = (kid) => BUCHUNGEN.some(b => b.kat === kid);
+function katsFuerFilter(sp) { return KATS.filter(k => sp.includes(k.sparte) && (k.aktiv || hatBuchungen(k.id))); }
+const katFilterLabel = (k, multi) => esc(k.name) + (multi ? " · " + S[k.sparte].k : "") + (k.aktiv ? "" : " (stillgelegt)");
+const sum = (rs, typ) => rs.filter(b => !typ || b.typ === typ).reduce((a, b) => a + b.cent, 0);
+const hoch = (cent, y) => y === 2026 ? Math.round(cent * 12 / MONATE_VERGANGEN) : cent;
+// Hochrechnung nach Saison: was heuer schon da ist, plus das Vorjahr ab dem Stichtag
+const restVorjahr = (prev, typ) => prev.filter(b => b.datum.slice(5) > CUT_MD && (!typ || b.typ === typ)).reduce((a, b) => a + b.cent, 0);
+const proj = (cur, prev, typ, y) => sum(cur, typ) + (y === 2026 ? restVorjahr(prev, typ) : 0);
+
+/* ---------- Navigation ---------- */
+const $ = (s) => document.querySelector(s);
+function go(page, scope) {
+  // Wer die Erfassen-Seite mit offenem Bearbeiten verlässt, verwirft die Änderung.
+  if (state.editId && state.page === "erfassen" && page !== "erfassen") { endEdit(); toast("Bearbeiten abgebrochen"); }
+  state.page = page; if (scope !== undefined) state.scope = scope;
+  document.querySelectorAll(".page").forEach(p => p.hidden = p.id !== "page-" + page);
+  document.querySelectorAll(".nav-item[data-go], .bnav button[data-go]").forEach(b => b.classList.toggle("active", b.dataset.go === page && page !== "sparte"));
+  document.querySelectorAll("#nav-sparten .nav-item, #nav-gruppen .nav-item").forEach(b => b.classList.toggle("active", page === "sparte" && b.dataset.scope === String(state.scope)));
+  syncScopeSelects();
+  const toolsOn = ["uebersicht", "sparte", "buchungen"].includes(page);
+  $("#top-tools").style.display = toolsOn ? "" : "none";
+  const filtersOpen = toolsOn && $("#filters").dataset.open === "1";
+  $("#filters").classList.toggle("open", filtersOpen);
+  $("#filter-toggle").setAttribute("aria-expanded", String(filtersOpen));
+  const titles = { uebersicht: "Übersicht", sparte: scopeName(), erfassen: "Erfassen", buchungen: "Buchungen", kategorien: "Kategorien", belege: "Belege", bankimport: "Bankimport", excel: "Excel-Import", export: "Export" };
+  $("#page-title").textContent = titles[page];
+  const restTxt = state.jahr === 2026 ? " · bis 8. September echt, Rest nach Vorjahresverlauf" : "";
+  const scopes = { uebersicht: `${state.jahr} · ${scopeName()}${restTxt}`, sparte: `${state.jahr} · ${S[+state.scope] ? S[+state.scope].k : "Gruppe"}${restTxt}`, buchungen: `${state.jahr} · ${scopeName()}`, erfassen: "Sparte bleibt gemerkt, Kategorie kommt von selbst", kategorien: "je Sparte, mit Stichwörtern", belege: "Fotos deiner Rechnungen", bankimport: "Konten, Kontoauszüge, Zuordnung", excel: "alte Kassabücher übernehmen", export: "für Steuerberater und Ablage" };
+  $("#page-scope").textContent = scopes[page] || "";
+  fillKatFilter();
+  syncFilterUi();
+  render();
+  window.scrollTo({ top: 0 });
+  closeSheet();
+}
+function render() {
+  const p = state.page;
+  if (p === "uebersicht") renderUebersicht();
+  if (p === "sparte") renderSparte();
+  if (p === "buchungen") renderBuchungen();
+  if (p === "erfassen") renderErfassen();
+  if (p === "kategorien") renderKategorien();
+  if (p === "belege") renderBelege();
+  if (p === "bankimport") renderBank();
+  if (p === "export") renderExport();
+}
+// Sparten-Auswahl als Dropdown: oben neben dem Jahr (auch am Handy sichtbar) und in der Buchungen-Filterzeile
+function scopeOptionsHtml() {
+  return `<option value="alle">Alle Sparten ohne Verein</option>` + SPARTEN.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join("") + `<optgroup label="Zusammen">` + GRUPPEN.map(g => `<option value="${g.id}">${esc(g.name)}</option>`).join("") + `</optgroup>`;
+}
+function syncScopeSelects() { ["scopesel", "bu-scope"].forEach(id => { const el = $("#" + id); if (el) el.value = String(state.scope); }); }
+function onScopeChange(v) { const p = state.page; if (v === "alle") go(p === "sparte" ? "uebersicht" : p, "alle"); else go(p === "uebersicht" ? "sparte" : p, v); }
+// Gruppen in der Sidebar (und in den Sparten-Dropdowns) neu aufbauen, z. B. nach „+ Gruppe anlegen“
+function renderGruppenNav() {
+  $("#nav-gruppen").innerHTML = GRUPPEN.map(g => `<button class="nav-item sub" data-scope="${g.id}" title="${esc(g.sparten.map(id => S[id].name).join(" + "))}">${esc(g.name)}</button>`).join("");
+  $("#nav-gruppen").querySelectorAll(".nav-item").forEach(b => b.addEventListener("click", () => go("sparte", b.dataset.scope)));
+  ["scopesel", "bu-scope"].forEach(id => { const el = $("#" + id); if (el) { const v = el.value; el.innerHTML = scopeOptionsHtml(); el.value = v; } });
+}
+function openGruppeDialog() {
+  $("#dd-title").textContent = "Gruppe anlegen";
+  $("#dd-sub").textContent = "Mehrere Sparten zusammen betrachten, z. B. Hof und Ferienhaus als ein Betrieb";
+  $("#dd-sum").innerHTML = `<div class="settle"><label class="field">Name der Gruppe<input id="gr-name" placeholder="z. B. Hof und Ferienhaus"></label><button class="btn primary" id="gr-go" style="margin-left:auto">Gruppe anlegen</button></div>`;
+  $("#dd-table").innerHTML = `<thead><tr><th></th><th>Sparte</th></tr></thead><tbody>` + SPARTEN.filter(s => !s.verein).map(s => `<tr><td><input type="checkbox" data-id="${s.id}" aria-label="${esc(s.name)} aufnehmen"></td><td style="text-align:left"><span class="sdot" style="--dot:${s.c};display:inline-block;vertical-align:middle;margin-right:8px"></span>${esc(s.name)}</td></tr>`).join("") + `</tbody>`;
+  $("#gr-go").addEventListener("click", () => {
+    const name = $("#gr-name").value.trim(); const ids = [...$("#dd-table").querySelectorAll("input:checked")].map(cb => +cb.dataset.id);
+    if (!name || ids.length < 2) { toast("Name und mindestens zwei Sparten wählen"); return; }
+    const id = "g-" + Date.now(); GRUPPEN.push({ id, name, sparten: ids }); renderGruppenNav(); closeDrill(); toast(`Gruppe „${name}“ angelegt`); go("sparte", id);
+  });
+  if (typeof openDD === "function") openDD(); else { $("#dd").classList.add("open"); $("#dd-back").classList.add("open"); document.body.style.overflow = "hidden"; }
+  setTimeout(() => $("#gr-name").focus(), 50);
+}
+function buildNav() {
+  ["scopesel", "bu-scope"].forEach(id => { $("#" + id).innerHTML = scopeOptionsHtml(); $("#" + id).addEventListener("change", e => onScopeChange(e.target.value)); });
+  $("#nav-sparten").innerHTML = SPARTEN.map(s => `<button class="nav-item" data-scope="${s.id}" style="--dot:${s.c}"><span class="dot"></span>${esc(s.name)}${s.verein ? '<span class="cnt">eigen</span>' : ""}</button>`).join("");
+  renderGruppenNav();
+  document.querySelectorAll("#nav-sparten .nav-item").forEach(b => b.addEventListener("click", () => go("sparte", b.dataset.scope)));
+  $("#nav-gruppe-neu").addEventListener("click", openGruppeDialog);
+  // Seitenwechsel behält die gewählte Sparte; nur „Übersicht“ geht auf alle zurück.
+  // Sidebar, Bottom-Navigation und mobiles Menü verhalten sich gleich.
+  document.querySelectorAll(".nav-item[data-go], .bnav button[data-go]").forEach(b => b.addEventListener("click", () => go(b.dataset.go, b.dataset.go === "uebersicht" ? "alle" : undefined)));
+  $("#yearseg").innerHTML = JAHRE.map(y => `<button data-y="${y}" class="${y === state.jahr ? "active" : ""}" aria-pressed="${y === state.jahr}">${y}${y === 2026 ? '<span class="est">≈</span>' : ""}</button>`).join("");
+  $("#yearseg").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; state.jahr = +b.dataset.y; document.querySelectorAll("#yearseg button").forEach(x => { const on = +x.dataset.y === state.jahr; x.classList.toggle("active", on); x.setAttribute("aria-pressed", String(on)); }); go(state.page, state.scope); });
+  $("#filter-toggle").addEventListener("click", () => { const f = $("#filters"); f.dataset.open = f.dataset.open === "1" ? "0" : "1"; const open = f.dataset.open === "1"; f.classList.toggle("open", open); $("#filter-toggle").setAttribute("aria-expanded", String(open)); });
+  ["f-richtung", "f-zahlung", "f-kat"].forEach(id => $("#" + id).addEventListener("change", () => { state.richtung = $("#f-richtung").value; state.zahl = $("#f-zahlung").value; state.kat = $("#f-kat").value; syncFilterUi(); render(); }));
+  $("#filter-reset").addEventListener("click", filterReset);
+  $("#theme-toggle").addEventListener("click", () => { const r = document.documentElement; const light = r.getAttribute("data-theme") === "light"; r.setAttribute("data-theme", light ? "dark" : "light"); try { localStorage.setItem("hf-theme", light ? "dark" : "light"); } catch (e) { } });
+  try { const t = localStorage.getItem("hf-theme"); if (t) document.documentElement.setAttribute("data-theme", t); } catch (e) { }
+  if (!document.documentElement.getAttribute("data-theme")) document.documentElement.setAttribute("data-theme", "dark");
+  // Werkzeuge einklappbar, Zustand gemerkt
+  const setTools = (open) => { $("#nav-tools").hidden = !open; $("#tools-toggle").setAttribute("aria-expanded", String(open)); $("#tools-toggle").querySelector(".chev").textContent = open ? "▾" : "▸"; };
+  $("#tools-toggle").addEventListener("click", () => { const open = $("#nav-tools").hidden; setTools(open); try { localStorage.setItem("hf-tools", open ? "1" : "0"); } catch (e) { } });
+  try { if (localStorage.getItem("hf-tools") === "0") setTools(false); } catch (e) { }
+  // Größte Posten: Ausgaben oder Einnahmen
+  $("#topseg").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; state.topTyp = b.dataset.t; document.querySelectorAll("#topseg button").forEach(x => { const on = x.dataset.t === state.topTyp; x.classList.toggle("active", on); x.setAttribute("aria-pressed", String(on)); }); renderUebersicht(); });
+  // Mobil
+  $("#bn-sparten").addEventListener("click", () => openSheet(SPARTEN.map(s => `<button class="nav-item" data-scope="${s.id}" style="--dot:${s.c}"><span class="dot"></span>${esc(s.name)}</button>`).join("") + GRUPPEN.map(g => `<button class="nav-item sub" data-scope="${g.id}">${esc(g.name)}</button>`).join(""), true));
+  $("#bn-mehr").addEventListener("click", () => openSheet(["kategorien", "belege", "bankimport", "excel", "export"].map(p => `<button class="nav-item" data-go="${p}">${{ kategorien: "Kategorien", belege: "Belege", bankimport: "Bankimport", excel: "Excel-Import", export: "Export" }[p]}</button>`).join("") + `<button class="nav-item" id="sheet-theme">Hell / Dunkel</button>`));
+  $("#sheet-back").addEventListener("click", closeSheet);
+}
+// Gleiche Behandlung wie beim Drilldown: hidden/inert beim Öffnen weg, Fokus aufs erste
+// Element; beim Schließen Fokus zurück auf den Auslöser, hidden/inert erst nach der Transition.
+let sheetOpener = null, sheetHideTimer = null;
+function openSheet(html, sparten) {
+  sheetOpener = document.activeElement;
+  const sh = $("#sheet"); sh.innerHTML = html;
+  clearTimeout(sheetHideTimer);
+  sh.hidden = false; sh.inert = false;
+  setTimeout(() => { sh.classList.add("open"); $("#sheet-back").classList.add("open"); }, 0);
+  sh.querySelectorAll("[data-scope]").forEach(b => b.addEventListener("click", () => go("sparte", b.dataset.scope)));
+  sh.querySelectorAll("[data-go]").forEach(b => b.addEventListener("click", () => go(b.dataset.go, b.dataset.go === "uebersicht" ? "alle" : undefined)));
+  const t = sh.querySelector("#sheet-theme"); if (t) t.addEventListener("click", () => { $("#theme-toggle").click(); closeSheet(); });
+  const first = sh.querySelector("button, [href], input, select, textarea, [tabindex]");
+  if (first && first.focus) first.focus();
+}
+function closeSheet() {
+  const sh = $("#sheet");
+  sh.classList.remove("open"); $("#sheet-back").classList.remove("open");
+  clearTimeout(sheetHideTimer);
+  sheetHideTimer = setTimeout(() => { sh.hidden = true; sh.inert = true; }, 220);
+  if (sheetOpener && sheetOpener.focus) sheetOpener.focus();
+  sheetOpener = null;
+}
+function fillKatFilter() {
+  const sp = scopeSparten();
+  const kats = katsFuerFilter(sp);
+  const opts = '<option value="">Alle</option>' + kats.map(k => `<option value="${k.id}">${katFilterLabel(k, sp.length > 1)}</option>`).join("");
+  $("#f-kat").innerHTML = opts; $("#f-kat").value = state.kat && kats.some(k => k.id === +state.kat) ? state.kat : "";
+  if (!kats.some(k => k.id === +state.kat)) state.kat = "";
+}
+// Aktive Filter bleiben sichtbar, auch wenn die Filterleiste eingeklappt ist.
+function filterAktivText() {
+  const t = [];
+  if (state.richtung) t.push(state.richtung === "einnahme" ? "nur Einnahmen" : "nur Ausgaben");
+  if (state.zahl) t.push({ bank: "nur Bank", bar: "nur Bar", karte: "nur Karte" }[state.zahl]);
+  if (state.kat && K[+state.kat]) t.push("Kategorie " + K[+state.kat].name);
+  return t.join(" · ");
+}
+function syncFilterUi() { const t = filterAktivText(); $("#filter-toggle").textContent = t ? "Filter aktiv: " + t : "Mehr Filter"; }
+function filterReset() { state.richtung = state.zahl = state.kat = ""; $("#f-richtung").value = $("#f-zahlung").value = $("#f-kat").value = ""; syncFilterUi(); render(); }
+
+/* ---------- Diagramme (SVG, ohne Bibliothek) ---------- */
+function sparkline(vals, prev, color) {
+  const w = 300, h = 44, all = vals.concat(prev).filter(v => v != null);
+  const max = Math.max(1, ...all), n = 12;
+  const pt = (arr) => arr.map((v, i) => v == null ? null : [i / (n - 1) * w, h - 4 - (v / max) * (h - 10)]);
+  const line = (pts) => pts.filter(Boolean).map((p, i) => (i ? "L" : "M") + p[0].toFixed(1) + " " + p[1].toFixed(1)).join(" ");
+  const cur = pt(vals), pv = pt(prev);
+  const curPts = cur.filter(Boolean); const last = curPts[curPts.length - 1];
+  const area = curPts.length ? line(curPts) + ` L${last[0].toFixed(1)} ${h} L${curPts[0][0].toFixed(1)} ${h} Z` : "";
+  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true">
+    <path d="${line(pv)}" fill="none" stroke="var(--line-strong)" stroke-width="1.5" stroke-dasharray="3 3"/>
+    <path d="${area}" fill="${color}" opacity=".14"/>
+    <path d="${line(curPts)}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round"/>
+    ${last ? `<circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="3" fill="${color}" stroke="var(--panel)" stroke-width="2"/>` : ""}
+  </svg>`;
+}
+function monthlyChart(el, ein, aus, jahr, W = 900) {
+  const H = 260, padL = 52, padR = 12, padT = 14, padB = 30;
+  const iw = W - padL - padR, ih = H - padT - padB;
+  const saldo = ein.map((e, i) => e - aus[i]);
+  const maxV = Math.max(1, ...ein, ...aus), minS = Math.min(0, ...saldo);
+  const top = maxV * 1.08, bottom = minS * 1.08;
+  const y = (v) => padT + (top - v) / (top - bottom) * ih;
+  const slot = iw / 12, bw = Math.min(26, slot * 0.32);
+  const ticks = niceTicks(bottom, top, 5);
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Einnahmen und Ausgaben je Monat">`;
+  for (const t of ticks) s += `<line x1="${padL}" x2="${W - padR}" y1="${y(t)}" y2="${y(t)}" stroke="var(--grid)"/><text x="${padL - 8}" y="${y(t) + 4}" text-anchor="end" font-size="11" fill="var(--muted)">${fmtK(t)}</text>`;
+  s += `<line x1="${padL}" x2="${W - padR}" y1="${y(0)}" y2="${y(0)}" stroke="var(--line-strong)"/>`;
+  // September ist angefangen, nicht leer: er wird normal gezeichnet und ist anklickbar.
+  const future = (i) => jahr === 2026 && i > 8;
+  const angefangen = (i) => jahr === 2026 && i === 8;
+  for (let i = 0; i < 12; i++) {
+    const cx = padL + slot * i + slot / 2;
+    const eH = y(0) - y(ein[i]), aH = y(0) - y(aus[i]);
+    const mgLabel = `${esc(MON_LANG[i])} ${jahr}${future(i) ? ", noch keine Daten" : `, Einnahmen ${fmtEur(ein[i])}, Ausgaben ${fmtEur(aus[i])}, Buchungen zeigen`}`;
+    s += `<g class="mg" data-i="${i}" opacity="${future(i) ? .25 : 1}" tabindex="0" role="button" aria-label="${mgLabel}">
+      <rect x="${cx - bw - 1}" y="${y(ein[i])}" width="${bw}" height="${Math.max(0, eH)}" rx="3" fill="var(--ein)"/>
+      <rect x="${cx + 1}" y="${y(aus[i])}" width="${bw}" height="${Math.max(0, aH)}" rx="3" fill="var(--aus)"/>
+      <text x="${cx}" y="${H - 10}" text-anchor="middle" font-size="11.5" fill="var(--muted)">${MON[i]}</text>
+      <rect class="hit" x="${padL + slot * i}" y="${padT}" width="${slot}" height="${ih}" fill="transparent"/></g>`;
+  }
+  const pts = saldo.map((v, i) => future(i) ? null : [padL + slot * i + slot / 2, y(v)]).filter(Boolean);
+  s += `<path d="${pts.map((p, i) => (i ? "L" : "M") + p[0] + " " + p[1]).join(" ")}" fill="none" stroke="var(--ink)" stroke-width="2" stroke-linejoin="round"/>`;
+  pts.forEach(p => s += `<circle cx="${p[0]}" cy="${p[1]}" r="3.5" fill="var(--ink)" stroke="var(--panel)" stroke-width="2"/>`);
+  s += `</svg><div class="tip"></div>`;
+  el.innerHTML = s;
+  const tip = el.querySelector(".tip");
+  el.querySelectorAll(".mg").forEach(gEl => {
+    gEl.addEventListener("mousemove", (ev) => {
+      const i = +gEl.dataset.i; const r = el.getBoundingClientRect();
+      tip.style.display = "block"; tip.style.left = Math.min(r.width - 170, ev.clientX - r.left + 12) + "px"; tip.style.top = (ev.clientY - r.top - 10) + "px";
+      tip.innerHTML = `<b>${MON_LANG[i]} ${jahr}</b><div class="row"><span>Einnahmen</span><span class="ein">${fmtEur(ein[i])}</span></div><div class="row"><span>Ausgaben</span><span class="aus">${fmtEur(aus[i])}</span></div><div class="row"><span>Saldo</span><span>${fmtEur(saldo[i], true)}</span></div>${future(i) ? '<div class="muted">noch keine Daten</div>' : angefangen(i) ? '<div class="muted">bis 8. Sept.</div>' : ""}`;
+    });
+    gEl.addEventListener("mouseleave", () => tip.style.display = "none");
+    alsButton(gEl, () => { if (!future(+gEl.dataset.i)) drill({ monat: +gEl.dataset.i + 1, jahr }); });
+  });
+}
+function niceTicks(lo, hi, n) { const span = hi - lo, raw = span / n, mag = Math.pow(10, Math.floor(Math.log10(raw))), norm = raw / mag, step = (norm < 1.5 ? 1 : norm < 3 ? 2 : norm < 7 ? 5 : 10) * mag; const out = []; for (let v = Math.ceil(lo / step) * step; v <= hi; v += step) out.push(v); return out; }
+function monthSeries(rs) { const e = Array(12).fill(0), a = Array(12).fill(0); for (const b of rs) { if (b.typ === "einnahme") e[b.m - 1] += b.cent; else if (b.typ === "ausgabe") a[b.m - 1] += b.cent; } return { e, a }; }
+
+/* ---------- Übersicht ---------- */
+function kpiCard(label, cur, prev, color, series, prevSeries, isSaldo) {
+  const delta = prev ? (cur - prev) / Math.abs(prev) : null;
+  const cls = delta == null ? "flat" : (isSaldo || label === "Einnahmen") ? (delta >= 0 ? "up" : "down") : (delta <= 0 ? "up" : "down");
+  const est = state.jahr === 2026 ? `<span class="pill est" title="bis 8. September echt, der Rest folgt dem Verlauf des Vorjahres. So zählen AMA-Förderung im November und die Sommersaison richtig.">≈ Jahr nach Vorjahresverlauf</span>` : "";
+  return `<div class="card kpi"><div class="lbl"><span>${label} ${state.jahr}</span>${est}</div><div class="val" style="color:${color}">${fmtEur(cur, isSaldo)}</div>
+    <div class="delta">${delta == null ? '<span class="pill flat">kein Vorjahr</span>' : `<span class="pill ${cls}">${fmtPct(delta)}</span><span>gegenüber ${state.jahr - 1}: <b>${fmtEur(prev, isSaldo)}</b></span>`}</div>
+    ${sparkline(series, prevSeries, color)}</div>`;
+}
+function renderUebersicht() {
+  const y = state.jahr, cur = rows({ jahr: y }), prev = rows({ jahr: y - 1 });
+  const Ep = sum(prev, "einnahme"), Ap = sum(prev, "ausgabe");
+  const E = proj(cur, prev, "einnahme", y), A = proj(cur, prev, "ausgabe", y);
+  const ms = monthSeries(cur), mp = monthSeries(prev);
+  const cut = (arr) => arr.map((v, i) => (y === 2026 && i > 8) ? null : v);
+  $("#kpis").innerHTML = kpiCard("Einnahmen", E, Ep, "var(--ein)", cut(ms.e), mp.e) + kpiCard("Ausgaben", A, Ap, "var(--aus)", cut(ms.a), mp.a) + kpiCard("Saldo", E - A, Ep - Ap, "var(--ink)", cut(ms.e.map((v, i) => v - ms.a[i])), mp.e.map((v, i) => v - mp.a[i]), true);
+  // Die Sparten-Kacheln rechnen bewusst ohne Filter. Wenn welche aktiv sind, steht das da.
+  const aktiveFilter = filterAktivText();
+  $("#tiles-title").textContent = aktiveFilter ? "Sparten · Filter gelten hier nicht" : "Sparten";
+  const fnote = $("#filter-note"); fnote.hidden = !aktiveFilter;
+  if (aktiveFilter) { fnote.innerHTML = `<span>Filter aktiv: <b>${esc(aktiveFilter)}</b> — die drei Zahlen oben zeigen nur diese Buchungen.</span><button class="lnk" id="filter-note-reset">zurücksetzen</button>`; $("#filter-note-reset").addEventListener("click", filterReset); }
+  $("#verlauf-hint").textContent = y === 2026 ? "ab Oktober noch leer · Klick auf einen Monat zeigt die Buchungen" : "Klick auf einen Monat zeigt die Buchungen";
+  monthlyChart($("#verlauf"), ms.e, ms.a, y, 620);
+  const t = state.topTyp; renderTop($("#top"), cur, t, 8, t === "ausgabe" ? "var(--aus)" : "var(--ein)");
+  $("#top-hint").textContent = `Anteil an allen ${t === "ausgabe" ? "Ausgaben" : "Einnahmen"} ${y} · Klick zeigt die Buchungen`;
+  renderHints(cur, prev, y);
+  renderAuslagen($("#auslagen"), null);
+  renderKonten();
+  const tiles = SPARTEN.filter(s => !s.verein).map(s => tileHtml(s, y));
+  const z = S[4]; const zr = rows({ sparten: [4], jahr: y, ignoreFilter: true }); const zE = sum(zr, "einnahme"), zA = sum(zr, "ausgabe");
+  $("#tiles").innerHTML = tiles.join("") + `<button class="tile zina" data-scope="4" style="--dot:${z.c}"><div class="tn">${z.name} <small>Verein, zählt nicht in den Gesamtzahlen</small></div><div class="tea"><span class="ein">${fmtEur(zE)}</span><span class="aus">${fmtEur(zA)}</span></div><div class="tv">${fmtEur(zE - zA, true)}${y === 2026 ? ' <small class="muted">bisher</small>' : ""}</div></button>`;
+  $("#tiles").querySelectorAll(".tile").forEach(t => t.addEventListener("click", () => go("sparte", t.dataset.scope)));
+}
+function tileHtml(s, y) {
+  const r = rows({ sparten: [s.id], jahr: y, ignoreFilter: true }); const E = sum(r, "einnahme"), A = sum(r, "ausgabe"); const tot = E + A || 1;
+  return `<button class="tile" data-scope="${s.id}" style="--dot:${s.c}"><div class="tn"><span class="sdot"></span>${esc(s.name)}</div><div class="tv">${fmtEur(E - A, true)}${y === 2026 ? ' <small class="muted">bisher</small>' : ""}</div><div class="tea"><span><span class="ein">+</span> ${fmtEur(E)}</span><span><span class="aus">−</span> ${fmtEur(A)}</span></div><div class="bar"><i style="width:${E / tot * 100}%;background:var(--ein)"></i><i style="width:${A / tot * 100}%;background:var(--aus)"></i></div></button>`;
+}
+function renderTop(el, rs, typ, n, color) {
+  const byKat = {}; for (const b of rs) if (b.typ === typ) byKat[b.kat] = (byKat[b.kat] || 0) + b.cent;
+  const tot = Object.values(byKat).reduce((a, b) => a + b, 0) || 1;
+  const list = Object.entries(byKat).sort((a, b) => b[1] - a[1]).slice(0, n); const max = list.length ? list[0][1] : 1;
+  const multi = scopeSparten().length > 1;
+  el.innerHTML = list.length ? list.map(([id, v]) => { const k = K[id], s = S[k.sparte]; return `<div class="hbar" data-kat="${id}" style="--fc:${color}" tabindex="0" role="button" aria-label="${esc(k.name)}, ${fmtEur(v)}, Buchungen zeigen"><div class="name"><span class="sdot" style="--dot:${s.c}"></span><span>${esc(k.name)}</span>${multi ? `<span class="tag">${s.k}</span>` : ""}</div><div class="track"><div class="fill" style="width:${v / max * 100}%"></div></div><div class="v">${fmtEur(v)}</div><div class="p">${Math.round(v / tot * 100)} %</div></div>`; }).join("") : '<p class="muted">Keine Buchungen im Zeitraum.</p>';
+  el.querySelectorAll(".hbar").forEach(h => alsButton(h, () => drill({ kat: +h.dataset.kat, typ, jahr: state.jahr })));
+}
+// Hinweise: jeder hat einen Schlüssel; weggeklickte bleiben weg, bis sich die Sache ändert
+let hintsOff = new Set(); try { hintsOff = new Set(JSON.parse(localStorage.getItem("hf-hints-off") || "[]")); } catch (e) { }
+function hintOff(key) { hintsOff.add(key); try { localStorage.setItem("hf-hints-off", JSON.stringify([...hintsOff])); } catch (e) { } render(); }
+function renderHints(cur, prev, y) {
+  const hints = [];
+  const sp = scopeSparten(), multi = sp.length > 1;
+  const label = (k) => esc(k.name) + (multi ? ` (${S[k.sparte].k})` : "");
+  // 1) Stärkster Kostenanstieg, nach Saison hochgerechnet
+  const byK = (rs) => { const o = {}; for (const b of rs) if (b.typ === "ausgabe") o[b.kat] = (o[b.kat] || 0) + b.cent; return o; };
+  const a = byK(cur), p = byK(prev), rest = y === 2026 ? byK(prev.filter(b => b.datum.slice(5) > CUT_MD)) : {}; let best = null;
+  for (const id in a) { const h = a[id] + (rest[id] || 0); if (p[id] > 40000 && h > p[id] * 1.15 && (!best || h - p[id] > best.d)) best = { id, d: h - p[id], pct: (h - p[id]) / p[id] }; }
+  // Die Schlüssel tragen die Zahl mit, um die es geht: ändert sie sich deutlich,
+  // ist es ein neuer Hinweis und er erscheint wieder.
+  if (best) hints.push({ key: `anstieg:${best.id}:${y}:${Math.round(best.pct * 20) * 5}`, c: "var(--crit)", ic: "up", t: `<b>${label(K[best.id])}</b> liegt ${y === 2026 ? "hochgerechnet " : ""}${fmtPct(best.pct)} über ${y - 1}, das sind ${fmtEur(best.d)} mehr.`, go: () => drill({ kat: +best.id, typ: "ausgabe", jahr: y }) });
+  // 2) Regelmäßige Einnahme fehlt, gemeldet erst fünf Tage nach dem üblichen Zahltag
+  if (y === 2026) for (const k of KATS) {
+    if (!sp.includes(k.sparte) || k.richtung !== "einnahme") continue;
+    const pv = prev.filter(b => b.kat === k.id); const months = new Set(pv.map(b => b.m));
+    if (months.size < 11 || cur.some(b => b.kat === k.id && b.m === 9)) continue;
+    const days = pv.map(b => +b.datum.slice(8)).sort((x, z) => x - z); const usual = days[Math.floor(days.length / 2)];
+    if (HEUTE.getDate() < usual + 5) continue;
+    hints.push({ key: `fehlt:${k.id}:${y}-9`, c: "var(--warn)", ic: "clock", t: `<b>${label(k)}</b> ist für September noch nicht da. Sonst kommt sie um den ${usual}. des Monats.`, go: () => drill({ kat: k.id, jahr: y }) });
+  }
+  // 3) Offene Auslagen: wer schuldet wem
+  for (const au of auslagenOffen().filter(x => sp.includes(x.fuer) || sp.includes(x.von)).slice(0, 1)) hints.push({ key: `auslage:${au.von}|${au.fuer}:${au.cent}`, c: "var(--warn)", ic: "hand", t: `<b>${esc(S[au.fuer].name)}</b> schuldet ${esc(S[au.von].name)} ${fmtEur(au.cent)} an privat bezahlten Auslagen (${au.rows.length} Buchungen).`, go: () => drill({ rows: au.rows, title: "Offene Auslagen", sub: `${S[au.von].name} für ${S[au.fuer].name} · noch nicht ausgeglichen` }) });
+  // 4) Größte Einzelbuchung
+  const big = cur.filter(b => b.typ === "ausgabe").sort((x, z) => z.cent - x.cent)[0];
+  if (big) hints.push({ key: `gross:${big.id}`, c: "var(--info)", ic: "star", t: `Größte Einzelausgabe: <b>${esc(big.text)}</b> mit ${fmtEur(big.cent)} am ${fmtDate(big.datum)} (${label(K[big.kat])}).`, go: () => drill({ kat: big.kat, jahr: y }) });
+  // 5) Offene Bankumsätze
+  hints.push({ key: "bank:offen", c: "var(--info)", ic: "bank", t: `<b>14 Bankumsätze</b> warten auf deine Zuordnung, 9 davon mit Vorschlag.`, go: () => go("bankimport"), lbl: "Zum Bankimport" });
+  // 6) Anteil der größten Ausgabenkategorie
+  const tot = Object.values(a).reduce((s, v) => s + v, 0); const topK = Object.entries(a).sort((x, z) => z[1] - x[1])[0];
+  if (topK && tot) hints.push({ key: `anteil:${topK[0]}:${y}:${Math.round(topK[1] / tot * 20) * 5}`, c: "var(--muted)", ic: "pie", t: `<b>${label(K[topK[0]])}</b> macht ${Math.round(topK[1] / tot * 100)} % aller Ausgaben aus.`, go: () => drill({ kat: +topK[0], typ: "ausgabe", jahr: y }) });
+  const icons = { up: '<path d="M3 12l4-5 3 3 5-6"/><path d="M11 4h4v4"/>', hand: '<path d="M4 9V4.5a1 1 0 012 0V8M6 8V3a1 1 0 012 0v5M8 8V4a1 1 0 012 0v4M10 9V5.5a1 1 0 012 0V10c0 2.5-1.8 4-4 4s-4-1.5-4-4V9"/>', clock: '<circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 2"/>', star: '<path d="M8 2l1.8 3.8 4.2.6-3 2.9.7 4.2L8 11.5l-3.7 2 .7-4.2-3-2.9 4.2-.6z"/>', bank: '<path d="M2 6l6-4 6 4M3 6v7M13 6v7M2 13h12M6 7v5M10 7v5"/>', pie: '<circle cx="8" cy="8" r="6"/><path d="M8 2v6h6"/>' };
+  // Alle Hinweise sind erreichbar: die ersten fünf stehen da, der Rest hinter einem Knopf.
+  const visible = hints.filter(h => !hintsOff.has(h.key));
+  const show = state.hintsAlle ? visible : visible.slice(0, 5);
+  const weitere = visible.length - show.length; const hidden = hints.length - visible.length;
+  const foot = [];
+  if (weitere) foot.push(`<button class="lnk" id="hints-more">${weitere} weitere ${weitere === 1 ? "Hinweis" : "Hinweise"}</button>`);
+  else if (state.hintsAlle && visible.length > 5) foot.push(`<button class="lnk" id="hints-less">weniger zeigen</button>`);
+  if (hidden) foot.push(`<button class="lnk" id="hints-show">${hidden} ausgeblendete wieder zeigen</button>`);
+  $("#hints").innerHTML = (show.length ? show.map((h, i) => `<div class="hint-row" style="--hc:${h.c}"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">${icons[h.ic]}</svg><div>${h.t}</div><button class="go" data-i="${i}">${h.lbl || "Buchungen zeigen"}</button><button class="x" data-off="${h.key}" title="ausblenden, bis sich die Zahl ändert" aria-label="Hinweis ausblenden">×</button></div>`).join("") : '<p class="muted">Nichts Auffälliges. Was du weggeklickt hast, kommt wieder, sobald sich die Zahl ändert.</p>') + (foot.length ? `<div class="hints-foot">${foot.join(" · ")}</div>` : "");
+  $("#hints").querySelectorAll(".go").forEach(b => b.addEventListener("click", () => show[+b.dataset.i].go()));
+  $("#hints").querySelectorAll(".x").forEach(b => b.addEventListener("click", () => hintOff(b.dataset.off)));
+  const hm = $("#hints-more"); if (hm) hm.addEventListener("click", () => { state.hintsAlle = true; render(); });
+  const hl = $("#hints-less"); if (hl) hl.addEventListener("click", () => { state.hintsAlle = false; render(); });
+  const hs = $("#hints-show"); if (hs) hs.addEventListener("click", () => { hintsOff.clear(); try { localStorage.removeItem("hf-hints-off"); } catch (e) { } render(); });
+}
+// Kontostände: Saldo laut Kontoauszug (PDF hat alten und neuen Saldo) oder einmal eingegeben, dann plus Umsätze seither
+const KONTEN = [
+  { name: "Girokonto Sparkasse", basis: "Saldo laut Kontoauszug 31. Aug. + 12 Umsätze seither · Privat A", saldo: 431280, stand: "3. Sept.", alter: 5 },
+  { name: "s MasterCard Platinum", kind: "Kreditkarte ···3129", basis: "Saldo laut Abrechnung 30. Juni + 31 Einzelkäufe seither", saldo: -61240, stand: "12. Juli", alter: 58 },
+  { name: "Flatex Cashkonto", basis: "von dir eingegeben am 2. Sept. · Überweisungen dorthin sind Umbuchungen", saldo: 1200000, stand: "2. Sept.", alter: 6 },
+];
+function renderKonten() {
+  $("#konten").innerHTML = KONTEN.map(k => `<div class="konto"><div><div class="kn">${esc(k.name)}${k.kind ? `<span class="tag">${k.kind}</span>` : ""}</div><div class="ks">${esc(k.basis)}</div></div><div><div class="kv">${fmtEur(k.saldo, false)}</div><div class="kd">Stand ${k.stand}${k.alter > 30 ? `<span class="pill down" title="seit ${k.alter} Tagen kein Auszug eingespielt">Import ${k.alter} Tage alt</span>` : ""}</div></div></div>`).join("")
+    + `<div class="konto" style="background:transparent;border:1px dashed var(--line-strong)"><div><div class="kn">Kontostand eingeben</div><div class="ks">wenn der Auszug keinen Saldo liefert, z. B. George-CSV</div></div><div style="align-self:center"><button class="btn small" id="konto-eingabe">Eingeben</button></div></div>`
+    + `<div class="ks muted" style="padding:8px 2px 0">Barkassen, gerechnet aus Anfangsstand und Barbewegungen</div>`
+    + SPARTEN.filter(s => !s.verein).map(s => kassaHtml(s.id, true)).join("");
+  $("#konto-eingabe").addEventListener("click", () => toast("Im echten System: Konto, Datum und Betrag laut Auszug eingeben"));
+}
+
+/* ---------- Sparte ---------- */
+const KENNZAHLEN = { 3: [{ n: "Deckungsbeitrag Tiere", plus: ["Einnahmen Tier"], minus: ["Futtermittel", "Tierarzt", "Tiere"] }, { n: "Hof ohne Förderungen", plus: ["Einnahmen Tier", "Obst/Schnaps"], minus: ["*"] }], 1: [{ n: "Miete nach Kredit und Fixkosten", plus: ["Miete"], minus: ["Kreditrückzahlung", "Fixkosten", "Kontoführung", "Strom", "Heizung", "Gemeinde"] }], 2: [{ n: "Ergebnis Ferienhaus", plus: ["Übernachtungen", "Endreinigung weiterverrechnet"], minus: ["*"] }, { n: "Übernachtungen nach Provision und Reinigung", plus: ["Übernachtungen"], minus: ["Provisionen Buchungsportale", "Reinigung und Wäsche"] }], 5: [{ n: "Bleibt vom Lohn", plus: ["Lohn"], minus: ["*"] }], 6: [{ n: "Bleibt vom Lohn", plus: ["Lohn"], minus: ["*"] }] };
+/* Formeln und Gruppen werden einmal beim Start in Kategorie-IDs aufgelöst.
+   Umbenennen ändert danach nur die Beschriftung, nie die Rechnung. */
+function katIdsByName(sparteId, name) { return KATS.filter(k => (sparteId == null || k.sparte === sparteId) && k.name === name).map(k => k.id); }
+const KENNZAHLEN_IDS = {};
+for (const sid of Object.keys(KENNZAHLEN)) KENNZAHLEN_IDS[sid] = KENNZAHLEN[sid].map(d => ({
+  n: d.n,
+  plus: d.plus.flatMap(n => katIdsByName(+sid, n)),
+  minus: d.minus.filter(n => n !== "*").flatMap(n => katIdsByName(+sid, n)),
+  alleAusgaben: d.minus.includes("*"),
+}));
+// Einnahmen und Ausgaben je Kategorie getrennt, erst danach die Formel.
+// „*“ zieht jede Ausgabe der Sparte genau einmal ab, auch bei gemischten Kategorien.
+function kennzahlWert(d, rs) {
+  const E = {}, A = {};
+  for (const b of rs) { if (b.typ === "einnahme") E[b.kat] = (E[b.kat] || 0) + b.cent; else if (b.typ === "ausgabe") A[b.kat] = (A[b.kat] || 0) + b.cent; }
+  let v = 0;
+  for (const id of d.plus) v += E[id] || 0;
+  if (d.alleAusgaben) { for (const id in A) v -= A[id]; }
+  else for (const id of d.minus) v -= A[id] || 0;
+  return v;
+}
+const kzNamen = (ids) => ids.map(id => K[id] ? K[id].name : "?").join(" + ");
+function renderSparte() {
+  const y = state.jahr, cur = rows({ jahr: y }), prev = rows({ jahr: y - 1 });
+  const Ep = sum(prev, "einnahme"), Ap = sum(prev, "ausgabe");
+  const E = proj(cur, prev, "einnahme", y), A = proj(cur, prev, "ausgabe", y);
+  const ms = monthSeries(cur), mp = monthSeries(prev); const cut = (arr) => arr.map((v, i) => (y === 2026 && i > 8) ? null : v);
+  $("#s-kpis").innerHTML = kpiCard("Einnahmen", E, Ep, "var(--ein)", cut(ms.e), mp.e) + kpiCard("Ausgaben", A, Ap, "var(--aus)", cut(ms.a), mp.a) + kpiCard("Saldo", E - A, Ep - Ap, "var(--ink)", cut(ms.e.map((v, i) => v - ms.a[i])), mp.e.map((v, i) => v - mp.a[i]), true);
+  // Eigene Kennzahlen
+  const sp = scopeSparten(); const defs = sp.length === 1 ? (KENNZAHLEN_IDS[sp[0]] || []) : [];
+  const calc = (d) => kennzahlWert(d, cur);
+  const monate = y === 2026 ? MONATE_VERGANGEN : 12;
+  $("#s-kz").innerHTML = defs.map(d => `<div class="kzc"><div class="n">${esc(d.n)}</div><div class="f">${esc(kzNamen(d.plus))} − ${d.alleAusgaben ? "alle Ausgaben" : esc(kzNamen(d.minus).replace(/ \+ /g, " − "))}</div><div class="v">${fmtEur(calc(d), true)}</div><div class="f">Ø ${fmtEur(Math.round(calc(d) / monate), true)} je Monat${y === 2026 ? " · bis 8. Sept." : ""}</div></div>`).join("") + `<div class="kzc add" role="button" tabindex="0" id="kz-add">+ Kennzahl anlegen<br><span class="muted" style="font-size:12px">Kategorien wählen, addieren, abziehen</span></div>`;
+  alsButton($("#kz-add"), () => toast("Im Prototyp nur angedeutet"));
+  renderAuslagen($("#s-auslagen"), sp.length === 1 ? sp[0] : null);
+  $("#s-kassa").innerHTML = sp.length === 1 ? kassaHtml(sp[0], false) : `<div class="konten">${sp.map(id => kassaHtml(id, true)).join("")}</div>`; wireKassa($("#s-kassa"));
+  // Jahresauswahl: standardmäßig die letzten vier, ältere per Klick
+  const years = JAHRE.filter(yy => !state.hideYears.has(yy));
+  $("#s-years").innerHTML = `<span class="muted" style="font-size:12px;align-self:center;margin-right:4px">Jahre:</span>` + JAHRE.map(yy => `<button class="chip ${state.hideYears.has(yy) ? "" : "on"}" data-y="${yy}" aria-pressed="${!state.hideYears.has(yy)}">${yy}${yy === 2026 ? " ≈" : ""}</button>`).join("");
+  $("#s-years").querySelectorAll(".chip").forEach(c => c.addEventListener("click", () => { const yy = +c.dataset.y; if (state.hideYears.has(yy)) state.hideYears.delete(yy); else if (years.length > 1) state.hideYears.add(yy); renderSparte(); }));
+  // Matrix; für 2026 zählt der Rest des Vorjahres ab dem Stichtag als Schätzung dazu
+  const kats = KATS.filter(k => sp.includes(k.sparte) && (!state.kat || k.id === +state.kat));
+  const cell = {}, rest = {};
+  for (const b of BUCHUNGEN) if (sp.includes(b.sparte) && (!state.zahl || b.zahl === state.zahl)) { const key = b.kat + "|" + b.y + "|" + b.typ; cell[key] = (cell[key] || 0) + b.cent; if (b.y === 2025 && b.datum.slice(5) > CUT_MD) rest[b.kat + "|" + b.typ] = (rest[b.kat + "|" + b.typ] || 0) + b.cent; }
+  const val = (k, yy, typ) => cell[k.id + "|" + yy + "|" + typ] || 0;
+  const est = (k, typ) => val(k, 2026, typ) + (rest[k.id + "|" + typ] || 0);
+  const block = (typ, title) => {
+    const list = kats.filter(k => (k.richtung === typ || k.richtung === "beides") && JAHRE.some(yy => val(k, yy, typ) > 0)).sort((a, b) => val(b, y, typ) - val(a, y, typ));
+    if (!list.length) return "";
+    const totY = list.reduce((s, k) => s + val(k, y, typ), 0) || 1; const maxShare = Math.max(...list.map(k => val(k, y, typ) / totY), .01);
+    let h = `<tr class="group"><td colspan="${years.length + 3}">${title}</td></tr>`;
+    for (const k of list) {
+      const cur = val(k, y, typ), pv = val(k, y - 1, typ); const hv = y === 2026 ? est(k, typ) : cur; const d = pv ? (hv - pv) / pv : null;
+      const dcls = d == null ? "" : (typ === "ausgabe" ? (d > 0.05 ? "aus" : d < -0.05 ? "ein" : "muted") : (d > 0.05 ? "ein" : d < -0.05 ? "aus" : "muted"));
+      h += `<tr class="${k.aktiv ? "" : "inactive"}"><td><span class="cat"><span class="sdot" style="--dot:${S[k.sparte].c}"></span>${esc(k.name)}${sp.length > 1 ? ` <span class="muted" style="font-size:11px">${S[k.sparte].k}</span>` : ""}</span>${katStillPill(k)}</td>`;
+      // Auch rein saisonale Kategorien ohne Istwert zeigen ihre Schätzung.
+      for (const yy of years) { const v = val(k, yy, typ); h += `<td class="cell" data-kat="${k.id}" data-y="${yy}" data-typ="${typ}" tabindex="0" role="button" aria-label="${esc(k.name)} ${yy}, ${v ? fmtEur(v) : "keine Buchungen"}, Buchungen zeigen">${v ? fmtEur(v) : '<span class="muted">–</span>'}${yy === 2026 && est(k, typ) ? `<span class="est" title="Schätzung fürs ganze Jahr nach Vorjahresverlauf">≈ ${fmtK(est(k, typ))}</span>` : ""}</td>`; }
+      h += `<td>${cur ? fmtEur(Math.round(cur / monate)) : "–"}</td>`;
+      h += `<td><span class="share" style="width:${Math.round(cur / totY / maxShare * 60)}px"><i style="width:100%;background:${typ === "ausgabe" ? "var(--aus)" : "var(--ein)"}"></i></span>${Math.round(cur / totY * 100)} %${d != null ? ` <span class="delta ${dcls}">${fmtPct(d)}</span>` : ""}</td></tr>`;
+    }
+    h += `<tr class="sum"><td>${title} gesamt</td>${years.map(yy => `<td>${fmtEur(list.reduce((s, k) => s + val(k, yy, typ), 0))}${yy === 2026 ? `<span class="est" title="Summe der Schätzungen fürs ganze Jahr">≈ ${fmtK(list.reduce((s, k) => s + est(k, typ), 0))}</span>` : ""}</td>`).join("")}<td>${fmtEur(Math.round(totY / monate))}</td><td></td></tr>`;
+    return h;
+  };
+  $("#s-matrix").innerHTML = `<thead><tr><th>Kategorie</th>${years.map(yy => `<th>${yy}${yy === 2026 ? ' <span class="est">bis 8.9. · ≈ Jahr</span>' : ""}</th>`).join("")}<th>Ø je Monat ${y}</th><th>Anteil ${y} · zu ${y - 1}</th></tr></thead><tbody>${state.richtung === "ausgabe" ? "" : block("einnahme", "Einnahmen")}${state.richtung === "einnahme" ? "" : block("ausgabe", "Ausgaben")}</tbody>`;
+  $("#s-matrix").querySelectorAll(".cell").forEach(c => alsButton(c, () => drill({ kat: +c.dataset.kat, jahr: +c.dataset.y, typ: c.dataset.typ })));
+  $("#s-aus-hint").textContent = `Anteil an den Ausgaben ${y}`;
+  renderTop($("#s-top-aus"), cur, "ausgabe", 8, "var(--aus)");
+  $("#s-verlauf-hint").textContent = "Klick auf einen Monat zeigt die Buchungen";
+  monthlyChart($("#s-verlauf"), ms.e, ms.a, y, 620);
+}
+
+/* ---------- Drilldown ---------- */
+let drillRows = [];
+// Der Drilldown zeigt genau die Menge, aus der die angeklickte Zahl stammt:
+// dieselben globalen Filter wie rows(). Die Richtung nur, wenn die Zelle nicht
+// schon eine Richtung vorgibt.
+function drill(o) {
+  const sp = o.kat ? [K[o.kat].sparte] : scopeSparten();
+  const richtung = o.typ ? "" : state.richtung;
+  const rs = o.rows || BUCHUNGEN.filter(b => sp.includes(b.sparte) && b.typ !== "umbuchung" && (o.jahr == null || b.y === o.jahr) && (!o.kat || b.kat === o.kat) && (!o.typ || b.typ === o.typ) && (!o.monat || b.m === o.monat) && (!state.zahl || b.zahl === state.zahl) && (!richtung || b.typ === richtung));
+  const zLbl = { bank: "nur Bank", bar: "nur Bar", karte: "nur Karte" };
+  $("#dd-title").textContent = o.title || (o.kat ? K[o.kat].name : (o.monat ? MON_LANG[o.monat - 1] : "Buchungen"));
+  $("#dd-sub").textContent = o.sub || [o.kat ? S[K[o.kat].sparte].name : scopeName(), o.jahr, o.monat ? MON_LANG[o.monat - 1] : null,
+    o.typ ? (o.typ === "einnahme" ? "nur Einnahmen" : "nur Ausgaben") : (o.rows || !richtung ? null : (richtung === "einnahme" ? "nur Einnahmen" : "nur Ausgaben")),
+    o.rows || !state.zahl ? null : zLbl[state.zahl]].filter(Boolean).join(" · ");
+  drillRows = rs; state.drillLimit = 300; renderDrillTable();
+  openDD();
+}
+function renderDrillTable() {
+  const rs = drillRows, n = rs.length, lim = Math.min(state.drillLimit, n);
+  const E = sum(rs, "einnahme"), A = sum(rs, "ausgabe");
+  $("#dd-sum").innerHTML = `<span>${n} Buchungen</span>${E ? `<span>Einnahmen <b class="ein">${fmtEur(E)}</b></span>` : ""}${A ? `<span>Ausgaben <b class="aus">${fmtEur(A)}</b></span>` : ""}${E && A ? `<span>Saldo <b>${fmtEur(E - A, true)}</b></span>` : ""}${n > lim ? `<span class="muted">zeigt ${lim} von ${n} <button class="lnk" id="dd-more">weitere anzeigen</button></span>` : ""}`;
+  $("#dd-table").innerHTML = tableRows(rs.slice(0, lim), true);
+  const mehr = $("#dd-more"); if (mehr) mehr.addEventListener("click", () => { state.drillLimit += 300; renderDrillTable(); });
+}
+// Öffnen/Schließen des Drilldowns als eigener Dialog: Fokus merken und zurückgeben,
+// „hidden“/„inert“ erst nach Ende der Schiebe-Transition (.dd hat 220ms transform-Transition),
+// damit sie noch sichtbar zufährt statt hart zu verschwinden.
+let ddOpener = null, ddHideTimer = null;
+function openDD() {
+  ddOpener = document.activeElement;
+  const dd = $("#dd");
+  clearTimeout(ddHideTimer);
+  dd.hidden = false; dd.inert = false;
+  setTimeout(() => { dd.classList.add("open"); $("#dd-back").classList.add("open"); }, 0);
+  document.body.style.overflow = "hidden";
+  $("#dd-close").focus();
+}
+function closeDrill() {
+  const dd = $("#dd");
+  dd.classList.remove("open"); $("#dd-back").classList.remove("open"); document.body.style.overflow = "";
+  clearTimeout(ddHideTimer);
+  ddHideTimer = setTimeout(() => { dd.hidden = true; dd.inert = true; }, 250);
+  if (ddOpener && ddOpener.focus) ddOpener.focus();
+  ddOpener = null;
+}
+// Einfache Fokusfalle: Tab am letzten fokussierbaren Element springt zum ersten und umgekehrt.
+$("#dd").addEventListener("keydown", e => {
+  if (e.key !== "Tab") return;
+  const f = [...$("#dd").querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')].filter(el => !el.disabled);
+  if (!f.length) return;
+  const first = f[0], last = f[f.length - 1];
+  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+});
+function tableRows(rs, compact) {
+  const multi = new Set(rs.map(b => b.sparte)).size > 1;
+  return `<thead><tr><th>Datum</th><th>Text</th><th>Kategorie</th>${compact ? "" : "<th>Zahlung</th>"}<th>Beleg</th><th>Betrag</th>${compact ? "" : "<th></th>"}</tr></thead><tbody>` + rs.map(b => { const k = K[b.kat], s = S[b.sparte]; const sign = b.typ === "einnahme" ? "+" : b.typ === "ausgabe" ? "−" : "⇄"; const cls = b.typ === "einnahme" ? "ein" : b.typ === "ausgabe" ? "aus" : "muted"; const off = b.bezahltVon ? offenCent(b) : 0; const teilw = b.bezahltVon && off > 0 && (b.ausglCent || 0) > 0;
+    const ausl = b.bezahltVon ? ` <span class="pill est" title="privat bezahlt${off <= 0 ? ", ausgeglichen" + (b.ausgeglichen ? " am " + fmtDate(b.ausgeglichen) : "") : teilw ? ", noch " + fmtEur(off) + " offen" : ", noch offen"}">Auslage ${S[b.bezahltVon].k}${off <= 0 ? " ✓" : teilw ? " · teilweise" : ""}</span>` : ""; return `<tr><td class="muted">${fmtDate(b.datum)}</td><td class="t">${esc(b.text)}</td><td><span class="zk"><span class="sdot" style="--dot:${s.c}"></span>${esc(k.name)}${multi ? ` <span class="muted">${s.k}</span>` : ""}</span>${katStillPill(k)}${ausl}</td>${compact ? "" : `<td class="muted">${{ bank: "Bank", bar: "Bar", karte: "Karte" }[b.zahl]}</td>`}<td class="belegic ${b.beleg ? "has" : ""}" title="${b.beleg ? "Beleg vorhanden" : "kein Beleg"}">${b.beleg ? "▣" : "·"}</td><td class="${cls}" style="font-weight:500">${sign} ${fmtEur(b.cent)}</td>${compact ? "" : `<td>${b.typ === "umbuchung" ? "" : `<button class="lnk" data-edit="${b.id}">bearbeiten</button>`}</td>`}</tr>`; }).join("") + `</tbody>`;
+}
+
+/* ---------- Buchungen ---------- */
+function renderBuchungen() {
+  const sp = scopeSparten(); const kats = katsFuerFilter(sp);
+  const sel = $("#bu-kat"); const keep = sel.value; sel.innerHTML = '<option value="">Alle</option>' + kats.map(k => `<option value="${k.id}">${katFilterLabel(k, sp.length > 1)}</option>`).join(""); if (kats.some(k => k.id === +keep)) sel.value = keep;
+  const q = $("#bu-q").value.trim().toLowerCase(), kf = +sel.value || 0, tf = $("#bu-typ").value, zf = $("#bu-zahl").value;
+  const rs = rows({ jahr: state.jahr, includeUmb: true }).filter(b => (!kf || b.kat === kf) && (!tf || b.typ === tf) && (!zf || b.zahl === zf) && (!q || b.text.toLowerCase().includes(q) || K[b.kat].name.toLowerCase().includes(q) || fmtEur(b.cent).includes(q)));
+  $("#bu-count").textContent = `${rs.length} Buchungen · Einnahmen ${fmtEur(sum(rs, "einnahme"))} · Ausgaben ${fmtEur(sum(rs, "ausgabe"))}`;
+  $("#bu-table").innerHTML = tableRows(rs.slice(0, state.buLimit), false);
+  $("#bu-table").querySelectorAll("[data-edit]").forEach(b => b.addEventListener("click", () => editBooking(+b.dataset.edit)));
+  $("#bu-more").style.display = rs.length > state.buLimit ? "" : "none";
+}
+// Bearbeiten: Rettungsweg, wenn eine Buchung in der falschen Sparte gelandet ist.
+// Wechselt man von Privat auf Hof, schlägt die App „Bezahlt von: Privat A“ gleich vor.
+function editBooking(id) {
+  const b = BUCHUNGEN.find(x => x.id === id); if (!b) return;
+  state.editId = id; state.quickSparte = b.sparte;
+  go("erfassen");
+  $("#b-sparte").value = b.sparte; $("#b-typ").value = b.typ; fillKatSelect(); fillVonSelect(); $("#b-kat").value = b.kat;
+  $("#b-datum").value = b.datum; $("#b-zahlung").value = b.zahl; $("#b-von").value = b.bezahltVon ? String(b.bezahltVon) : "";
+  // Text ohne Betrag, Betrag direkt aus den Cent: so wird beim Bearbeiten nichts neu geparst.
+  $("#q-text").value = b.text; $("#b-betrag").value = fmtBetragFeld(b.cent / 100);
+  state.manualKat = true; state.katBestaetigt = true; state.betragManuell = false; quickUpdate();
+  $("#b-title").textContent = "Buchung bearbeiten"; $("#b-hint").textContent = "Sparte wechseln und Kategorie wählen, wenn sie woanders hingehört";
+  $("#b-save").textContent = "Änderung speichern"; $("#b-save2").textContent = "Änderung speichern"; $("#b-cancel").hidden = false; showDetails(true);
+  $("#q-text").focus();
+}
+// Nach dem Bearbeiten steht wieder der normale Erfassungszustand da:
+// bar, Ausgabe, heutiges Datum — nichts bleibt aus der bearbeiteten Buchung hängen.
+function endEdit() { state.editId = null; state.manualKat = false; state.katBestaetigt = false; state.betragManuell = false; $("#b-title").textContent = "Erfassen"; $("#b-hint").textContent = "Ein Satz reicht. Enter speichert, Pfeil ↑↓ wechselt die Kategorie"; $("#b-save").textContent = "Buchung speichern"; $("#b-save2").textContent = "Speichern"; $("#b-cancel").hidden = true; $("#q-text").value = ""; $("#b-text").value = ""; $("#b-betrag").value = ""; $("#b-von").value = ""; $("#b-von").disabled = false; $("#b-zahlung").value = "bar"; $("#b-typ").value = "ausgabe"; $("#b-datum").value = HEUTE_ISO; showDetails(false); }
+$("#b-cancel").addEventListener("click", () => { endEdit(); renderErfassen(); });
+["bu-q", "bu-kat", "bu-typ", "bu-zahl"].forEach(id => $("#" + id).addEventListener("input", () => { state.buLimit = 100; renderBuchungen(); }));
+$("#bu-more").addEventListener("click", () => { state.buLimit += 100; renderBuchungen(); });
+
+/* ---------- Erfassen ---------- */
+function parseQuick(text, sparteId) {
+  const t = text.toLowerCase();
+  // Betrag ist das letzte Zahl-Token im Text; gedeutet wird es von parseBetrag.
+  const tokenRe = /(\d(?:[\d.,]*\d)?)\s*(?:€|eur\b)?/gi;
+  let treffer = null, tm;
+  while ((tm = tokenRe.exec(text)) !== null) { const v = parseBetrag(tm[1]); if (v != null) treffer = { v, start: tm.index, end: tm.index + tm[0].length }; }
+  const betrag = treffer ? treffer.v : null;
+  const ohneBetrag = treffer ? (text.slice(0, treffer.start) + " " + text.slice(treffer.end)).replace(/\s+/g, " ").trim() : text.trim();
+  const words = t.replace(/[\d.,€]+/g, " ").split(/\s+/).filter(w => w.length >= 3);
+  let best = null;
+  for (const k of KATS.filter(k => k.sparte === sparteId && k.aktiv)) {
+    // gelernt: ein früherer Buchungstext passt ganz
+    const learned = BUCHUNGEN.find(b => b.kat === k.id && b.text.toLowerCase() && words.length && words.every(w => b.text.toLowerCase().includes(w)));
+    if (learned) { best = { k, why: "gelernt", typ: learned.typ }; break; }
+    const hit = k.kw.find(w => t.includes(w));
+    // Rohtext: das Stichwort kommt unverändert zurück und wird erst bei der Ausgabe escaped.
+    if (hit && !best) best = { k, why: "kw", kw: hit, typ: k.richtung === "einnahme" ? "einnahme" : "ausgabe" };
+  }
+  return { betrag, best, text: ohneBetrag };
+}
+function renderErfassen() {
+  const sel = $("#b-sparte"); sel.innerHTML = SPARTEN.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join(""); sel.value = state.quickSparte;
+  fillKatSelect(); fillVonSelect();
+  $("#recent").innerHTML = BUCHUNGEN.slice(0, 7).map(b => `<div class="r"><div class="d">${fmtDate(b.datum)}</div><div class="t">${esc(b.text)}<small>${esc(K[b.kat].name)} · ${S[b.sparte].k}${b.bezahltVon ? " · Auslage " + S[b.bezahltVon].k : ""}</small></div><div class="${b.typ === "einnahme" ? "ein" : b.typ === "ausgabe" ? "aus" : "muted"}">${b.typ === "einnahme" ? "+" : b.typ === "ausgabe" ? "−" : "⇄"} ${fmtEur(b.cent)}</div></div>`).join("");
+  quickUpdate();
+}
+// „Bezahlt von“ gibt es nur bei Ausgaben: eine Einnahme kann niemand vorstrecken.
+function fillVonSelect() {
+  const sid = +$("#b-sparte").value; const keep = $("#b-von").value; const einnahme = $("#b-typ").value === "einnahme";
+  $("#b-von").innerHTML = `<option value="">Konto oder Kasse der Sparte</option>` + (einnahme ? "" : SPARTEN.filter(s => s.typ === "privat" && s.id !== sid).map(s => `<option value="${s.id}">${esc(s.name)} (Auslage)</option>`).join(""));
+  $("#b-von").disabled = einnahme;
+  if (einnahme) $("#b-von").value = "";
+  else if ([...$("#b-von").options].some(o => o.value === keep)) $("#b-von").value = keep;
+}
+function fillKatSelect() {
+  const sid = +$("#b-sparte").value; const typ = $("#b-typ").value;
+  const kats = KATS.filter(k => k.sparte === sid && k.aktiv && (k.richtung === "beides" || k.richtung === typ));
+  $("#b-kat").innerHTML = kats.map(k => `<option value="${k.id}">${esc(k.name)}</option>`).join("");
+}
+function showDetails(open) { $("#b-form").hidden = !open; $("#b-details").textContent = open ? "Details einklappen ▴" : "Details anpassen ▾"; $("#b-details").setAttribute("aria-expanded", String(open)); }
+function updateSummary() {
+  const sid = +$("#b-sparte").value, von = +$("#b-von").value, z = { bar: "Bar", bank: "Bank", karte: "Karte" }[$("#b-zahlung").value];
+  $("#b-summary").textContent = `${S[sid].name} · ${z} · ${fmtDate($("#b-datum").value)} · ${von ? "Auslage von " + S[von].name : "Konto oder Kasse der Sparte"}`;
+}
+// Ein Fluss: Satz tippen, Vorschlag sehen, Enter speichert. ↑↓ blättert durch die Kategorien der Sparte,
+// die Details darunter klappen nur auf, wenn man sie braucht oder kein Vorschlag passt.
+function quickUpdate() {
+  const text = $("#q-text").value; const sid = +$("#b-sparte").value; const box = $("#q-sugg");
+  if (!text.trim()) { if (!state.editId) { state.katBestaetigt = state.manualKat; state.manualKat = false; state.betragManuell = false; } box.innerHTML = `<span class="muted">Sparte: <b>${esc(S[sid].name)}</b>. Tipp etwas ein, die Kategorie kommt sofort.</span>`; updateSummary(); return; }
+  const p = parseQuick(text, sid);
+  $("#b-text").value = p.text;
+  // Ein selbst getippter Betrag gewinnt immer; sonst kommt er aus dem Text, und
+  // ohne Betrag im Text wird das Feld geleert — außer beim Bearbeiten.
+  if (state.betragManuell) { /* Feld bleibt, wie der Nutzer es getippt hat */ }
+  else if (p.betrag != null) $("#b-betrag").value = fmtBetragFeld(p.betrag);
+  else if (!state.editId) $("#b-betrag").value = "";
+  // Eine Kategorie gilt nur als bestätigt, wenn sie getroffen oder selbst gewählt wurde.
+  if (state.manualKat) state.katBestaetigt = true;
+  else if (p.best) { $("#b-typ").value = p.best.typ; fillKatSelect(); fillVonSelect(); $("#b-kat").value = p.best.k.id; state.katBestaetigt = true; }
+  else state.katBestaetigt = false;
+  const kSel = K[+$("#b-kat").value]; const treffer = state.manualKat || !!p.best;
+  const why = state.manualKat ? "gewählt" : (p.best ? (p.best.why === "kw" ? "Stichwort „" + esc(p.best.kw) + "“" : p.best.why) : "");
+  const dot = `<span class="sdot" style="--dot:${S[sid].c}"></span>`;
+  const chip = treffer && kSel ? `<span class="sg">${dot}<b>${esc(kSel.name)}</b><span class="why">${why}</span></span><span class="muted">${$("#b-typ").value === "einnahme" ? "Einnahme" : "Ausgabe"} · Enter speichert · ↑↓ andere Kategorie</span>` : `<span class="sg">${dot}<b>Kategorie wählen</b><span class="why">kein Treffer</span></span><span class="muted">↑↓ blättert durch, oder unten wählen. Beim Speichern merkt sich die App den Text.</span>`;
+  if (!treffer) showDetails(true);
+  const zeigeBetrag = parseBetrag($("#b-betrag").value);
+  box.innerHTML = `${chip}${zeigeBetrag != null ? `<span class="amt" style="margin-left:auto">${fmtEur(Math.round(zeigeBetrag * 100))}</span>` : ""}`;
+  updateSummary();
+}
+$("#q-text").addEventListener("input", quickUpdate);
+$("#q-text").addEventListener("keydown", e => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); saveBooking(); return; }
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") { const sel = $("#b-kat"); if (!sel.options.length) return; e.preventDefault(); sel.selectedIndex = (sel.selectedIndex + (e.key === "ArrowDown" ? 1 : sel.options.length - 1)) % sel.options.length; state.manualKat = true; quickUpdate(); }
+});
+$("#b-details").addEventListener("click", () => showDetails($("#b-form").hidden));
+$("#b-save2").addEventListener("click", saveBooking);
+$("#b-kat").addEventListener("change", () => { state.manualKat = true; quickUpdate(); });
+["b-zahlung", "b-datum", "b-von"].forEach(id => $("#" + id).addEventListener("change", updateSummary));
+// Wer den Betrag selbst tippt, behält ihn: der Text überschreibt ihn dann nicht mehr.
+$("#b-betrag").addEventListener("input", () => { state.betragManuell = $("#b-betrag").value.trim() !== ""; });
+$("#b-sparte").addEventListener("change", () => {
+  state.quickSparte = +$("#b-sparte").value; fillKatSelect(); fillVonSelect();
+  if (state.editId) { const o = BUCHUNGEN.find(x => x.id === state.editId); if (o && S[o.sparte].typ === "privat" && S[state.quickSparte].typ !== "privat") { $("#b-von").value = String(o.sparte); toast(`Vorschlag: bezahlt von ${S[o.sparte].name}, also eine Auslage`); } state.manualKat = true; quickUpdate(); }
+  else { state.manualKat = false; quickUpdate(); }
+});
+$("#b-typ").addEventListener("change", () => { fillKatSelect(); fillVonSelect(); state.manualKat = true; quickUpdate(); });
+$("#b-form").addEventListener("submit", e => { e.preventDefault(); saveBooking(); });
+$("#b-newcat").addEventListener("click", () => { $("#newcat").classList.add("open"); $("#nc-name").focus(); });
+$("#nc-cancel").addEventListener("click", () => $("#newcat").classList.remove("open"));
+$("#nc-save").addEventListener("click", () => { const n = $("#nc-name").value.trim(); if (!n) return; kat(+$("#b-sparte").value, n, $("#nc-richtung").value, { texts: [n] }); const k = KATS[KATS.length - 1]; K[k.id] = k; $("#newcat").classList.remove("open"); $("#nc-name").value = ""; $("#b-typ").value = k.richtung === "einnahme" ? "einnahme" : "ausgabe"; fillKatSelect(); $("#b-kat").value = k.id; state.manualKat = true; quickUpdate(); toast(`Kategorie „${n}“ angelegt`); });
+/* Prüft eine Eingabe, bevor irgendetwas in die Daten wandert. Reine Funktion:
+   liefert entweder { fehler } oder die geprüften Werte. „Bezahlt von“ gibt es
+   nur bei Ausgaben — eine Einnahme ist nie eine Auslage. */
+function buchungPruefen(f) {
+  const betrag = parseBetrag(f.betragStr);
+  if (betrag == null || !Number.isFinite(betrag) || betrag <= 0) return { fehler: "Betrag fehlt oder ist keine gültige Zahl" };
+  if (!f.katId || !K[f.katId]) return { fehler: "Kategorie wählen: ↑↓ oder Details" };
+  if (!f.katBestaetigt) return { fehler: "Kategorie wählen: ↑↓ oder Details" };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(f.datum || ""))) return { fehler: "Bitte ein gültiges Datum wählen" };
+  if (f.datum > HEUTE_ISO) return { fehler: "Zukunftsbuchungen gibt es hier nicht" };
+  return { cent: Math.round(betrag * 100), bezahltVon: f.typ === "einnahme" ? null : (f.bezahltVon || null) };
+}
+function saveBooking() {
+  const katId = +$("#b-kat").value, datum = $("#b-datum").value, typ = $("#b-typ").value;
+  const p = buchungPruefen({ betragStr: $("#b-betrag").value, katId, datum, typ, bezahltVon: +$("#b-von").value || null, katBestaetigt: state.katBestaetigt });
+  if (p.fehler) { toast(p.fehler); return; }
+  const k = K[katId]; const [y, m] = datum.split("-").map(Number); const von = p.bezahltVon;
+  const neu = { sparte: k.sparte, kat: katId, datum, y, m, typ, cent: p.cent, text: $("#b-text").value.trim() || k.name, zahl: $("#b-zahlung").value, bezahltVon: von };
+  if (state.editId) {
+    const b = BUCHUNGEN.find(x => x.id === state.editId);
+    if (!b) { toast("Diese Buchung gibt es nicht mehr"); endEdit(); renderErfassen(); return; }
+    const bezahlt = b.ausglCent || 0;
+    if (bezahlt > 0 && neu.cent < bezahlt) { toast(`Auf diese Auslage sind schon ${fmtEur(bezahlt)} zurückgezahlt — der Betrag kann nicht kleiner sein`); return; }
+    const altesDatum = b.ausgeglichen;
+    Object.assign(b, neu); b.ausglCent = bezahlt;
+    b.ausgeglichen = bezahlt > 0 && offenCent(b) === 0 ? (altesDatum || datum) : null;
+    BUCHUNGEN.sort((a, c) => c.datum.localeCompare(a.datum) || c.id - a.id);
+    toast(`Geändert: ${fmtEur(neu.cent)} · ${k.name} · ${S[k.sparte].k}${von ? " · Auslage von " + S[von].k : ""}`);
+    endEdit();
+  } else {
+    BUCHUNGEN.unshift(Object.assign({ id: ++BID, beleg: false, ausglCent: 0 }, neu));
+    toast(`Gespeichert: ${fmtEur(neu.cent)} · ${k.name}${von ? " · als Auslage von " + S[von].k : ""}`);
+  }
+  $("#q-text").value = ""; $("#b-text").value = ""; $("#b-betrag").value = ""; $("#b-von").value = "";
+  state.manualKat = false; state.betragManuell = false; state.katBestaetigt = false;
+  showDetails(false); renderErfassen();
+}
+function toast(msg) { const t = $("#toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove("show"), 2200); }
+
+/* ---------- Kategorien ---------- */
+let katTab = 3;
+// Gruppen bündeln gleichartige Kategorien. Beim Start einmal über die Namen
+// aufgelöst, danach zählen nur noch die IDs — Umbenennen ändert nichts.
+const KAT_GRUPPEN = [["Versicherungen", ["Versicherungen", "Versicherung", "Fixkosten und Versicherungen"]], ["Energie", ["Strom", "Heizung", "Fixkosten", "Energie und Heizen"]], ["Gebäude und Instandhaltung", ["Gebäude/Instandhaltung", "Instandhaltung Gebäude", "Umbau", "Möbel und Einrichtung"]], ["Tiere", ["Einnahmen Tier", "Tierarzt", "Tiere", "Futtermittel"]], ["Auto und Mobilität", ["Auto", "Motorrad", "Maschinen"]], ["Steuern und Abgaben", ["Steuer", "Gemeinde", "Ortstaxe"]], ["Lebensmittel und Leben", ["Essen", "Kino", "Kinder"]]]
+  .map(([n, namen]) => ({ n, ids: namen.flatMap(nm => katIdsByName(null, nm)) }));
+function renderKategorien() {
+  $("#k-tabs").innerHTML = SPARTEN.map(s => `<button class="${s.id === katTab ? "active" : ""}" data-s="${s.id}"><span class="sdot" style="--dot:${s.c}"></span>${esc(s.name)}</button>`).join("");
+  $("#k-tabs").querySelectorAll("button").forEach(b => b.addEventListener("click", () => { katTab = +b.dataset.s; renderKategorien(); }));
+  const kats = KATS.filter(k => k.sparte === katTab); const y = 2026;
+  const stats = (k) => { const rs = BUCHUNGEN.filter(b => b.kat === k.id && b.y === y); return { n: rs.length, s: rs.reduce((a, b) => a + b.cent, 0) }; };
+  $("#k-table").innerHTML = `<thead><tr><th>Kategorie</th><th style="text-align:left">Richtung</th><th style="text-align:left">Stichwörter</th><th>Buchungen ${y}</th><th>Summe ${y}</th><th>Ø je Monat</th><th></th></tr></thead><tbody>` + kats.map(k => { const st = stats(k); return `<tr class="${k.aktiv ? "" : "inactive"}" data-id="${k.id}"><td><span class="cat"><span class="sdot" style="--dot:${S[k.sparte].c}"></span><span class="kname">${esc(k.name)}</span>${k.aktiv ? "" : ' <span class="pill est">stillgelegt</span>'}</span></td><td style="text-align:left" class="muted">${{ einnahme: "Einnahme", ausgabe: "Ausgabe", beides: "beides" }[k.richtung]}</td><td style="text-align:left"><div class="kwedit">${k.kw.map(w => `<span class="chip kw">${esc(w)}<button class="x" data-kw="${esc(w)}" aria-label="Stichwort entfernen">×</button></span>`).join("")}<input placeholder="+ Stichwort" data-add="${k.id}"></div></td><td>${st.n || "–"}</td><td>${st.s ? fmtEur(st.s) : "–"}</td><td>${st.s ? fmtEur(Math.round(st.s / MONATE_VERGANGEN)) : "–"}</td><td><span class="act"><button data-act="rename">umbenennen</button><button data-act="toggle">${k.aktiv ? "stilllegen" : "aktivieren"}</button></span></td></tr>`; }).join("") + `</tbody>`;
+  $("#k-table").querySelectorAll("input[data-add]").forEach(inp => inp.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); const w = inp.value.trim().toLowerCase(); if (w) { K[+inp.dataset.add].kw.push(w); toast(`Stichwort „${w}“ gemerkt`); renderKategorien(); } } }));
+  $("#k-table").querySelectorAll(".x").forEach(b => b.addEventListener("click", () => { const id = +b.closest("tr").dataset.id; K[id].kw = K[id].kw.filter(w => w !== b.dataset.kw); renderKategorien(); }));
+  $("#k-table").querySelectorAll("[data-act]").forEach(b => b.addEventListener("click", () => {
+    const tr = b.closest("tr"), k = K[+tr.dataset.id];
+    if (b.dataset.act === "toggle") { k.aktiv = !k.aktiv; toast(k.aktiv ? `„${k.name}“ ist wieder aktiv` : `„${k.name}“ stillgelegt, alte Buchungen bleiben`); renderKategorien(); return; }
+    const span = tr.querySelector(".kname"); const inp = document.createElement("input"); inp.className = "name-edit"; inp.value = k.name; span.replaceWith(inp); inp.focus(); inp.select();
+    const done = () => { const n = inp.value.trim(); if (n && n !== k.name) { toast(`„${k.name}“ heißt jetzt „${n}“`); k.name = n; } renderKategorien(); };
+    inp.addEventListener("keydown", e => { if (e.key === "Enter") done(); if (e.key === "Escape") renderKategorien(); }); inp.addEventListener("blur", done);
+  }));
+  $("#k-new").onclick = () => { go("erfassen"); state.quickSparte = katTab; $("#b-sparte").value = katTab; fillKatSelect(); fillVonSelect(); showDetails(true); $("#newcat").classList.add("open"); $("#nc-name").focus(); };
+  const gsum = (ids) => BUCHUNGEN.filter(b => b.y === 2026 && !S[b.sparte].verein && ids.includes(b.kat) && b.typ === "ausgabe").reduce((a, b) => a + b.cent, 0);
+  const gl = KAT_GRUPPEN.map(gr => ({ n: gr.n, v: gsum(gr.ids), anz: gr.ids.length })).sort((a, b) => b.v - a.v); const gmax = (gl[0] ? gl[0].v : 0) || 1;
+  $("#k-gruppen").innerHTML = gl.map(gr => `<div class="hbar" style="--fc:var(--ink-2)"><div class="name"><span>${esc(gr.n)}</span><span class="tag">${gr.anz} Kat.</span></div><div class="track"><div class="fill" style="width:${gr.v / gmax * 100}%"></div></div><div class="v">${fmtEur(gr.v)}</div><div class="p">2026</div></div>`).join("");
+  $("#k-regeln").innerHTML = `<thead><tr><th style="text-align:left">Wenn der Text enthält</th><th style="text-align:left">dann</th><th>Konto</th><th>gelernt am</th><th></th></tr></thead><tbody>` + [["lagerhaus kraftfutter", "Futtermittel", "HOF", "Giro", "12. Aug. 26"], ["miete gruber", "Miete", "HM", "Giro", "3. Jän. 25"], ["telering", "Telering", "AL", "Giro", "28. Feb. 25"], ["spar kirchbichl", "Essen", "AL", "MasterCard", "4. Mär. 26"], ["kreditrate sparkasse", "Kreditrückzahlung", "HM", "Giro", "3. Jän. 25"], ["flatex cashkonto", "Umbuchung", "AL", "Giro", "2. Sept. 26"]].map(r => `<tr><td style="text-align:left">${r[0]}</td><td style="text-align:left"><span class="zk">${r[1]} <span class="muted">${r[2]}</span></span></td><td class="muted">${r[3]}</td><td class="muted">${r[4]}</td><td><span class="act"><button>abschalten</button></span></td></tr>`).join("") + `</tbody>`;
+  // Nur angedeutete Funktionen: Klick sagt das, statt nichts zu tun.
+  $("#k-regeln").querySelectorAll(".act button").forEach(b => b.addEventListener("click", () => toast("Im Prototyp nur angedeutet")));
+}
+
+/* ---------- Belege ---------- */
+function renderBelege() {
+  const list = BUCHUNGEN.filter(b => b.beleg && b.typ === "ausgabe").slice(0, 18);
+  $("#belege").innerHTML = list.map(b => `<div class="beleg" title="${esc(b.text)}"><div class="thumb"><i class="h"></i><i class="w"></i><i class="s"></i><i></i><i class="w"></i><i class="s"></i><div class="tot"><span>SUMME</span><span>${(b.cent / 100).toLocaleString("de-AT", { minimumFractionDigits: 2 })}</span></div></div><div class="bn">${esc(b.text)}</div><div class="bm"><span>${fmtDate(b.datum)}</span><span><span class="sdot" style="--dot:${S[b.sparte].c};display:inline-block;vertical-align:middle;margin-right:4px"></span>${S[b.sparte].k}</span></div></div>`).join("");
+}
+
+/* ---------- Bankimport ---------- */
+function renderBank() {
+  $("#acct").innerHTML = [
+    { n: "Girokonto Sparkasse", kind: "Girokonto", i: "AT61 1904 3002 3457 3201 · Vorgabe: Privat A", v: 431280, s: "letzter Import 3. Sept. 2026 · 234 Umsätze 2025 eingespielt" },
+    { n: "s MasterCard Platinum", kind: "Kreditkarte ···3129", i: "Einzelkäufe werden hier verbucht", v: -61240, s: "Abrechnung am Giro wird als Umbuchung erkannt" },
+    { n: "Flatex Cashkonto", kind: "Depot-Verrechnung", i: "Überweisungen dorthin sind Umbuchungen", v: 1200000, s: "kein Import, nur Gegenkonto" },
+  ].map(a => `<div class="a"><div class="an">${a.n}<span class="kind">${a.kind}</span></div><div class="ai">${a.i}</div><div class="av">${fmtEur(a.v, false)}</div><div class="ai">${a.s}</div></div>`).join("");
+  const rows = [
+    ["6. Sept. 26", "Raiffeisen Lagerhaus Kraftfutter Lieferung 9/26", "−612,40", "auto", "Futtermittel · HOF", "Regel „lagerhaus kraftfutter“"],
+    ["5. Sept. 26", "MasterCard Abrechnung Kartenendnummer 3129", "−1.184,20", "umb", "Umbuchung → MasterCard", "Kartenendnummer erkannt"],
+    ["4. Sept. 26", "Dr. Huber Tierarztpraxis Rechnung 2233", "−148,00", "vor", "Tierarzt · HOF", "Stichwort „huber“"],
+    ["2. Sept. 26", "Flatex Bank Cashkonto Inhaber", "−12.000,00", "umb", "Umbuchung → Flatex", "eigene IBAN"],
+    ["2. Sept. 26", "Einzelunf.010125-010225602654035669", "−41,80", "offen", "", "kein Treffer, du ordnest zu"],
+    ["1. Sept. 26", "Amazon EU Sarl", "−67,90", "vor", "Kinder · AL", "Stichwort „kinder“ aus früherer Buchung"],
+    ["1. Sept. 26", "AMA Direktzahlung Vorschuss", "+3.200,00", "vor", "Förderungen · HOF", "Stichwort „ama“"],
+    ["29. Aug. 26", "Lastschrift 4711 Unbekannt", "−19,99", "offen", "", "kein Treffer"],
+    // Die September-Miete fehlt im Seed absichtlich; die letzte verbuchte ist die vom August.
+    ["3. Aug. 26", "Gruber Martin Miete 08/2026", "+850,00", "auto", "Miete · HM", "Regel „miete gruber“"],
+  ];
+  const stl = { auto: "automatisch verbucht", vor: "Vorschlag", offen: "offen", umb: "Umbuchung" };
+  $("#umsaetze").innerHTML = `<thead><tr><th>Datum</th><th style="text-align:left">Text der Bank</th><th>Betrag</th><th style="text-align:left">Status</th><th style="text-align:left">Zuordnung</th><th style="text-align:left">Warum</th><th></th></tr></thead><tbody>` + rows.map(r => `<tr><td class="muted">${r[0]}</td><td style="text-align:left;white-space:normal">${r[1]}</td><td class="${r[2].startsWith("+") ? "ein" : "aus"}" style="font-weight:500">${r[2]} €</td><td style="text-align:left"><span class="st ${r[3]}">${stl[r[3]]}</span></td><td style="text-align:left">${r[4] ? `<span class="zk">${r[4]}</span>` : '<span class="muted">Kategorie wählen …</span>'}</td><td style="text-align:left" class="muted">${r[5]}</td><td><span class="act">${r[3] === "vor" ? "<button>übernehmen</button><button>ändern</button>" : r[3] === "offen" ? "<button>zuordnen</button><button>ignorieren</button>" : "<button>öffnen</button>"}</span></td></tr>`).join("") + `</tbody>`;
+  // Nur angedeutete Funktionen: Klick sagt das, statt nichts zu tun.
+  $("#umsaetze").querySelectorAll(".act button").forEach(b => b.addEventListener("click", () => toast("Im Prototyp nur angedeutet")));
+}
+
+/* ---------- Export mit Auswahl je Buchung ----------
+   Abgewählte Kategorien und Buchungen bleiben gemerkt (im echten System:
+   Feld steuer_relevant je Buchungszeile plus Kategorie-Flag) und übersteht dank
+   der stabilen Buchungs-IDs aus dem Seed auch ein Neuladen der Seite. */
+const exState = { jahr: 2025, sparte: "5", q: "", katAus: new Set() };
+try { exState.katAus = new Set(JSON.parse(localStorage.getItem("hf-export-katAus") || "[]")); } catch (e) { }
+try {
+  const ausIds = new Set(JSON.parse(localStorage.getItem("hf-export-aus") || "[]"));
+  if (ausIds.size) for (const b of BUCHUNGEN) if (ausIds.has(b.id)) b.exportAus = true;
+} catch (e) { }
+function speichereExportAuswahl() {
+  try {
+    localStorage.setItem("hf-export-katAus", JSON.stringify([...exState.katAus]));
+    localStorage.setItem("hf-export-aus", JSON.stringify(BUCHUNGEN.filter(b => b.exportAus).map(b => b.id)));
+  } catch (e) { }
+}
+// Kopf-Checkbox spiegelt die wählbaren (nicht per Kategorie ausgeschlossenen) Zeilen:
+// alle gewählt → checked, ein Teil → indeterminate, keine → leer.
+function updateExAllHead(list) {
+  const cb = $("#ex-all"); if (!cb) return;
+  const selectable = list.filter(b => !exState.katAus.has(b.kat));
+  const n = selectable.filter(b => !b.exportAus).length;
+  cb.checked = selectable.length > 0 && n === selectable.length;
+  cb.indeterminate = n > 0 && n < selectable.length;
+}
+function renderExport() {
+  const sp = exState.sparte === "alle" ? SPARTEN.filter(s => !s.verein).map(s => s.id) : [+exState.sparte];
+  const all = BUCHUNGEN.filter(b => sp.includes(b.sparte) && b.y === exState.jahr && b.typ !== "umbuchung");
+  const byKat = {}; all.forEach(b => byKat[b.kat] = (byKat[b.kat] || 0) + 1);
+  $("#ex-kats").innerHTML = Object.entries(byKat).sort((a, b) => b[1] - a[1]).map(([id, n]) => `<button class="${exState.katAus.has(+id) ? "" : "active"}" data-k="${id}" title="${exState.katAus.has(+id) ? "Kategorie wieder aufnehmen" : "ganze Kategorie ausschließen"}"><span class="sdot" style="--dot:${S[K[id].sparte].c}"></span>${esc(K[id].name)}${sp.length > 1 ? " · " + S[K[id].sparte].k : ""} <span class="muted">${n}</span></button>`).join("");
+  $("#ex-kats").querySelectorAll("button").forEach(b => b.addEventListener("click", () => { const id = +b.dataset.k; if (exState.katAus.has(id)) exState.katAus.delete(id); else exState.katAus.add(id); speichereExportAuswahl(); renderExport(); }));
+  const q = exState.q.toLowerCase();
+  const list = all.filter(b => !q || b.text.toLowerCase().includes(q) || K[b.kat].name.toLowerCase().includes(q) || fmtEur(b.cent).includes(q));
+  const multi = sp.length > 1;
+  $("#ex-table").innerHTML = `<thead><tr><th><input type="checkbox" id="ex-all" aria-label="alle sichtbaren an- oder abwählen"></th><th>Datum</th><th>Text</th><th>Kategorie</th><th>Beleg</th><th>Betrag</th></tr></thead><tbody>` + list.map(b => { const k = K[b.kat], s = S[b.sparte]; const katAus = exState.katAus.has(b.kat); const on = !katAus && !b.exportAus; return `<tr class="${on ? "" : "ex-off"}" data-id="${b.id}"><td><input type="checkbox" data-id="${b.id}" ${on ? "checked" : ""} ${katAus ? 'disabled title="ganze Kategorie abgewählt"' : ""} aria-label="Buchung ${esc(b.text)} ${fmtEur(b.cent)} auswählen"></td><td class="muted">${fmtDate(b.datum)}</td><td class="t">${esc(b.text)}</td><td><span class="zk"><span class="sdot" style="--dot:${s.c}"></span>${esc(k.name)}${multi ? ` <span class="muted">${s.k}</span>` : ""}</span></td><td class="belegic ${b.beleg ? "has" : ""}">${b.beleg ? "▣" : "·"}</td><td class="${b.typ === "einnahme" ? "ein" : "aus"}" style="font-weight:500">${b.typ === "einnahme" ? "+" : "−"} ${fmtEur(b.cent)}</td></tr>`; }).join("") + `</tbody>`;
+  updateExAllHead(list);
+  $("#ex-table").querySelectorAll("tbody input[type=checkbox]").forEach(cb => cb.addEventListener("change", () => { const b = BUCHUNGEN.find(x => x.id === +cb.dataset.id); b.exportAus = !cb.checked; cb.closest("tr").classList.toggle("ex-off", !cb.checked); speichereExportAuswahl(); updateExAllHead(list); renderExportBar(list); }));
+  $("#ex-all").addEventListener("change", (e) => { list.forEach(b => { if (!exState.katAus.has(b.kat)) b.exportAus = !e.target.checked; }); speichereExportAuswahl(); renderExport(); });
+  renderExportBar(list);
+}
+function renderExportBar(list) {
+  const sel = list.filter(b => !exState.katAus.has(b.kat) && !b.exportAus);
+  const off = list.length - sel.length;
+  const suchHinweis = exState.q ? `<span class="muted">Suche aktiv: Export umfasst nur die gezeigten Treffer</span>` : "";
+  $("#ex-bar").innerHTML = `<span class="cnt"><b>${sel.length}</b> von ${list.length} Buchungen</span><span>Einnahmen <b class="ein">${fmtEur(sum(sel, "einnahme"))}</b></span><span>Ausgaben <b class="aus">${fmtEur(sum(sel, "ausgabe"))}</b></span>${off ? `<span class="muted">${off} ausgeschlossen, gemerkt</span>` : ""}${suchHinweis}<span class="sp"><button class="btn small" id="ex-reset">Auswahl zurücksetzen (nur diese Liste)</button><button class="btn small primary" id="ex-go">Export-Vorschau (${sel.length})</button></span>`;
+  // Reicht nur so weit wie die aktuell angezeigte Liste (Jahr + Sparte + Suche):
+  // Buchungen darin zurücksetzen, Kategorie-Ausschlüsse nur für Kategorien in dieser Liste aufheben.
+  $("#ex-reset").addEventListener("click", () => {
+    list.forEach(b => b.exportAus = false);
+    const katsInList = new Set(list.map(b => b.kat));
+    for (const id of [...exState.katAus]) if (katsInList.has(id)) exState.katAus.delete(id);
+    speichereExportAuswahl();
+    renderExport();
+  });
+  $("#ex-go").addEventListener("click", () => toast("Im echten System entsteht hier die Datei"));
+}
+["ex-jahr", "ex-sparte", "ex-format"].forEach(id => $("#" + id).addEventListener("change", () => { exState.jahr = +$("#ex-jahr").value; exState.sparte = $("#ex-sparte").value; renderExport(); }));
+$("#ex-q").addEventListener("input", () => { exState.q = $("#ex-q").value.trim(); renderExport(); });
+
+/* ---------- Start ---------- */
+buildNav();
+$("#ex-sparte").innerHTML = SPARTEN.map(s => `<option value="${s.id}" ${s.id === 5 ? "selected" : ""}>${esc(s.name)}</option>`).join("") + '<option value="alle">Alle Sparten ohne Verein</option>';
+$("#dd-close").addEventListener("click", closeDrill); $("#dd-back").addEventListener("click", closeDrill);
+document.addEventListener("keydown", e => { if (e.key === "Escape") { closeDrill(); closeSheet(); } });
+// Im Prototyp nur angedeutete Funktionen: Klick sagt das, statt nichts zu tun.
+["acct-new", "b-beleg", "drop-bank", "drop-excel"].forEach(id => alsButton($("#" + id), () => toast("Im Prototyp nur angedeutet")));
+// Am Handy zuerst Erfassen zeigen, am Desktop die Übersicht.
+if (window.innerWidth < 760) go("erfassen"); else go("uebersicht", "alle");
+</script>
