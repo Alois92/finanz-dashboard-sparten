@@ -4,6 +4,7 @@ import logging
 import re
 import sqlite3
 import uuid
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -14,6 +15,8 @@ from ..bereiche import (Bereich, BereichDep, pruefe_sparte, pruefe_kategorie,
                         pruefe_globalgruppe)
 from ..regeln import normalisiere_regeltext
 from ..schemas import BuchungIn
+from ..bewegungen import (synchronisiere_buchung, storniere_buchungsbewegungen, kassa_fuer_sparte,
+                          erzeuge_transfer, pruefe_bewegungsreferenzen, storniere_transfer, pruefe_transfer)
 
 router = APIRouter(tags=["buchungen"])
 
@@ -28,10 +31,20 @@ class UmbuchungIn(BaseModel):
     datum: str
     betrag_cent: int = Field(gt=0)
     text: str | None = None
+    zahlungsart: Literal['bank', 'bar'] = 'bank'
+    von_konto_id: int | None = None
+    nach_konto_id: int | None = None
 
 
 def _pruefe_sparte_und_zeilen(con: sqlite3.Connection, b: BuchungIn, bereich: Bereich) -> None:
     pruefe_sparte(con, b.sparte_id, bereich)
+    if b.bankumsatz_id is not None:
+        pruefe_umsatz(con, b.bankumsatz_id, bereich)
+        konto = con.execute('SELECT bankkonto_id FROM bankumsatz WHERE id=?', (b.bankumsatz_id,)).fetchone()[0]
+        if b.bankkonto_id is not None and konto != b.bankkonto_id:
+            raise HTTPException(422, 'Bankumsatz gehört nicht zum Konto')
+        if b.zahlungsart == 'bar':
+            raise HTTPException(422, 'Barbuchung darf keinen Bankumsatz referenzieren')
     if b.bankkonto_id is not None:
         pruefe_konto(con, b.bankkonto_id, bereich)
     for z in b.zeilen:
@@ -53,9 +66,9 @@ def create_buchung(b: BuchungIn, con: sqlite3.Connection = Depends(db_dep), bere
     try:
         cur = con.execute(
             "INSERT INTO buchung(sparte_id, datum, typ, zahlungsart, kontakt_id, "
-            "person_id, bankkonto_id, text, notiz) VALUES(?,?,?,?,?,?,?,?,?)",
+            "person_id, bankkonto_id, text, notiz, bankumsatz_id) VALUES(?,?,?,?,?,?,?,?,?,?)",
             (b.sparte_id, b.datum, b.typ, b.zahlungsart, b.kontakt_id,
-             b.person_id, b.bankkonto_id, b.text, b.notiz),
+             b.person_id, b.bankkonto_id, b.text, b.notiz, b.bankumsatz_id),
         )
         buchung_id = cur.lastrowid
         for z in b.zeilen:
@@ -64,10 +77,14 @@ def create_buchung(b: BuchungIn, con: sqlite3.Connection = Depends(db_dep), bere
                 "VALUES(?,?,?,?)",
                 (buchung_id, z.kategorie_id, z.betrag_cent, z.notiz),
             )
+        synchronisiere_buchung(con, buchung_id, bereich)
         con.commit()
     except sqlite3.IntegrityError as e:
         con.rollback()
         raise HTTPException(400, f"Datenbankfehler: {e}")
+    except HTTPException:
+        con.rollback()
+        raise
 
     if b.typ != "umbuchung" and b.text and b.zeilen:
         _lerne_regel(con, b.text, b.sparte_id, b.zeilen[0].kategorie_id, b.typ, bereich.id)
@@ -201,6 +218,7 @@ def list_buchungen(sparte_id: int | None = None,
                 b["filter_betrag_cent"] = sum(
                     z["betrag_cent"] for z in passende_zeilen)
             b["belege"] = belege_by.get(b["id"], [])
+            b['zahlungsstatus'] = _zahlungsstatus(con,b['id'])
     return buchungen
 
 
@@ -256,6 +274,7 @@ def suche_buchungen(q: str, con: sqlite3.Connection = Depends(db_dep), bereich: 
     for buchung in buchungen:
         buchung["zeilen"] = by_buchung.get(buchung["id"], [])
         buchung["belege"] = belege_by.get(buchung["id"], [])
+        buchung['zahlungsstatus'] = _zahlungsstatus(con,buchung['id'])
     return buchungen
 
 
@@ -269,6 +288,31 @@ def create_umbuchung(u: UmbuchungIn, con: sqlite3.Connection = Depends(db_dep), 
     pruefe_sparte(con, u.nach_sparte_id, bereich)
     if u.von_sparte_id == u.nach_sparte_id:
         raise HTTPException(400, "Von- und Nach-Sparte muessen verschieden sein")
+    konten = []
+    for sid, kid in ((u.von_sparte_id,u.von_konto_id),(u.nach_sparte_id,u.nach_konto_id)):
+        if kid is not None:
+            pruefe_konto(con,kid,bereich)
+            konto = con.execute('SELECT sparte_id,art FROM bankkonto WHERE id=?',(kid,)).fetchone()
+            if konto[0] != sid:
+                raise HTTPException(422,'Konto gehört nicht zur Sparte')
+            if u.zahlungsart == 'bar' and konto[1] != 'kassa':
+                raise HTTPException(422,'Barumbuchung benötigt Kassenkonten')
+        elif u.zahlungsart == 'bar':
+            kandidaten = con.execute("SELECT id FROM bankkonto WHERE sparte_id=? AND art='kassa'",(sid,)).fetchall()
+            if len(kandidaten)>1:
+                raise HTTPException(409,'Kassa nicht eindeutig')
+            kid = kandidaten[0][0] if kandidaten else None
+        else:
+            kandidaten = con.execute("SELECT id FROM bankkonto WHERE sparte_id=? AND art='bank' AND aktiv=1",(sid,)).fetchall()
+            kid = kandidaten[0][0] if len(kandidaten)==1 else None
+        if kid is not None:
+            pruefe_konto(con,kid,bereich)
+        konten.append(kid)
+    if all(k is not None for k in konten):
+        if len({r[0] for r in con.execute('SELECT waehrung FROM bankkonto WHERE id IN (?,?)',konten)}) != 1:
+            raise HTTPException(422,'Transfer benötigt dieselbe Währung')
+    else:
+        konten = [None,None]
     def umbuchung_kategorie(sparte_id: int) -> int:
         row = con.execute(
             "SELECT id FROM kategorie WHERE sparte_id = ? AND lower(name) = ? "
@@ -281,6 +325,10 @@ def create_umbuchung(u: UmbuchungIn, con: sqlite3.Connection = Depends(db_dep), 
 
     gruppe = uuid.uuid4().hex
     try:
+        if u.zahlungsart == 'bar':
+            konten = [kassa_fuer_sparte(con,sid,bereich) for sid in (u.von_sparte_id,u.nach_sparte_id)]
+            if len({r[0] for r in con.execute('SELECT waehrung FROM bankkonto WHERE id IN (?,?)',konten)}) != 1:
+                raise HTTPException(422,'Transfer benötigt dieselbe Währung')
         ids = []
         for sparte_id, richtung_text in ((u.von_sparte_id, "an"), (u.nach_sparte_id, "von")):
             andere = u.nach_sparte_id if sparte_id == u.von_sparte_id else u.von_sparte_id
@@ -297,12 +345,21 @@ def create_umbuchung(u: UmbuchungIn, con: sqlite3.Connection = Depends(db_dep), 
                 "VALUES(?,?,?)",
                 (cur.lastrowid, umbuchung_kategorie(sparte_id), u.betrag_cent))
             ids.append(cur.lastrowid)
+        tid, mids = erzeuge_transfer(con,'umbuchung',*konten,u.datum,u.betrag_cent,
+                                    u.text if all(k is not None for k in konten) else 'Nachzug Umbuchung '+gruppe+'; Konten ungeklärt')
+        for bid, kid in zip(ids,konten):
+            con.execute('UPDATE buchung SET bankkonto_id=?,zahlungsart=? WHERE id=?',(kid,u.zahlungsart,bid))
+        for bid, mid, sign in zip(ids,mids,(-1,1)):
+            con.execute('INSERT INTO buchung_bewegung VALUES(?,?,?)',(bid,mid,sign*u.betrag_cent))
         con.commit()
     except sqlite3.Error as e:
         con.rollback()
         raise HTTPException(400, f"Datenbankfehler: {e}")
+    except HTTPException:
+        con.rollback()
+        raise
     return {"transfer_gruppe_id": gruppe, "buchung_ids": ids,
-            "betrag_cent": u.betrag_cent}
+            "betrag_cent": u.betrag_cent, "transfer_id": tid}
 
 
 @router.put("/buchungen/{buchung_id}")
@@ -316,13 +373,14 @@ def update_buchung(buchung_id: int, b: BuchungIn,
     """
     pruefe_buchung(con, buchung_id, bereich)
     _pruefe_buchungsreferenzen(con, buchung_id, bereich)
-    alt = con.execute("SELECT transfer_gruppe_id FROM buchung WHERE id = ?",
+    alt = con.execute("SELECT transfer_gruppe_id, bankkonto_id, bankumsatz_id FROM buchung WHERE id = ?",
                       (buchung_id,)).fetchone()
     if not alt:
         raise HTTPException(404, "Buchung nicht gefunden")
     if alt["transfer_gruppe_id"]:
         raise HTTPException(400, "Umbuchungen sind gekoppelt - bitte loeschen "
                                  "und neu anlegen statt bearbeiten")
+    b = b.model_copy(update={feld: alt[feld] for feld in ('bankkonto_id','bankumsatz_id') if feld not in b.model_fields_set})
     _pruefe_sparte_und_zeilen(con, b, bereich)
     try:
         con.execute(
@@ -338,10 +396,19 @@ def update_buchung(buchung_id: int, b: BuchungIn,
                 "VALUES(?,?,?,?)",
                 (buchung_id, z.kategorie_id, z.betrag_cent, z.notiz),
             )
+        for feld in ('bankkonto_id', 'bankumsatz_id'):
+            if feld in b.model_fields_set:
+                con.execute(f'UPDATE buchung SET {feld}=? WHERE id=?', (getattr(b, feld), buchung_id))
+        synchronisiere_buchung(con, buchung_id, bereich)
+        if alt['bankumsatz_id'] is not None and alt['bankumsatz_id'] != b.bankumsatz_id:
+            con.execute("UPDATE bankumsatz SET importstatus='offen' WHERE id=? AND NOT EXISTS (SELECT 1 FROM buchung WHERE bankumsatz_id=?)",(alt['bankumsatz_id'],alt['bankumsatz_id']))
         con.commit()
     except sqlite3.IntegrityError as e:
         con.rollback()
         raise HTTPException(400, f"Datenbankfehler: {e}")
+    except HTTPException:
+        con.rollback()
+        raise
     return _buchung_detail(con, buchung_id)
 
 
@@ -363,13 +430,19 @@ def delete_buchung(buchung_id: int, con: sqlite3.Connection = Depends(db_dep), b
     for b in betroffen:
         pruefe_buchung(con, b["id"], bereich)
         _pruefe_buchungsreferenzen(con, b["id"], bereich)
+    if row['transfer_gruppe_id']:
+        marker = 'Nachzug Umbuchung '+row['transfer_gruppe_id']
+        for t in con.execute('SELECT id FROM transfer WHERE von_konto_id IS NULL AND nach_konto_id IS NULL AND notiz IN (?,?)',(marker,marker+'; Konten ungeklärt')).fetchall():
+            pruefe_transfer(con,t[0],bereich)
+            storniere_transfer(con,t[0])
     for b in betroffen:
+        storniere_buchungsbewegungen(con, b['id'])
         con.execute("DELETE FROM buchung WHERE id = ?", (b["id"],))  # Zeilen via CASCADE
         # War die Buchung aus einem Bankumsatz uebernommen, wird dieser wieder
         # geoeffnet, damit er nicht unerledigt als "verbucht" haengen bleibt.
         if b["bankumsatz_id"] is not None:
-            con.execute("UPDATE bankumsatz SET importstatus = 'offen' WHERE id = ?",
-                        (b["bankumsatz_id"],))
+            con.execute("UPDATE bankumsatz SET importstatus = 'offen' WHERE id = ? AND NOT EXISTS (SELECT 1 FROM buchung WHERE bankumsatz_id=?)",
+                        (b["bankumsatz_id"],b["bankumsatz_id"]))
     con.commit()
 
 
@@ -381,6 +454,7 @@ def _buchung_detail(con: sqlite3.Connection, buchung_id: int) -> dict:
         (buchung_id,),
     ).fetchone()
     result = dict(row)
+    result['zahlungsstatus'] = _zahlungsstatus(con,buchung_id)
     result["zeilen"] = [
         dict(z) for z in con.execute(
             "SELECT z.id, z.kategorie_id, k.name AS kategorie_name, z.betrag_cent, z.notiz "
@@ -392,8 +466,17 @@ def _buchung_detail(con: sqlite3.Connection, buchung_id: int) -> dict:
     return result
 
 
+def _zahlungsstatus(con, buchung_id):
+    row = con.execute("""SELECT b.zahlungsart, EXISTS (
+        SELECT 1 FROM buchung_bewegung x JOIN bewegung m ON m.id=x.bewegung_id
+        WHERE x.buchung_id=b.id AND m.storniert_am IS NULL)
+        FROM buchung b WHERE b.id=?""",(buchung_id,)).fetchone()
+    return 'verknuepft' if row[1] else 'Zahlung unbekannt' if row[0] in ('bank','karte') else None
+
+
 def _pruefe_buchungsreferenzen(con, buchung_id, bereich):
     """Auch erhaltene Verweise und gekoppelte Loeschfolgen bleiben im Bereich."""
+    pruefe_bewegungsreferenzen(con,buchung_id,bereich)
     row = con.execute("SELECT bankkonto_id, bankumsatz_id FROM buchung WHERE id=?", (buchung_id,)).fetchone()
     if row["bankkonto_id"] is not None:
         pruefe_konto(con, row["bankkonto_id"], bereich)

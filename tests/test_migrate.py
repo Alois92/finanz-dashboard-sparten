@@ -84,7 +84,7 @@ class MigrationTest(unittest.TestCase):
             p.start()
             self.addCleanup(p.stop)
 
-    def test_neue_datenbank_ist_auf_version_3_ohne_anstehende_migrationen(self):
+    def test_neue_datenbank_ist_auf_version_4_ohne_anstehende_migrationen(self):
         from app import migrate
 
         db.init_db()
@@ -94,9 +94,9 @@ class MigrationTest(unittest.TestCase):
             versionen = con.execute(
                 "SELECT version, name FROM schema_version ORDER BY version"
             ).fetchall()
-            self.assertEqual([(1, "schema_version"), (2, "import_batch_erkennung"), (3, "bereiche")], [tuple(r) for r in versionen])
+            self.assertEqual([(1, "schema_version"), (2, "import_batch_erkennung"), (3, "bereiche"), (4, "konten_bewegungen")], [tuple(r) for r in versionen])
             self.assertEqual(
-                {"aktuell": 3, "anstehend": [], "basis": False},
+                {"aktuell": 4, "anstehend": [], "basis": False},
                 migrate.status(con),
             )
         finally:
@@ -119,7 +119,7 @@ class MigrationTest(unittest.TestCase):
         con = db.get_connection()
         try:
             self.assertEqual(
-                [(0, "basis"), (1, "schema_version"), (2, "import_batch_erkennung"), (3, "bereiche")],
+                [(0, "basis"), (1, "schema_version"), (2, "import_batch_erkennung"), (3, "bereiche"), (4, "konten_bewegungen")],
                 [
                     tuple(r)
                     for r in con.execute(
@@ -273,7 +273,7 @@ class MigrationTest(unittest.TestCase):
         self.assertEqual(200, response.status_code)
         self.assertEqual(
             {
-                "aktuell": 3,
+                "aktuell": 4,
                 "anstehend": [],
                 "schreibgeschuetzt": False,
                 "fehler": None,

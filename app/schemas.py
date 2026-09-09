@@ -48,6 +48,7 @@ class BuchungIn(BaseModel):
     kontakt_id: Optional[int] = None
     person_id: Optional[int] = None
     bankkonto_id: Optional[int] = None
+    bankumsatz_id: Optional[int] = None
     text: Optional[str] = None
     notiz: Optional[str] = None
     zeilen: List[ZeileIn]

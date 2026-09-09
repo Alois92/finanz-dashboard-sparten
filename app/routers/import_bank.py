@@ -4,8 +4,6 @@ Verarbeitet deutsche Bank-Export-CSVs (Trennzeichen ';', Zahlen '1.234,56',
 Datum 'TT.MM.JJJJ'). Betraege werden durchgaengig in Cent gespeichert.
 
 Endpunkte:
-  GET  /api/bankkonten                    - aktive Konten auflisten
-  POST /api/bankkonten                    - Konto anlegen
   POST /api/import/csv                    - CSV importieren (multipart)
   GET  /api/bankumsaetze                  - Umsaetze auflisten (offene mit Vorschlag)
   POST /api/bankumsaetze/{id}/verbuchen   - Umsatz als Buchung uebernehmen
@@ -25,6 +23,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from ..db import db_dep
+from ..bewegungen import import_bewegung, synchronisiere_buchung
 from ..bereiche import (
     Bereich, BereichDep, pruefe_sparte, pruefe_kategorie, pruefe_konto,
     pruefe_umsatz, pruefe_regel,
@@ -144,14 +143,6 @@ def fingerabdruck(konto_id, datum, betrag_cent, text, gegenpartei, iban, vorkomm
 # Pydantic-Modelle
 # ---------------------------------------------------------------------------
 
-class BankkontoIn(BaseModel):
-    name: str
-    sparte_id: Optional[int] = None
-    iban: Optional[str] = None
-    bank: Optional[str] = None
-    inhaber: Optional[str] = None
-
-
 class UmsatzVerbuchenIn(BaseModel):
     sparte_id: int
     kategorie_id: int
@@ -173,42 +164,6 @@ class VorschlaegeUebernehmenIn(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Bankkonten
-# ---------------------------------------------------------------------------
-
-@router.get("/bankkonten")
-def list_bankkonten(con: sqlite3.Connection = Depends(db_dep),
-                       bereich: BereichDep = Bereich(1)):
-    rows = con.execute(
-        "SELECT id, sparte_id, inhaber, name, iban, bank, aktiv "
-        "FROM bankkonto WHERE aktiv = 1 AND bereich_id = ? ORDER BY name",
-        (bereich.id,),
-    ).fetchall()
-    return [dict(r) for r in rows]
-
-
-@router.post("/bankkonten", status_code=201)
-def create_bankkonto(k: BankkontoIn, con: sqlite3.Connection = Depends(db_dep),
-                       bereich: BereichDep = Bereich(1)):
-    name = k.name.strip()
-    if not name:
-        raise HTTPException(400, "Name darf nicht leer sein")
-    if k.sparte_id is not None:
-        pruefe_sparte(con, k.sparte_id, bereich)
-    cur = con.execute(
-        "INSERT INTO bankkonto(sparte_id, inhaber, name, iban, bank, bereich_id) "
-        "VALUES(?,?,?,?,?,?)",
-        (k.sparte_id, k.inhaber, name, k.iban, k.bank, bereich.id),
-    )
-    con.commit()
-    row = con.execute(
-        "SELECT id, sparte_id, inhaber, name, iban, bank, aktiv "
-        "FROM bankkonto WHERE id = ?", (cur.lastrowid,)
-    ).fetchone()
-    return dict(row)
-
-
-# ---------------------------------------------------------------------------
 # CSV-Import
 # ---------------------------------------------------------------------------
 
@@ -220,6 +175,8 @@ def import_csv(
     bereich: BereichDep = Bereich(1),
 ):
     pruefe_konto(con, bankkonto_id, bereich)
+    if con.execute("SELECT art FROM bankkonto WHERE id=?", (bankkonto_id,)).fetchone()[0] == 'kassa':
+        raise HTTPException(422, 'Kassenkonten sind vom CSV-Import ausgeschlossen')
     rohbytes = datei.file.read()
     if not rohbytes:
         raise HTTPException(400, "Datei ist leer")
@@ -282,6 +239,7 @@ def import_csv(
             (bankkonto_id, batch_id, p["datum"], p["valuta"], p["betrag_cent"], p["saldo_cent"], p["text"], p["gegenpartei"], p["iban_gegenpartei"], neuer_hash),
         )
         neu += cur.rowcount
+        import_bewegung(con, cur.lastrowid, bereich)
     con.execute("UPDATE import_batch SET anzahl_neu = ?, anzahl_dubletten = ? WHERE id = ?", (neu, dubletten, batch_id))
     con.commit()
     erkannt = {**erkannt_basis, "zeilen_gesamt": len(zeilen) - 1, "zeilen_ungueltig": ungueltig}
@@ -536,6 +494,7 @@ def verbuche_umsatz(umsatz_id: int, body: UmsatzVerbuchenIn,
             "UPDATE bankumsatz SET importstatus = 'verbucht' WHERE id = ?",
             (umsatz_id,),
         )
+        synchronisiere_buchung(con, buchung_id, bereich)
         regel_angelegt = False
         muster = _regel_text(u)
         if muster:

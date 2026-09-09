@@ -74,6 +74,8 @@ class ImportBankApiTest(unittest.TestCase):
             con.execute("DELETE FROM regel")
             con.execute("DELETE FROM buchungszeile")
             con.execute("DELETE FROM buchung")
+            con.execute("DELETE FROM bewegung")
+            con.execute("DELETE FROM transfer")
             con.execute("DELETE FROM bankumsatz")
             con.execute("DELETE FROM import_batch")
             con.execute("DELETE FROM bankkonto")
