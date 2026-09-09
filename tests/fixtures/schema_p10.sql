@@ -134,11 +134,7 @@ CREATE TABLE bankkonto (
     iban        TEXT,
     bank        TEXT,
     aktiv       INTEGER NOT NULL DEFAULT 1 CHECK (aktiv IN (0,1)),
-    bereich_id INTEGER NOT NULL DEFAULT 1 REFERENCES bereich(id),
-    art TEXT NOT NULL DEFAULT 'bank' CHECK (art IN ('bank','karte','kassa','depot','wallet')),
-    waehrung TEXT NOT NULL DEFAULT 'EUR',
-    kartenendnummer TEXT,
-    sortierung INTEGER NOT NULL DEFAULT 0
+    bereich_id INTEGER NOT NULL DEFAULT 1 REFERENCES bereich(id)
 );
 
 CREATE TABLE import_batch (
@@ -359,42 +355,3 @@ END;
 CREATE INDEX idx_sparte_bereich ON sparte (bereich_id);
 CREATE INDEX idx_bankkonto_bereich ON bankkonto (bereich_id);
 CREATE INDEX idx_beleg_bereich ON beleg (bereich_id);
-
--- P11: Geldbewegungen getrennt von Kostenbuchungen.
-
-CREATE TABLE transfer (
-    id INTEGER PRIMARY KEY,
-    art TEXT NOT NULL CHECK (art IN ('bankomat','umbuchung','ausgleich','kartenabrechnung','sonstig')),
-    von_konto_id INTEGER REFERENCES bankkonto(id),
-    nach_konto_id INTEGER REFERENCES bankkonto(id),
-    datum TEXT NOT NULL,
-    betrag_cent INTEGER NOT NULL CHECK (betrag_cent > 0),
-    notiz TEXT,
-    storniert_am TEXT,
-    erstellt_am TEXT NOT NULL DEFAULT (datetime('now'))
-);
-CREATE TABLE bewegung (
-    id INTEGER PRIMARY KEY,
-    konto_id INTEGER NOT NULL REFERENCES bankkonto(id),
-    datum TEXT NOT NULL,
-    valuta TEXT,
-    betrag_signed_cent INTEGER NOT NULL,
-    waehrung TEXT NOT NULL DEFAULT 'EUR',
-    art TEXT NOT NULL DEFAULT 'zahlung' CHECK (art IN ('zahlung','transfer','gebuehr','zins','trade')),
-    transfer_id INTEGER REFERENCES transfer(id),
-    bankumsatz_id INTEGER UNIQUE REFERENCES bankumsatz(id),
-    text TEXT,
-    gegenpartei TEXT,
-    quelle TEXT NOT NULL CHECK (quelle IN ('manuell','import','ausgleich','kredit','nachzug')),
-    storniert_am TEXT,
-    erstellt_am TEXT NOT NULL DEFAULT (datetime('now'))
-);
-CREATE TABLE buchung_bewegung (
-    buchung_id INTEGER NOT NULL REFERENCES buchung(id) ON DELETE CASCADE,
-    bewegung_id INTEGER NOT NULL REFERENCES bewegung(id) ON DELETE CASCADE,
-    anteil_signed_cent INTEGER NOT NULL,
-    PRIMARY KEY (buchung_id, bewegung_id)
-);
-CREATE INDEX idx_bewegung_konto_datum ON bewegung (konto_id, datum);
-CREATE INDEX idx_bewegung_transfer ON bewegung (transfer_id);
-CREATE INDEX idx_buchung_bewegung_bewegung ON buchung_bewegung (bewegung_id);

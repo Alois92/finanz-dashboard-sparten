@@ -24,6 +24,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
 from ..db import db_dep
+from ..bewegungen import synchronisiere_buchung
 from ..bereiche import Bereich, BereichDep, pruefe_sparte
 
 router = APIRouter(tags=["import"])
@@ -373,10 +374,14 @@ def import_excel(
                     "INSERT INTO buchungszeile(buchung_id, kategorie_id, "
                     "betrag_cent) VALUES(?,?,?)",
                     (buchung_id, kat_vorhanden[name.strip().lower()], betrag))
+            synchronisiere_buchung(con,buchung_id,bereich)
         con.commit()
     except sqlite3.Error as e:
         con.rollback()
         raise HTTPException(400, f"Import abgebrochen, nichts gespeichert: {e}")
+    except HTTPException:
+        con.rollback()
+        raise
 
     bericht["eingespielt"] = len(neu)
     return bericht

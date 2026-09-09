@@ -122,6 +122,8 @@ class ImportExcelApiTest(unittest.TestCase):
         self.assertEqual(buchungen[0]["betrag_cent"], 4550)
         self.assertEqual(buchungen[1]["typ"], "einnahme")
         self.assertEqual(buchungen[1]["betrag_cent"], 120000)
+        bewegungen = con.execute("SELECT m.betrag_signed_cent FROM bewegung m JOIN bankkonto k ON k.id=m.konto_id WHERE k.sparte_id=? AND k.art='kassa' ORDER BY m.datum",(self.sparte_id,)).fetchall()
+        self.assertEqual([-4550,120000],[r[0] for r in bewegungen])
 
     def test_dubletten_bei_wiederholtem_einspielen(self):
         con = get_connection()
