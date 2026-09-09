@@ -9,6 +9,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from ..db import db_dep
+from ..bereiche import (Bereich, BereichDep, pruefe_sparte, pruefe_kategorie,
+                        pruefe_konto, pruefe_buchung, pruefe_beleg, pruefe_umsatz,
+                        pruefe_globalgruppe)
 from ..regeln import normalisiere_regeltext
 from ..schemas import BuchungIn
 
@@ -27,10 +30,12 @@ class UmbuchungIn(BaseModel):
     text: str | None = None
 
 
-def _pruefe_sparte_und_zeilen(con: sqlite3.Connection, b: BuchungIn) -> None:
-    if not con.execute("SELECT 1 FROM sparte WHERE id = ?", (b.sparte_id,)).fetchone():
-        raise HTTPException(404, "Sparte nicht gefunden")
+def _pruefe_sparte_und_zeilen(con: sqlite3.Connection, b: BuchungIn, bereich: Bereich) -> None:
+    pruefe_sparte(con, b.sparte_id, bereich)
+    if b.bankkonto_id is not None:
+        pruefe_konto(con, b.bankkonto_id, bereich)
     for z in b.zeilen:
+        pruefe_kategorie(con, z.kategorie_id, bereich)
         krow = con.execute(
             "SELECT sparte_id FROM kategorie WHERE id = ? AND aktiv = 1",
             (z.kategorie_id,),
@@ -42,8 +47,8 @@ def _pruefe_sparte_und_zeilen(con: sqlite3.Connection, b: BuchungIn) -> None:
 
 
 @router.post("/buchungen", status_code=201)
-def create_buchung(b: BuchungIn, con: sqlite3.Connection = Depends(db_dep)):
-    _pruefe_sparte_und_zeilen(con, b)
+def create_buchung(b: BuchungIn, con: sqlite3.Connection = Depends(db_dep), bereich: BereichDep = Bereich(1)):
+    _pruefe_sparte_und_zeilen(con, b, bereich)
 
     try:
         cur = con.execute(
@@ -65,13 +70,13 @@ def create_buchung(b: BuchungIn, con: sqlite3.Connection = Depends(db_dep)):
         raise HTTPException(400, f"Datenbankfehler: {e}")
 
     if b.typ != "umbuchung" and b.text and b.zeilen:
-        _lerne_regel(con, b.text, b.sparte_id, b.zeilen[0].kategorie_id, b.typ)
+        _lerne_regel(con, b.text, b.sparte_id, b.zeilen[0].kategorie_id, b.typ, bereich.id)
 
     return _buchung_detail(con, buchung_id)
 
 
 def _lerne_regel(con: sqlite3.Connection, text: str, sparte_id: int,
-                 kategorie_id: int, typ: str) -> None:
+                 kategorie_id: int, typ: str, bereich_id: int) -> None:
     """Legt/aktualisiert automatisch eine Merkregel aus einer erfassten Buchung.
 
     Faellt wie das manuelle Lernen beim Bankumsatz-Verbuchen (import_bank.py)
@@ -85,8 +90,8 @@ def _lerne_regel(con: sqlite3.Connection, text: str, sparte_id: int,
             return
         name = "Gelernt: " + text[:60]
         vorhanden = con.execute(
-            "SELECT id FROM regel WHERE LOWER(bedingung_text) = ? ORDER BY id LIMIT 1",
-            (bedingung,),
+            "SELECT id FROM regel WHERE LOWER(bedingung_text) = ? AND bereich_id = ? ORDER BY id LIMIT 1",
+            (bedingung, bereich_id),
         ).fetchone()
         if vorhanden:
             con.execute(
@@ -97,8 +102,8 @@ def _lerne_regel(con: sqlite3.Connection, text: str, sparte_id: int,
         else:
             con.execute(
                 "INSERT INTO regel(name, bedingung_text, ziel_sparte_id, "
-                "ziel_kategorie_id, ziel_typ) VALUES(?,?,?,?,?)",
-                (name, bedingung, sparte_id, kategorie_id, typ),
+                "ziel_kategorie_id, ziel_typ, bereich_id) VALUES(?,?,?,?,?,?)",
+                (name, bedingung, sparte_id, kategorie_id, typ, bereich_id),
             )
         con.commit()
     except Exception:
@@ -114,22 +119,20 @@ def list_buchungen(sparte_id: int | None = None,
                    monat: str | None = None,
                    kategorie_id: int | None = None,
                    globalgruppe_id: int | None = None,
-                   con: sqlite3.Connection = Depends(db_dep)):
+                   con: sqlite3.Connection = Depends(db_dep), bereich: BereichDep = Bereich(1)):
+    if sparte_id is not None:
+        pruefe_sparte(con, sparte_id, bereich)
+    if kategorie_id is not None:
+        pruefe_kategorie(con, kategorie_id, bereich)
+    if globalgruppe_id is not None:
+        pruefe_globalgruppe(con, globalgruppe_id, bereich)
     if monat is not None and not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", monat):
         raise HTTPException(400, "Monat muss das Format JJJJ-MM haben")
-    if kategorie_id is not None and not con.execute(
-        "SELECT 1 FROM kategorie WHERE id = ?", (kategorie_id,)
-    ).fetchone():
-        raise HTTPException(404, "Kategorie nicht gefunden")
-    if globalgruppe_id is not None and not con.execute(
-        "SELECT 1 FROM globale_kategoriegruppe WHERE id = ?", (globalgruppe_id,)
-    ).fetchone():
-        raise HTTPException(404, "Gruppe nicht gefunden")
     sql = ("SELECT b.id, b.sparte_id, s.name AS sparte_name, b.datum, b.typ, "
            "b.betrag_cent, b.zahlungsart, b.belegstatus, b.buchungsstatus, "
            "b.text, b.notiz, b.transfer_gruppe_id "
-           "FROM buchung b JOIN sparte s ON s.id = b.sparte_id WHERE 1=1")
-    params: list = []
+           "FROM buchung b JOIN sparte s ON s.id = b.sparte_id WHERE s.bereich_id = ?")
+    params: list = [bereich.id]
     if sparte_id is not None:
         sql += " AND b.sparte_id = ?"; params.append(sparte_id)
     if von:
@@ -181,8 +184,8 @@ def list_buchungen(sparte_id: int | None = None,
         belege = con.execute(
             f"SELECT bb.buchung_id, bl.id, bl.dateiname "
             f"FROM buchung_beleg bb JOIN beleg bl ON bl.id = bb.beleg_id "
-            f"WHERE bb.buchung_id IN ({marks}) ORDER BY bl.id",
-            ids,
+            f"WHERE bb.buchung_id IN ({marks}) AND bl.bereich_id = ? ORDER BY bl.id",
+            [*ids, bereich.id],
         ).fetchall()
         belege_by: dict[int, list] = {}
         for bl in belege:
@@ -202,7 +205,7 @@ def list_buchungen(sparte_id: int | None = None,
 
 
 @router.get("/buchungen/suche")
-def suche_buchungen(q: str, con: sqlite3.Connection = Depends(db_dep)):
+def suche_buchungen(q: str, con: sqlite3.Connection = Depends(db_dep), bereich: BereichDep = Bereich(1)):
     """Durchsucht Buchungstext, Notiz und Kontaktname Unicode-case-insensitiv."""
     con.create_function(
         "casefold", 1, lambda value: str(value or "").casefold(), deterministic=True
@@ -217,11 +220,11 @@ def suche_buchungen(q: str, con: sqlite3.Connection = Depends(db_dep)):
         "FROM buchung b "
         "JOIN sparte s ON s.id = b.sparte_id "
         "LEFT JOIN kontakt k ON k.id = b.kontakt_id "
-        "WHERE casefold(COALESCE(b.text, '')) LIKE ? ESCAPE '\\' "
+        "WHERE s.bereich_id = ? AND (casefold(COALESCE(b.text, '')) LIKE ? ESCAPE '\\' "
         "OR casefold(COALESCE(b.notiz, '')) LIKE ? ESCAPE '\\' "
         "OR casefold(COALESCE(k.name, '')) LIKE ? ESCAPE '\\' "
-        "ORDER BY b.datum DESC, b.id DESC LIMIT 200",
-        (pattern, pattern, pattern),
+        ") ORDER BY b.datum DESC, b.id DESC LIMIT 200",
+        (bereich.id, pattern, pattern, pattern),
     ).fetchall()
     buchungen = [dict(row) for row in rows]
     if not buchungen:
@@ -242,8 +245,8 @@ def suche_buchungen(q: str, con: sqlite3.Connection = Depends(db_dep)):
     belege = con.execute(
         f"SELECT bb.buchung_id, bl.id, bl.dateiname "
         f"FROM buchung_beleg bb JOIN beleg bl ON bl.id = bb.beleg_id "
-        f"WHERE bb.buchung_id IN ({marks}) ORDER BY bl.id",
-        ids,
+        f"WHERE bb.buchung_id IN ({marks}) AND bl.bereich_id = ? ORDER BY bl.id",
+        [*ids, bereich.id],
     ).fetchall()
     belege_by: dict[int, list] = {}
     for beleg in belege:
@@ -257,17 +260,15 @@ def suche_buchungen(q: str, con: sqlite3.Connection = Depends(db_dep)):
 
 
 @router.post("/umbuchungen", status_code=201)
-def create_umbuchung(u: UmbuchungIn, con: sqlite3.Connection = Depends(db_dep)):
+def create_umbuchung(u: UmbuchungIn, con: sqlite3.Connection = Depends(db_dep), bereich: BereichDep = Bereich(1)):
     """Geld zwischen zwei Sparten verschieben: zwei gekoppelte Buchungen
     (typ='umbuchung'), verbunden ueber transfer_gruppe_id. Umbuchungen sind
     in allen Einnahmen/Ausgaben-Auswertungen ausgeblendet (v_einnahmen_ausgaben).
     """
+    pruefe_sparte(con, u.von_sparte_id, bereich)
+    pruefe_sparte(con, u.nach_sparte_id, bereich)
     if u.von_sparte_id == u.nach_sparte_id:
         raise HTTPException(400, "Von- und Nach-Sparte muessen verschieden sein")
-    for sid in (u.von_sparte_id, u.nach_sparte_id):
-        if not con.execute("SELECT 1 FROM sparte WHERE id = ?", (sid,)).fetchone():
-            raise HTTPException(404, f"Sparte {sid} nicht gefunden")
-
     def umbuchung_kategorie(sparte_id: int) -> int:
         row = con.execute(
             "SELECT id FROM kategorie WHERE sparte_id = ? AND lower(name) = ? "
@@ -306,13 +307,15 @@ def create_umbuchung(u: UmbuchungIn, con: sqlite3.Connection = Depends(db_dep)):
 
 @router.put("/buchungen/{buchung_id}")
 def update_buchung(buchung_id: int, b: BuchungIn,
-                   con: sqlite3.Connection = Depends(db_dep)):
+                   con: sqlite3.Connection = Depends(db_dep), bereich: BereichDep = Bereich(1)):
 
     """Buchung ueberschreiben: Kopf-Felder aktualisieren, Zeilen ersetzen.
 
     Verknuepfungen, die nicht im Formular stehen (bankumsatz_id, Belegstatus,
     transfer_gruppe_id), bleiben unveraendert erhalten.
     """
+    pruefe_buchung(con, buchung_id, bereich)
+    _pruefe_buchungsreferenzen(con, buchung_id, bereich)
     alt = con.execute("SELECT transfer_gruppe_id FROM buchung WHERE id = ?",
                       (buchung_id,)).fetchone()
     if not alt:
@@ -320,7 +323,7 @@ def update_buchung(buchung_id: int, b: BuchungIn,
     if alt["transfer_gruppe_id"]:
         raise HTTPException(400, "Umbuchungen sind gekoppelt - bitte loeschen "
                                  "und neu anlegen statt bearbeiten")
-    _pruefe_sparte_und_zeilen(con, b)
+    _pruefe_sparte_und_zeilen(con, b, bereich)
     try:
         con.execute(
             "UPDATE buchung SET sparte_id = ?, datum = ?, typ = ?, zahlungsart = ?, "
@@ -343,7 +346,8 @@ def update_buchung(buchung_id: int, b: BuchungIn,
 
 
 @router.delete("/buchungen/{buchung_id}", status_code=204)
-def delete_buchung(buchung_id: int, con: sqlite3.Connection = Depends(db_dep)):
+def delete_buchung(buchung_id: int, con: sqlite3.Connection = Depends(db_dep), bereich: BereichDep = Bereich(1)):
+    pruefe_buchung(con, buchung_id, bereich)
     row = con.execute(
         "SELECT bankumsatz_id, transfer_gruppe_id FROM buchung WHERE id = ?",
         (buchung_id,)).fetchone()
@@ -356,6 +360,9 @@ def delete_buchung(buchung_id: int, con: sqlite3.Connection = Depends(db_dep)):
             (row["transfer_gruppe_id"],)).fetchall()
     else:
         betroffen = [{"id": buchung_id, "bankumsatz_id": row["bankumsatz_id"]}]
+    for b in betroffen:
+        pruefe_buchung(con, b["id"], bereich)
+        _pruefe_buchungsreferenzen(con, b["id"], bereich)
     for b in betroffen:
         con.execute("DELETE FROM buchung WHERE id = ?", (b["id"],))  # Zeilen via CASCADE
         # War die Buchung aus einem Bankumsatz uebernommen, wird dieser wieder
@@ -383,3 +390,14 @@ def _buchung_detail(con: sqlite3.Connection, buchung_id: int) -> dict:
         ).fetchall()
     ]
     return result
+
+
+def _pruefe_buchungsreferenzen(con, buchung_id, bereich):
+    """Auch erhaltene Verweise und gekoppelte Loeschfolgen bleiben im Bereich."""
+    row = con.execute("SELECT bankkonto_id, bankumsatz_id FROM buchung WHERE id=?", (buchung_id,)).fetchone()
+    if row["bankkonto_id"] is not None:
+        pruefe_konto(con, row["bankkonto_id"], bereich)
+    if row["bankumsatz_id"] is not None:
+        pruefe_umsatz(con, row["bankumsatz_id"], bereich)
+    for beleg in con.execute("SELECT beleg_id FROM buchung_beleg WHERE buchung_id=?", (buchung_id,)):
+        pruefe_beleg(con, beleg[0], bereich)

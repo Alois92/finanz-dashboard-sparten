@@ -2,11 +2,9 @@ import os
 import asyncio
 import json
 import pathlib
-import shutil
 import sqlite3
 import tempfile
 import unittest
-import uuid
 from unittest.mock import patch
 
 from app import auth, backup, db
@@ -70,8 +68,9 @@ class MigrationTest(unittest.TestCase):
             con.execute(f"ALTER TABLE import_batch DROP COLUMN {spalte}")
 
     def setUp(self):
-        self.root = pathlib.Path(tempfile.gettempdir()) / f"finanz-migrate-{uuid.uuid4().hex}"
-        self.root.mkdir()
+        self.temp = tempfile.TemporaryDirectory(prefix="finanz-migrate-")
+        self.addCleanup(self.temp.cleanup)
+        self.root = pathlib.Path(self.temp.name)
         self.db_path = self.root / "test.db"
         self.patches = [
             patch.dict(os.environ, {"FINANZ_DB": str(self.db_path), "FINANZ_TEST_AUTH_BYPASS": "1"}),
@@ -84,9 +83,8 @@ class MigrationTest(unittest.TestCase):
         for p in self.patches:
             p.start()
             self.addCleanup(p.stop)
-        self.addCleanup(shutil.rmtree, self.root, ignore_errors=True)
 
-    def test_neue_datenbank_ist_auf_version_2_ohne_anstehende_migrationen(self):
+    def test_neue_datenbank_ist_auf_version_3_ohne_anstehende_migrationen(self):
         from app import migrate
 
         db.init_db()
@@ -96,9 +94,9 @@ class MigrationTest(unittest.TestCase):
             versionen = con.execute(
                 "SELECT version, name FROM schema_version ORDER BY version"
             ).fetchall()
-            self.assertEqual([(1, "schema_version"), (2, "import_batch_erkennung")], [tuple(r) for r in versionen])
+            self.assertEqual([(1, "schema_version"), (2, "import_batch_erkennung"), (3, "bereiche")], [tuple(r) for r in versionen])
             self.assertEqual(
-                {"aktuell": 2, "anstehend": [], "basis": False},
+                {"aktuell": 3, "anstehend": [], "basis": False},
                 migrate.status(con),
             )
         finally:
@@ -121,7 +119,7 @@ class MigrationTest(unittest.TestCase):
         con = db.get_connection()
         try:
             self.assertEqual(
-                [(0, "basis"), (1, "schema_version"), (2, "import_batch_erkennung")],
+                [(0, "basis"), (1, "schema_version"), (2, "import_batch_erkennung"), (3, "bereiche")],
                 [
                     tuple(r)
                     for r in con.execute(
@@ -275,7 +273,7 @@ class MigrationTest(unittest.TestCase):
         self.assertEqual(200, response.status_code)
         self.assertEqual(
             {
-                "aktuell": 2,
+                "aktuell": 3,
                 "anstehend": [],
                 "schreibgeschuetzt": False,
                 "fehler": None,

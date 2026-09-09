@@ -30,6 +30,17 @@ CREATE TABLE schema_version (
 -- Stammdaten: Sparten, Gruppen, Kategorien
 -- ---------------------------------------------------------------------------
 
+CREATE TABLE bereich (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    kuerzel TEXT NOT NULL UNIQUE,
+    typ TEXT NOT NULL CHECK (typ IN ('haupt','verein')),
+    aktiv INTEGER NOT NULL DEFAULT 1 CHECK (aktiv IN (0,1)),
+    sortierung INTEGER NOT NULL DEFAULT 0
+);
+INSERT OR IGNORE INTO bereich(id, name, kuerzel, typ, sortierung)
+VALUES (1, 'Haupt', 'HAUPT', 'haupt', 10), (2, 'Verein', 'VEREIN', 'verein', 20);
+
 CREATE TABLE sparte (
     id          INTEGER PRIMARY KEY,
     name        TEXT    NOT NULL,
@@ -38,7 +49,8 @@ CREATE TABLE sparte (
     geschuetzt  INTEGER NOT NULL DEFAULT 0 CHECK (geschuetzt IN (0,1)),  -- 1 = Verein
     aktiv       INTEGER NOT NULL DEFAULT 1 CHECK (aktiv IN (0,1)),
     farbe       TEXT,
-    sortierung  INTEGER NOT NULL DEFAULT 0
+    sortierung  INTEGER NOT NULL DEFAULT 0,
+    bereich_id INTEGER NOT NULL DEFAULT 1 REFERENCES bereich(id)
 );
 
 -- Buendelt Sparten, z. B. "Vermietung gesamt"
@@ -47,7 +59,8 @@ CREATE TABLE auswertungsgruppe (
     name        TEXT    NOT NULL,
     beschreibung TEXT,
     farbe       TEXT,
-    aktiv       INTEGER NOT NULL DEFAULT 1 CHECK (aktiv IN (0,1))
+    aktiv       INTEGER NOT NULL DEFAULT 1 CHECK (aktiv IN (0,1)),
+    bereich_id INTEGER NOT NULL DEFAULT 1 REFERENCES bereich(id)
 );
 
 CREATE TABLE auswertungsgruppe_sparte (
@@ -62,7 +75,8 @@ CREATE TABLE globale_kategoriegruppe (
     name        TEXT    NOT NULL,
     beschreibung TEXT,
     farbe       TEXT,
-    aktiv       INTEGER NOT NULL DEFAULT 1 CHECK (aktiv IN (0,1))
+    aktiv       INTEGER NOT NULL DEFAULT 1 CHECK (aktiv IN (0,1)),
+    bereich_id INTEGER NOT NULL DEFAULT 1 REFERENCES bereich(id)
 );
 
 CREATE TABLE kategorie (
@@ -119,7 +133,8 @@ CREATE TABLE bankkonto (
     name        TEXT    NOT NULL,
     iban        TEXT,
     bank        TEXT,
-    aktiv       INTEGER NOT NULL DEFAULT 1 CHECK (aktiv IN (0,1))
+    aktiv       INTEGER NOT NULL DEFAULT 1 CHECK (aktiv IN (0,1)),
+    bereich_id INTEGER NOT NULL DEFAULT 1 REFERENCES bereich(id)
 );
 
 CREATE TABLE import_batch (
@@ -209,7 +224,8 @@ CREATE TABLE beleg (
     sha256_hash       TEXT,
     belegdatum        TEXT,
     betrag_erkannt_cent INTEGER,
-    notiz             TEXT
+    notiz             TEXT,
+    bereich_id INTEGER NOT NULL DEFAULT 1 REFERENCES bereich(id)
 );
 
 -- n:m Buchung <-> Beleg
@@ -241,7 +257,8 @@ CREATE TABLE regel (
     ziel_sparte_id         INTEGER REFERENCES sparte(id),
     ziel_kategorie_id      INTEGER REFERENCES kategorie(id),
     ziel_typ               TEXT    CHECK (ziel_typ IN ('einnahme','ausgabe','umbuchung')),
-    ziel_tag_id            INTEGER REFERENCES tag(id)
+    ziel_tag_id            INTEGER REFERENCES tag(id),
+    bereich_id INTEGER NOT NULL DEFAULT 1 REFERENCES bereich(id)
 );
 
 -- ---------------------------------------------------------------------------
@@ -334,3 +351,7 @@ BEGIN
        SET betrag_cent = (SELECT COALESCE(SUM(betrag_cent),0) FROM buchungszeile WHERE buchung_id = OLD.buchung_id)
      WHERE id = OLD.buchung_id;
 END;
+
+CREATE INDEX idx_sparte_bereich ON sparte (bereich_id);
+CREATE INDEX idx_bankkonto_bereich ON bankkonto (bereich_id);
+CREATE INDEX idx_beleg_bereich ON beleg (bereich_id);

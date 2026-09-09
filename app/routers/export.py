@@ -9,6 +9,7 @@ from fastapi.responses import HTMLResponse, StreamingResponse
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill
 from ..db import db_dep
+from ..bereiche import Bereich, BereichDep, pruefe_sparte, sparten_ids
 
 router = APIRouter(tags=["export"])
 EURO_FORMAT = '#.##0,00 \u20ac'
@@ -39,8 +40,9 @@ def _validate(con, von=None, bis=None, sparte_id=None):
         raise HTTPException(404, "Sparte nicht gefunden")
     return von, bis
 
-def _where(von, bis, sparte_id, alias="v"):
-    clauses, params = [], []
+def _where(von, bis, sparte_id, bereich, alias="v"):
+    clauses = [f"{alias}.sparte_id IN (SELECT id FROM sparte WHERE bereich_id = ?)"]
+    params = [bereich.id]
     for value, expression in ((von, f"{alias}.datum>=?"), (bis, f"{alias}.datum<=?"),
                               (sparte_id, f"{alias}.sparte_id=?")):
         if value is not None:
@@ -67,9 +69,11 @@ def _sheet(sheet, headers, widths, euro_from=None):
 
 @router.get("/api/export/xlsx")
 def export_xlsx(von: str | None = None, bis: str | None = None,
-                sparte_id: int | None = None, con: sqlite3.Connection = Depends(db_dep)):
+                sparte_id: int | None = None, con: sqlite3.Connection = Depends(db_dep), bereich: BereichDep = Bereich(1)):
+    if sparte_id is not None:
+        pruefe_sparte(con, sparte_id, bereich)
     von, bis = _validate(con, von, bis, sparte_id)
-    where, params = _where(von, bis, sparte_id)
+    where, params = _where(von, bis, sparte_id, bereich)
     rows = con.execute(
         "SELECT v.datum,s.name sparte,k.name kategorie,v.typ,COALESCE(b.text,'') text,"
         "COALESCE(ko.name,'') kontakt,v.betrag_cent FROM v_einnahmen_ausgaben v "
@@ -129,8 +133,8 @@ def _euro(cents):
     value = f"{abs(cents)/100:,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
     return ("-" if cents < 0 else "") + value + " \u20ac"
 
-def _sums(con, start, end, sid):
-    where, params = _where(start, end, sid)
+def _sums(con, start, end, sid, bereich):
+    where, params = _where(start, end, sid, bereich)
     row = con.execute(
         "SELECT COALESCE(SUM(CASE WHEN v.typ='einnahme' THEN v.betrag_cent END),0) ein,"
         "COALESCE(SUM(CASE WHEN v.typ='ausgabe' THEN v.betrag_cent END),0) aus "
@@ -139,20 +143,24 @@ def _sums(con, start, end, sid):
 
 @router.get("/export/bericht", response_class=HTMLResponse)
 def jahresbericht(jahr: str, sparte_id: int | None = None,
-                  con: sqlite3.Connection = Depends(db_dep)):
+                  con: sqlite3.Connection = Depends(db_dep), bereich: BereichDep = Bereich(1)):
     if not re.fullmatch(r"\d{4}", jahr) or not 1900 <= int(jahr) <= 9999:
         raise HTTPException(400, "jahr muss vierstellig sein")
     start, end = f"{jahr}-01-01", f"{jahr}-12-31"
+    if sparte_id is not None:
+        pruefe_sparte(con, sparte_id, bereich)
     _validate(con, start, end, sparte_id)
     if sparte_id is None:
+        ids = sparten_ids(con, bereich)
+        marks = ",".join("?" for _ in ids) or "NULL"
         divisions = con.execute(
-            "SELECT id,name FROM sparte WHERE aktiv=1 ORDER BY sortierung,name").fetchall()
+            f"SELECT id,name FROM sparte WHERE aktiv=1 AND id IN ({marks}) ORDER BY sortierung,name", ids).fetchall()
     else:
         divisions = con.execute("SELECT id,name FROM sparte WHERE id=?", (sparte_id,)).fetchall()
-    total_in, total_out = _sums(con, start, end, sparte_id)
+    total_in, total_out = _sums(con, start, end, sparte_id, bereich)
     sections = []
     for division in divisions:
-        income, expense = _sums(con, start, end, division["id"])
+        income, expense = _sums(con, start, end, division["id"], bereich)
         monthly = con.execute(
             "SELECT CAST(strftime('%m',v.datum) AS INTEGER) monat,"
             "COALESCE(SUM(CASE WHEN v.typ='einnahme' THEN v.betrag_cent END),0) ein,"

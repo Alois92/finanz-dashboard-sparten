@@ -24,6 +24,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
 from ..db import db_dep
+from ..bereiche import Bereich, BereichDep, pruefe_sparte
 
 router = APIRouter(tags=["import"])
 
@@ -278,11 +279,11 @@ def import_excel(
     modus: str = Form("pruefen"),
     datei: UploadFile = File(...),
     con: sqlite3.Connection = Depends(db_dep),
+    bereich: BereichDep = Bereich(1),
 ):
     if modus not in ("pruefen", "einspielen"):
         raise HTTPException(400, "modus muss 'pruefen' oder 'einspielen' sein")
-    if not con.execute("SELECT 1 FROM sparte WHERE id = ?", (sparte_id,)).fetchone():
-        raise HTTPException(404, "Sparte nicht gefunden")
+    pruefe_sparte(con, sparte_id, bereich)
 
     rohdaten = datei.file.read()
     if not rohdaten:

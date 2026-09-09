@@ -15,6 +15,8 @@ INSERT INTO sparte (name, kuerzel, typ, geschuetzt, sortierung, farbe) VALUES
   ('Alois privat',          'AL',  'privat',     0, 50, '#FB923C'),
   ('Frau privat',           'FR',  'privat',     0, 60, '#818CF8');
 
+UPDATE sparte SET bereich_id = 2 WHERE typ = 'verein';
+
 -- Globale Kategoriegruppen (spartenuebergreifend)
 INSERT INTO globale_kategoriegruppe (name) VALUES
   ('Versicherungen'),
@@ -59,7 +61,7 @@ WHERE g.name = 'Alles ohne Verein' AND s.typ <> 'verein';
 -- Gesamtuebersicht
 INSERT INTO auswertungsgruppe_sparte (auswertungsgruppe_id, sparte_id)
 SELECT g.id, s.id FROM auswertungsgruppe g, sparte s
-WHERE g.name = 'Gesamtuebersicht';
+WHERE g.name = 'Gesamtuebersicht' AND s.bereich_id = g.bereich_id;
 
 -- Personen fuer den Personen-Filter
 INSERT INTO person (name) VALUES ('Alois'), ('Frau');

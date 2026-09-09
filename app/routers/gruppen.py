@@ -4,6 +4,8 @@ import sqlite3
 from fastapi import APIRouter, Depends, HTTPException
 
 from ..db import db_dep
+from ..bereiche import (Bereich, BereichDep, pruefe_sparte, pruefe_kategorie,
+                        pruefe_globalgruppe, pruefe_auswertungsgruppe)
 from ..schemas import AuswertungsgruppeIn, GruppeIn
 
 router = APIRouter(tags=["gruppen"])
@@ -80,9 +82,9 @@ def _speichere_auswertungssparten(
 
 
 @router.get("/globalgruppen")
-def list_globalgruppen(con: sqlite3.Connection = Depends(db_dep)):
+def list_globalgruppen(con: sqlite3.Connection = Depends(db_dep), bereich: BereichDep = Bereich(1)):
     ids = [r["id"] for r in con.execute(
-        "SELECT id FROM globale_kategoriegruppe WHERE aktiv = 1 ORDER BY name, id"
+        "SELECT id FROM globale_kategoriegruppe WHERE aktiv = 1 AND bereich_id = ? ORDER BY name, id", (bereich.id,)
     ).fetchall()]
     return [_gruppe(con, gruppe_id) for gruppe_id in ids]
 
@@ -113,14 +115,16 @@ def _speichere_globalgruppe_kategorien(
 
 
 @router.post("/globalgruppen", status_code=201)
-def create_globalgruppe(gruppe: GruppeIn, con: sqlite3.Connection = Depends(db_dep)):
+def create_globalgruppe(gruppe: GruppeIn, con: sqlite3.Connection = Depends(db_dep), bereich: BereichDep = Bereich(1)):
     name, beschreibung = _werte(gruppe)
     kategorie_ids = sorted(set(gruppe.kategorie_ids))
+    for kategorie_id in kategorie_ids:
+        pruefe_kategorie(con, kategorie_id, bereich)
     _pruefe_kategorie_ids(con, kategorie_ids)
     try:
         cur = con.execute(
-            "INSERT INTO globale_kategoriegruppe(name, beschreibung) VALUES(?, ?)",
-            (name, beschreibung),
+            "INSERT INTO globale_kategoriegruppe(name, beschreibung, bereich_id) VALUES(?, ?, ?)",
+            (name, beschreibung, bereich.id),
         )
         _speichere_globalgruppe_kategorien(con, cur.lastrowid, kategorie_ids)
         con.commit()
@@ -132,10 +136,12 @@ def create_globalgruppe(gruppe: GruppeIn, con: sqlite3.Connection = Depends(db_d
 
 @router.put("/globalgruppen/{gruppe_id}")
 def update_globalgruppe(gruppe_id: int, gruppe: GruppeIn,
-                        con: sqlite3.Connection = Depends(db_dep)):
-    _gruppe(con, gruppe_id)
+                        con: sqlite3.Connection = Depends(db_dep), bereich: BereichDep = Bereich(1)):
+    pruefe_globalgruppe(con, gruppe_id, bereich)
     name, beschreibung = _werte(gruppe)
     kategorie_ids = sorted(set(gruppe.kategorie_ids))
+    for kategorie_id in kategorie_ids:
+        pruefe_kategorie(con, kategorie_id, bereich)
     _pruefe_kategorie_ids(con, kategorie_ids)
     try:
         con.execute(
@@ -151,29 +157,31 @@ def update_globalgruppe(gruppe_id: int, gruppe: GruppeIn,
 
 
 @router.delete("/globalgruppen/{gruppe_id}", status_code=204)
-def delete_globalgruppe(gruppe_id: int, con: sqlite3.Connection = Depends(db_dep)):
-    _gruppe(con, gruppe_id)
+def delete_globalgruppe(gruppe_id: int, con: sqlite3.Connection = Depends(db_dep), bereich: BereichDep = Bereich(1)):
+    pruefe_globalgruppe(con, gruppe_id, bereich)
     con.execute("DELETE FROM globale_kategoriegruppe WHERE id = ?", (gruppe_id,))
     con.commit()
 
 
 @router.get("/auswertungsgruppen")
-def list_auswertungsgruppen(con: sqlite3.Connection = Depends(db_dep)):
+def list_auswertungsgruppen(con: sqlite3.Connection = Depends(db_dep), bereich: BereichDep = Bereich(1)):
     ids = [r["id"] for r in con.execute(
-        "SELECT id FROM auswertungsgruppe WHERE aktiv = 1 ORDER BY name, id"
+        "SELECT id FROM auswertungsgruppe WHERE aktiv = 1 AND bereich_id = ? ORDER BY name, id", (bereich.id,)
     ).fetchall()]
     return [_auswertungsgruppe(con, gruppe_id) for gruppe_id in ids]
 
 
 @router.post("/auswertungsgruppen", status_code=201)
 def create_auswertungsgruppe(
-    gruppe: AuswertungsgruppeIn, con: sqlite3.Connection = Depends(db_dep),
+    gruppe: AuswertungsgruppeIn, con: sqlite3.Connection = Depends(db_dep), bereich: BereichDep = Bereich(1),
 ):
+    for sparte_id in gruppe.sparte_ids:
+        pruefe_sparte(con, sparte_id, bereich)
     name, beschreibung, sparte_ids = _auswertungswerte(gruppe, con)
     try:
         cur = con.execute(
-            "INSERT INTO auswertungsgruppe(name, beschreibung) VALUES(?, ?)",
-            (name, beschreibung),
+            "INSERT INTO auswertungsgruppe(name, beschreibung, bereich_id) VALUES(?, ?, ?)",
+            (name, beschreibung, bereich.id),
         )
         _speichere_auswertungssparten(con, cur.lastrowid, sparte_ids)
         con.commit()
@@ -186,9 +194,11 @@ def create_auswertungsgruppe(
 @router.put("/auswertungsgruppen/{gruppe_id}")
 def update_auswertungsgruppe(
     gruppe_id: int, gruppe: AuswertungsgruppeIn,
-    con: sqlite3.Connection = Depends(db_dep),
+    con: sqlite3.Connection = Depends(db_dep), bereich: BereichDep = Bereich(1),
 ):
-    _auswertungsgruppe(con, gruppe_id)
+    pruefe_auswertungsgruppe(con, gruppe_id, bereich)
+    for sparte_id in gruppe.sparte_ids:
+        pruefe_sparte(con, sparte_id, bereich)
     name, beschreibung, sparte_ids = _auswertungswerte(gruppe, con)
     try:
         con.execute(
@@ -205,8 +215,8 @@ def update_auswertungsgruppe(
 
 @router.delete("/auswertungsgruppen/{gruppe_id}", status_code=204)
 def delete_auswertungsgruppe(
-    gruppe_id: int, con: sqlite3.Connection = Depends(db_dep),
+    gruppe_id: int, con: sqlite3.Connection = Depends(db_dep), bereich: BereichDep = Bereich(1),
 ):
-    _auswertungsgruppe(con, gruppe_id)
+    pruefe_auswertungsgruppe(con, gruppe_id, bereich)
     con.execute("DELETE FROM auswertungsgruppe WHERE id = ?", (gruppe_id,))
     con.commit()

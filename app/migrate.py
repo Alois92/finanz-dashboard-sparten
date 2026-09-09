@@ -116,14 +116,7 @@ def anwenden(
         name, pfad = migrationen[version]
         try:
             if pfad.suffix == ".sql":
-                script = pfad.read_text(encoding="utf-8")
-                con.executescript(
-                    "BEGIN;\n"
-                    f"{script}\n"
-                    "INSERT INTO schema_version(version, name) "
-                    f"VALUES({version}, {repr(name)});\n"
-                    "COMMIT;"
-                )
+                _sql_migration(con, pfad, version, name)
             elif pfad.suffix == ".py":
                 con.execute("BEGIN")
                 _lade_python_migration(pfad).up(con)
@@ -142,6 +135,63 @@ def anwenden(
             raise MigrationsFehler(version, exc) from exc
         angewendet.append(version)
     return angewendet
+
+
+def _sql_anweisungen(script: str):
+    """SQLite erkennt auch Semikolons in Strings und mehrteiligen Triggern."""
+    puffer = ""
+    for zeichen in script:
+        puffer += zeichen
+        if zeichen == ";" and sqlite3.complete_statement(puffer):
+            yield puffer
+            puffer = ""
+    if puffer.strip():
+        yield puffer
+
+
+def _sql_migration(con, pfad: pathlib.Path, version: int, name: str) -> None:
+    # SQLite verbietet ADD COLUMN REFERENCES mit nicht-NULL-Default bei FK=ON.
+    # Deshalb fuer die Transaktion aussetzen und vor Commit explizit pruefen.
+    fremdschluessel = con.execute("PRAGMA foreign_keys").fetchone()[0]
+    meldungen = []
+    try:
+        con.execute("PRAGMA foreign_keys = OFF")
+        con.execute("BEGIN")
+        for sql in _sql_anweisungen(pfad.read_text(encoding="utf-8-sig")):
+            ohne_kommentare = re.sub(r"--[^\n]*|/\*.*?\*/", "", sql, flags=re.S).strip()
+            add = re.match(
+                r"ALTER\s+TABLE\s+([A-Za-z_]\w*)\s+ADD\s+COLUMN\s+([A-Za-z_]\w*)\b",
+                ohne_kommentare, re.I,
+            )
+            if add:
+                tabelle, spalte = add.groups()
+                vorhandene = {
+                    r[1].lower() for r in con.execute(f'PRAGMA table_info("{tabelle}")')
+                }
+                if spalte.lower() in vorhandene:
+                    log.info(
+                        "Migration %s: ADD COLUMN uebersprungen; Tabelle %s, Spalte %s bereits vorhanden",
+                        version, tabelle, spalte,
+                    )
+                    continue
+            cursor = con.execute(sql)
+            if cursor.description is not None:
+                meldungen.extend(
+                    " ".join(str(wert) for wert in row) for row in cursor.fetchall()
+                )
+        if con.execute("PRAGMA foreign_key_check").fetchone() is not None:
+            raise sqlite3.IntegrityError("Fremdschluesselpruefung nach Migration fehlgeschlagen")
+        con.execute(
+            "INSERT INTO schema_version(version, name) VALUES(?, ?)", (version, name)
+        )
+        con.commit()
+    except Exception:
+        con.rollback()
+        raise
+    finally:
+        con.execute(f"PRAGMA foreign_keys = {int(fremdschluessel)}")
+    for meldung in meldungen:
+        log.info("Migration %s: %s", version, meldung)
 
 
 def _lade_python_migration(pfad: pathlib.Path):

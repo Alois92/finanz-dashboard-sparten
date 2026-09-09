@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import tempfile
+import contextlib
+import io
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -12,6 +14,11 @@ from scripts import set_auth_password
 
 class SetAuthPasswordTest(unittest.TestCase):
     def setUp(self):
+        # Die echte CLI erzeugt Einmalcodes; diese gehören nicht ins Testprotokoll.
+        self.output = io.StringIO()
+        capture = contextlib.redirect_stdout(self.output)
+        capture.__enter__()
+        self.addCleanup(capture.__exit__, None, None, None)
         self.tempdir = tempfile.TemporaryDirectory()
         self.addCleanup(self.tempdir.cleanup)
         self.auth_path = Path(self.tempdir.name) / "auth.json"

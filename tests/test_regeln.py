@@ -168,9 +168,17 @@ class RegelvorschlagApiTest(unittest.TestCase):
         import_bank.patch_regel(
             regel_id, import_bank.RegelPatchIn(aktiv=1), con,
         )
+        with self.assertRaises(HTTPException) as error:
+            import_bank.uebernehme_vorschlaege(
+                import_bank.VorschlaegeUebernehmenIn(umsatz_ids=[zweiter_id, 999999]), con,
+            )
+        self.assertEqual(404, error.exception.status_code)
+        self.assertEqual("offen", con.execute(
+            "SELECT importstatus FROM bankumsatz WHERE id=?", (zweiter_id,),
+        ).fetchone()[0])
         ergebnis = import_bank.uebernehme_vorschlaege(
             import_bank.VorschlaegeUebernehmenIn(
-                umsatz_ids=[zweiter_id, 999999],
+                umsatz_ids=[zweiter_id, erster_id],
             ),
             con,
         )

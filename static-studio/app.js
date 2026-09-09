@@ -24,7 +24,9 @@ function escapeHtml(s) {
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 async function api(path, opts) {
-  const res = await fetch("/api" + path, opts);
+  const url = new URL("/api" + path, window.location.origin);
+  url.searchParams.set("bereich_id", "1");
+  const res = await fetch(url.pathname + url.search, opts);
   if (res.status === 401) {
     window.location.replace("/login.html");
     throw new Error("Sitzung abgelaufen.");

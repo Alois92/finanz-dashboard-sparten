@@ -16,11 +16,12 @@ import urllib.error
 import urllib.request
 from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from ..auswertung import OLLAMA_MODEL, OLLAMA_URL
 from ..db import db_dep
+from ..bereiche import Bereich, BereichDep, pruefe_beleg, pruefe_auswertung
 
 router = APIRouter(tags=["beleg-auswertung"])
 
@@ -46,9 +47,8 @@ def _auftrag_dict(row) -> dict:
 
 
 @router.post("/belege/{beleg_id}/auswerten", status_code=201)
-def auswerten_anfordern(beleg_id: int, con: sqlite3.Connection = Depends(db_dep)):
-    if not con.execute("SELECT 1 FROM beleg WHERE id = ?", (beleg_id,)).fetchone():
-        raise HTTPException(404, "Beleg nicht gefunden")
+def auswerten_anfordern(beleg_id: int, con: sqlite3.Connection = Depends(db_dep), bereich: BereichDep = Bereich(1)):
+    pruefe_beleg(con, beleg_id, bereich)
 
     # Dedupe: laeuft/wartet bereits ein Auftrag oder ist er schon fertig,
     # diesen zurueckgeben statt einen zweiten anzulegen.
@@ -72,15 +72,15 @@ def auswerten_anfordern(beleg_id: int, con: sqlite3.Connection = Depends(db_dep)
 @router.get("/beleg-auswertungen")
 def liste_auswertungen(
     status: Optional[str] = None,
-    con: sqlite3.Connection = Depends(db_dep),
+    con: sqlite3.Connection = Depends(db_dep), bereich: BereichDep = Bereich(1),
 ):
     sql = (
         "SELECT a.id, a.beleg_id, a.status, a.ergebnis_json, a.fehler, "
         "a.versuche, a.erstellt, a.aktualisiert, "
         "b.dateiname, b.sparte_id "
-        "FROM beleg_auswertung a JOIN beleg b ON b.id = a.beleg_id WHERE 1=1"
+        "FROM beleg_auswertung a JOIN beleg b ON b.id = a.beleg_id WHERE b.bereich_id = ?"
     )
-    params: list = []
+    params: list = [bereich.id]
     if status:
         sql += " AND a.status = ?"
         params.append(status)
@@ -93,12 +93,9 @@ def liste_auswertungen(
 def setze_auswertungsstatus(
     auswertung_id: int,
     body: AuswertungStatusIn,
-    con: sqlite3.Connection = Depends(db_dep),
+    con: sqlite3.Connection = Depends(db_dep), bereich: BereichDep = Bereich(1),
 ):
-    if not con.execute(
-        "SELECT 1 FROM beleg_auswertung WHERE id = ?", (auswertung_id,)
-    ).fetchone():
-        raise HTTPException(404, "Auswertungsauftrag nicht gefunden")
+    pruefe_auswertung(con, auswertung_id, bereich)
     con.execute(
         "UPDATE beleg_auswertung SET status = ?, aktualisiert = datetime('now') "
         "WHERE id = ?",
@@ -109,7 +106,7 @@ def setze_auswertungsstatus(
 
 
 @router.get("/auswertung/status")
-def auswertung_status():
+def auswertung_status(bereich: BereichDep = Bereich(1)):
     """Erreichbarkeit des konfigurierten Ollama-Servers pruefen.
 
     Liefert immer einen regulaeren Antwortkoerper - ist der Server nicht
