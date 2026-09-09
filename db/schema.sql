@@ -20,6 +20,12 @@ PRAGMA foreign_keys = ON;
 -- Kein WAL: Standard-Journal (DELETE) funktioniert auch auf Netzlaufwerken (SMB).
 -- Einzelnutzer-Betrieb, daher kein WAL noetig.
 
+CREATE TABLE schema_version (
+    version        INTEGER PRIMARY KEY,
+    name           TEXT    NOT NULL,
+    angewendet_am  TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
 -- ---------------------------------------------------------------------------
 -- Stammdaten: Sparten, Gruppen, Kategorien
 -- ---------------------------------------------------------------------------

@@ -14,7 +14,8 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from .auswertung import auswertung_schleife
 from .auth import AuthMiddleware, router as auth_router
 from .backup import backup_schleife
-from .db import init_db
+from .db import get_connection, init_db
+from .migrate import MigrationsFehler, status as migrationsstatus
 from .routers import (belege, beleg_auswertung, buchungen, dashboard, export,
                       gruppen, import_bank, import_excel, schnellerfassung,
                       stammdaten)
@@ -24,15 +25,28 @@ STUDIO_DIR = pathlib.Path(__file__).resolve().parent.parent / "static-studio"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    init_db()
-    sicherung = asyncio.create_task(backup_schleife())
-    auswertung = asyncio.create_task(auswertung_schleife())
+    sicherung = None
+    auswertung = None
+    app.state.schreibgeschuetzt = False
+    app.state.migrationsfehler = None
+    try:
+        init_db()
+    except MigrationsFehler as exc:
+        app.state.schreibgeschuetzt = True
+        app.state.migrationsfehler = str(exc)
+    else:
+        sicherung = asyncio.create_task(backup_schleife())
+        auswertung = asyncio.create_task(auswertung_schleife())
     yield
-    sicherung.cancel()
-    auswertung.cancel()
+    if sicherung is not None:
+        sicherung.cancel()
+    if auswertung is not None:
+        auswertung.cancel()
 
 
 app = FastAPI(title="Finanz-Dashboard Sparten", version="0.1.0", lifespan=lifespan)
+app.state.schreibgeschuetzt = False
+app.state.migrationsfehler = None
 app.add_middleware(AuthMiddleware)
 app.add_middleware(
     TrustedHostMiddleware,
@@ -57,6 +71,21 @@ app.include_router(belege.router, prefix="/api")
 app.include_router(beleg_auswertung.router, prefix="/api")
 app.include_router(import_bank.router, prefix="/api")
 app.include_router(import_excel.router, prefix="/api")
+
+
+@app.middleware("http")
+async def schreibschutz_middleware(request: Request, call_next):
+    if (
+        request.method in {"POST", "PUT", "PATCH", "DELETE"}
+        and not request.url.path.startswith("/api/auth/")
+        and getattr(request.app.state, "schreibgeschuetzt", False)
+    ):
+        fehler = getattr(request.app.state, "migrationsfehler", None) or "unbekannt"
+        return JSONResponse(
+            {"detail": f"Datenbank-Nachzug fehlgeschlagen: {fehler}"},
+            status_code=503,
+        )
+    return await call_next(request)
 
 
 def _saubere_validierungswert(wert):
@@ -88,6 +117,21 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/api/schema")
+def schema_status():
+    con = get_connection()
+    try:
+        stand = migrationsstatus(con)
+    finally:
+        con.close()
+    return {
+        "aktuell": stand["aktuell"],
+        "anstehend": stand["anstehend"],
+        "schreibgeschuetzt": app.state.schreibgeschuetzt,
+        "fehler": app.state.migrationsfehler,
+    }
 
 
 # Studio ist die einzige Oberflaeche: unter / UND weiterhin unter /studio
