@@ -1,6 +1,6 @@
 # P00: Versionierter Schema-Nachzug mit Sicherung
 
-Meilenstein M0. Modell: Standard-Codex, Aufwand medium. Branch `neubau/p00-schema-nachzug` von `neubau`.
+Meilenstein M0. Modell: Standard-Codex, Aufwand medium. Branch `pkt/p00-schema-nachzug` von `neubau`.
 
 ## 1. Ziel
 

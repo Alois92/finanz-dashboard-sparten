@@ -119,10 +119,10 @@ def _sichere_auf_zweitziel(erstkopie, dateiname: str) -> None:
     NAS gerade offline): jeder Fehler wird nur geloggt, niemals weitergereicht.
     """
     ziel2 = BACKUP_ZIEL2 / dateiname
-    if ziel2.exists() and _ist_gueltige_sqlite_datei(ziel2):
-        return
     temp_ziel2 = _temp_pfad(ziel2)
     try:
+        if ziel2.exists() and _ist_gueltige_sqlite_datei(ziel2):
+            return
         BACKUP_ZIEL2.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(erstkopie, temp_ziel2)
         _abschliessen(temp_ziel2, ziel2, BACKUP_ZIEL2, "Zweitziel")

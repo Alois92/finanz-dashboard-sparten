@@ -73,6 +73,8 @@ SPARTEN_PALETTE = ["#6AA9FF", "#2DD4BF", "#C084FC", "#F472B6", "#FB923C",
 
 def init_db() -> None:
     """Legt Schema + Seed an, falls die Datenbank noch leer ist."""
+    from . import backup, migrate
+
     con = get_connection()
     try:
         exists = con.execute(
@@ -82,7 +84,13 @@ def init_db() -> None:
             con.executescript(SCHEMA.read_text(encoding="utf-8"))
             con.executescript(SEED.read_text(encoding="utf-8"))
             con.commit()
+            migrate.alle_markieren(con)
         else:
+            if not con.execute(
+                "SELECT 1 FROM sqlite_master "
+                "WHERE type='table' AND name='schema_version'"
+            ).fetchone():
+                migrate.basis_setzen(con)
             # Nachruestung: fehlende Sparten-Farben setzen (idempotent, greift
             # nur bei NULL/leer - selbst gewaehlte Farben bleiben unberuehrt).
             for kuerzel, farbe in SPARTEN_FARBEN.items():
@@ -131,6 +139,12 @@ def init_db() -> None:
             "ON beleg_auswertung (beleg_id)"
         )
         con.commit()
+
+        def _sicherung():
+            pfad = backup.sichere_datenbank()
+            return pathlib.Path(pfad) if pfad else None
+
+        migrate.anwenden(con, _sicherung, sicherung_pflicht=backup.DB_PERSISTENT)
     finally:
         con.close()
 
