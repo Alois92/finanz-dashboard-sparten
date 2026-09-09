@@ -1,4 +1,4 @@
-"""Bank-CSV-Import mit Dublettenschutz und Kontostand-Abgleich.
+﻿"""Bank-CSV-Import mit Dublettenschutz und Kontostand-Abgleich.
 
 Verarbeitet deutsche Bank-Export-CSVs (Trennzeichen ';', Zahlen '1.234,56',
 Datum 'TT.MM.JJJJ'). Betraege werden durchgaengig in Cent gespeichert.
@@ -16,6 +16,9 @@ import hashlib
 import io
 import re
 import sqlite3
+import unicodedata
+from datetime import datetime
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
@@ -28,89 +31,109 @@ router = APIRouter(tags=["import"])
 
 
 # ---------------------------------------------------------------------------
-# Spaltenerkennung (Header case-insensitiv, Umlaute/Einheiten tolerant)
+# Robuster CSV-Parser (P01)
 # ---------------------------------------------------------------------------
 
-# Schluesselwoerter je Zielspalte. Reihenfolge = Prioritaet.
-SPALTEN_DATUM = ("buchungstag", "buchungsdatum", "datum", "belegdatum")
 SPALTEN_VALUTA = ("valutadatum", "valuta", "wertstellung")
-SPALTEN_BETRAG = ("betrag", "umsatz", "soll/haben")
-SPALTEN_TEXT = ("verwendungszweck", "buchungstext", "vorgang", "beschreibung",
-                "text")
-SPALTEN_SALDO = ("saldo", "kontostand")
-SPALTEN_GEGENPARTEI = ("beguenstigter", "begünstigter", "zahlungspflichtiger",
-                       "auftraggeber", "empfaenger", "empfänger",
-                       "zahlungsbeteiligter", "gegenpartei", "name")
-SPALTEN_IBAN = ("iban", "kontonummer")
+
+def _norm_p01(wert: str) -> str:
+    text = unicodedata.normalize("NFKD", (wert or "").strip().lstrip("\ufeff"))
+    return "".join(c for c in text.lower() if c.isalnum())
 
 
-def _norm(kopf: str) -> str:
-    """Header normalisieren: Kleinbuchstaben, ohne Rand-Leerzeichen/BOM."""
-    return kopf.strip().lstrip("﻿").lower()
+def dekodiere(rohbytes: bytes) -> tuple[str, str]:
+    if rohbytes.startswith(b"\xff\xfe"):
+        return rohbytes.decode("utf-16"), "utf-16"
+    if rohbytes.startswith(b"\xfe\xff"):
+        return rohbytes.decode("utf-16"), "utf-16"
+    if rohbytes.startswith(b"\xef\xbb\xbf"):
+        return rohbytes.decode("utf-8-sig"), "utf-8"
+    for kodierung in ("utf-8", "cp1252"):
+        try:
+            return rohbytes.decode(kodierung), kodierung
+        except UnicodeDecodeError:
+            continue
+    return rohbytes.decode("cp1252"), "cp1252"
 
 
-def _finde_spalte(kopf_norm: list[str], kandidaten: tuple[str, ...]) -> Optional[int]:
-    """Index der ersten passenden Spalte (erst exakt, dann Teilstring)."""
-    for kand in kandidaten:
-        for i, k in enumerate(kopf_norm):
-            if k == kand:
+def erkenne_trennzeichen(text: str) -> str:
+    zeilen = text.splitlines()
+    kandidaten = (";", ",", "\t")
+    gueltig = []
+    for position, kandidat in enumerate(kandidaten):
+        anzahl = [len(next(csv.reader([zeile], delimiter=kandidat))) for zeile in zeilen if zeile.strip()]
+        if anzahl and len(set(anzahl)) == 1:
+            gueltig.append((anzahl[0], -position, kandidat))
+    return max(gueltig)[2] if gueltig else ";"
+
+
+def _finde_p01(kopf: list[str], kandidaten: tuple[str, ...], ausgeschlossen: set[int] = set()):
+    norm = [_norm_p01(wert) for wert in kopf]
+    kandidaten_norm = [_norm_p01(wert) for wert in kandidaten]
+    for kandidat in kandidaten_norm:
+        for i, wert in enumerate(norm):
+            if i not in ausgeschlossen and wert == kandidat:
                 return i
-    for kand in kandidaten:
-        for i, k in enumerate(kopf_norm):
-            if kand in k:
+    for kandidat in kandidaten_norm:
+        for i, wert in enumerate(norm):
+            if i not in ausgeschlossen and kandidat in wert:
                 return i
     return None
 
 
-# ---------------------------------------------------------------------------
-# Wertkonvertierung (deutsches Format -> Cent / ISO-Datum)
-# ---------------------------------------------------------------------------
+def erkenne_spalten(kopf: list[str]) -> dict:
+    norm = [_norm_p01(wert) for wert in kopf]
+    eigene_name = {i for i, wert in enumerate(norm) if wert == "eigenerkontoname"}
+    eigene_iban = {i for i, wert in enumerate(norm) if wert == "eigeneiban"}
+    result = {
+        "datum": _finde_p01(kopf, ("buchungsdatum", "datum", "valuta", "date", "booking date", "buchungstag", "valutadatum")),
+        "betrag": _finde_p01(kopf, ("betrag", "amount", "umsatz", "soll/haben")),
+        "text": _finde_p01(kopf, ("buchungs-details", "buchungsdetails", "details", "verwendungszweck", "buchungstext", "umsatztext", "description", "memo", "text", "vorgang", "beschreibung")),
+        "gegenpartei": _finde_p01(kopf, ("partnername", "partner", "empfänger", "auftraggeber", "payee", "name", "beguenstigter", "zahlungspflichtiger", "zahlungsbeteiligter", "gegenpartei"), eigene_name),
+        "iban": _finde_p01(kopf, ("partner iban", "iban gegenpartei", "gegen-iban", "iban", "kontonummer"), eigene_iban),
+        "waehrung": _finde_p01(kopf, ("währung", "waehrung", "currency")),
+    }
+    result["saldo"] = _finde_p01(
+        kopf, ("saldo", "kontostand", "balance"),
+        {i for i, wert in enumerate(norm) if "eigene" in wert},
+    )
+    return result
 
-def _betrag_zu_cent(text: str) -> int:
-    """'1.234,56' / '-1.234,56' / '1234,56-' -> Cent (int, vorzeichenbehaftet)."""
-    s = text.strip().replace(" ", "").replace(" ", "")
-    s = s.replace("EUR", "").replace("€", "")
-    if not s:
-        raise ValueError("leerer Betrag")
-    negativ = False
-    if s.startswith("+"):
-        s = s[1:]
-    if s.startswith("-"):
-        negativ = True
-        s = s[1:]
+
+def parse_betrag_cent(wert: str) -> int:
+    s = (wert or "").strip().replace(" ", "").replace("\u00a0", "")
+    s = re.sub(r"(?:EUR|€)$", "", s, flags=re.IGNORECASE)
     if s.endswith("-"):
-        negativ = True
-        s = s[:-1]
-    # Deutsches Format: Tausenderpunkt entfernen, Dezimalkomma -> Punkt.
-    s = s.replace(".", "").replace(",", ".")
-    cent = round(float(s) * 100)
-    return -cent if negativ else cent
+        s = "-" + s[:-1]
+    if not s or not re.fullmatch(r"[+-]?[0-9.,]+", s):
+        raise ValueError(f"ungueltiger Betrag: {wert!r}")
+    if "," in s and "." in s:
+        s = s.replace(".", "").replace(",", ".") if s.rfind(",") > s.rfind(".") else s.replace(",", "")
+    elif "," in s:
+        s = s.replace(",", ".")
+    try:
+        return int((Decimal(s) * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    except InvalidOperation:
+        raise ValueError(f"ungueltiger Betrag: {wert!r}") from None
 
 
-def _datum_zu_iso(text: str) -> str:
-    """'TT.MM.JJJJ' (auch JJ) -> 'YYYY-MM-DD'. ISO-Eingabe wird durchgereicht."""
-    s = text.strip()
-    if "." in s:
-        teile = s.split(".")
-        if len(teile) != 3 or not all(teile):
-            raise ValueError(f"ungueltiges Datum: {text!r}")
-        tag, monat, jahr = teile
-        if len(jahr) == 2:
-            jahr = "20" + jahr
-        return f"{int(jahr):04d}-{int(monat):02d}-{int(tag):02d}"
-    if "-" in s and len(s) >= 8:  # bereits ISO
-        return s
-    raise ValueError(f"ungueltiges Datum: {text!r}")
-
-
-def _dekodiere(rohdaten: bytes) -> str:
-    """CSV-Bytes dekodieren: erst UTF-8 (mit BOM), sonst cp1252 (Windows/dt. Banken)."""
-    for kodierung in ("utf-8-sig", "cp1252", "latin-1"):
+def parse_datum(wert: str) -> str:
+    for format_ in ("%d.%m.%Y", "%Y-%m-%d", "%m/%d/%Y"):
         try:
-            return rohdaten.decode(kodierung)
-        except UnicodeDecodeError:
-            continue
-    return rohdaten.decode("utf-8", errors="replace")
+            return datetime.strptime((wert or "").strip(), format_).date().isoformat()
+        except ValueError:
+            pass
+    raise ValueError(f"ungueltiges Datum: {wert!r}")
+
+
+def _norm_hash(wert) -> str:
+    return " ".join(str(wert or "").strip().lower().split())
+
+
+def fingerabdruck(konto_id, datum, betrag_cent, text, gegenpartei, iban, vorkommen: int) -> str:
+    werte = (konto_id, datum, betrag_cent, _norm_hash(text), _norm_hash(gegenpartei), _norm_hash(iban), vorkommen)
+    return hashlib.sha256("|".join(map(str, werte)).encode("utf-8")).hexdigest()
+
 
 
 # ---------------------------------------------------------------------------
@@ -189,144 +212,84 @@ def import_csv(
     datei: UploadFile = File(...),
     con: sqlite3.Connection = Depends(db_dep),
 ):
-    # Sync-Endpoint (wie die uebrigen Router): sqlite-Verbindung und Handler
-    # laufen im selben Threadpool-Thread. Datei daher synchron ueber .file lesen.
-    if not con.execute("SELECT 1 FROM bankkonto WHERE id = ?",
-                       (bankkonto_id,)).fetchone():
+    if not con.execute("SELECT 1 FROM bankkonto WHERE id = ?", (bankkonto_id,)).fetchone():
         raise HTTPException(404, "Bankkonto nicht gefunden")
-
-    rohdaten = datei.file.read()
-    if not rohdaten:
+    rohbytes = datei.file.read()
+    if not rohbytes:
         raise HTTPException(400, "Datei ist leer")
-    text = _dekodiere(rohdaten)
-
-    leser = csv.reader(io.StringIO(text), delimiter=";")
-    zeilen = [z for z in leser if any(feld.strip() for feld in z)]
+    text, kodierung = dekodiere(rohbytes)
+    trennzeichen = erkenne_trennzeichen(text)
+    zeilen = [z for z in csv.reader(io.StringIO(text), delimiter=trennzeichen) if any(feld.strip() for feld in z)]
     if not zeilen:
         raise HTTPException(400, "CSV enthaelt keine Daten")
-
     kopf = zeilen[0]
-    kopf_norm = [_norm(feld) for feld in kopf]
-
-    idx_datum = _finde_spalte(kopf_norm, SPALTEN_DATUM)
-    idx_betrag = _finde_spalte(kopf_norm, SPALTEN_BETRAG)
-    idx_text = _finde_spalte(kopf_norm, SPALTEN_TEXT)
-    idx_valuta = _finde_spalte(kopf_norm, SPALTEN_VALUTA)
-    idx_saldo = _finde_spalte(kopf_norm, SPALTEN_SALDO)
-    idx_gegen = _finde_spalte(kopf_norm, SPALTEN_GEGENPARTEI)
-    idx_iban = _finde_spalte(kopf_norm, SPALTEN_IBAN)
-
-    fehlend = []
-    if idx_datum is None:
-        fehlend.append("Datum")
-    if idx_betrag is None:
-        fehlend.append("Betrag")
-    if idx_text is None:
-        fehlend.append("Text/Verwendungszweck")
+    spalten = erkenne_spalten(kopf)
+    fehlend = [name for name in ("datum", "betrag") if spalten[name] is None]
+    erkannt_basis = {"kodierung": kodierung, "trennzeichen": trennzeichen, "spalten": spalten}
     if fehlend:
-        raise HTTPException(
-            400,
-            "Pflichtspalte(n) nicht gefunden: " + ", ".join(fehlend)
-            + f". Gefundene Spalten: {kopf}",
-        )
+        raise HTTPException(400, f"Pflichtspalte(n) nicht gefunden: {', '.join('Datum' if n == 'datum' else 'Betrag' for n in fehlend)}. Kodierung: {kodierung}; Trennzeichen: {trennzeichen!r}; Gefundene Spalten: {kopf}")
 
-    def _feld(zeile: list[str], idx: Optional[int]) -> Optional[str]:
-        if idx is None or idx >= len(zeile):
-            return None
-        wert = zeile[idx].strip()
-        return wert or None
+    def feld(zeile, idx):
+        return zeile[idx].strip() if idx is not None and idx < len(zeile) and zeile[idx].strip() else None
 
-    # Datenzeilen parsen (Zeilennummer merken fuer Fehlermeldungen).
-    posten = []  # dicts mit den Feldern + csv_zeile
+    posten, ungueltig = [], []
+    vorkommen = {}
     for nr, zeile in enumerate(zeilen[1:], start=2):
-        datum_roh = _feld(zeile, idx_datum)
-        betrag_roh = _feld(zeile, idx_betrag)
-        if datum_roh is None or betrag_roh is None:
-            # Zeile ohne Datum/Betrag (z. B. Saldo-Fusszeile) ueberspringen.
-            continue
         try:
-            datum = _datum_zu_iso(datum_roh)
-            betrag_cent = _betrag_zu_cent(betrag_roh)
-        except ValueError as e:
-            raise HTTPException(400, f"Zeile {nr}: {e}")
-        saldo_roh = _feld(zeile, idx_saldo)
-        saldo_cent = None
-        if saldo_roh is not None:
+            datum = parse_datum(feld(zeile, spalten["datum"]) or "")
+            betrag = parse_betrag_cent(feld(zeile, spalten["betrag"]) or "")
+        except ValueError as exc:
+            ungueltig.append({"zeile": nr, "grund": str(exc)})
+            continue
+        eintrag = {
+            "csv_zeile": nr, "datum": datum, "valuta": feld(zeile, _finde_p01(kopf, SPALTEN_VALUTA)),
+            "betrag_cent": betrag, "saldo_cent": None, "text": feld(zeile, spalten["text"]) or "",
+            "gegenpartei": feld(zeile, spalten["gegenpartei"]), "iban_gegenpartei": feld(zeile, spalten["iban"]),
+        }
+        if spalten["saldo"] is not None:
             try:
-                saldo_cent = _betrag_zu_cent(saldo_roh)
-            except ValueError as e:
-                raise HTTPException(400, f"Zeile {nr} (Saldo): {e}")
-        umsatztext = _feld(zeile, idx_text) or ""
-        posten.append({
-            "csv_zeile": nr,
-            "datum": datum,
-            "valuta": _feld(zeile, idx_valuta),
-            "betrag_cent": betrag_cent,
-            "saldo_cent": saldo_cent,
-            "text": umsatztext,
-            "gegenpartei": _feld(zeile, idx_gegen),
-            "iban_gegenpartei": _feld(zeile, idx_iban),
-        })
-
+                eintrag["saldo_cent"] = parse_betrag_cent(feld(zeile, spalten["saldo"]) or "")
+            except ValueError as exc:
+                ungueltig.append({"zeile": nr, "grund": f"Saldo: {exc}"})
+                continue
+        schluessel = (datum, betrag, _norm_hash(eintrag["text"]), _norm_hash(eintrag["gegenpartei"]), _norm_hash(eintrag["iban_gegenpartei"]))
+        eintrag["vorkommen"] = vorkommen.get(schluessel, 0)
+        vorkommen[schluessel] = eintrag["vorkommen"] + 1
+        posten.append(eintrag)
     if not posten:
         raise HTTPException(400, "Keine gueltigen Umsatzzeilen gefunden")
 
-    # Kontostand-Abgleich: saldo[n] - saldo[n-1] == betrag[n] (in Datei-Reihenfolge).
-    saldo_ok, saldo_hinweis = _saldo_pruefen(posten, idx_saldo is not None)
-
-    # import_batch anlegen (Zaehler spaeter aktualisieren).
-    cur = con.execute(
-        "INSERT INTO import_batch(bankkonto_id, dateiname, anzahl_zeilen, quelle) "
-        "VALUES(?,?,?,?)",
-        (bankkonto_id, datei.filename, len(posten), "csv"),
+    saldo_ok, saldo_hinweis = _saldo_pruefen(posten, spalten["saldo"] is not None)
+    batch = con.execute(
+        "INSERT INTO import_batch(bankkonto_id, dateiname, anzahl_zeilen, quelle, dateihash, parser_version, zeitraum_von, zeitraum_bis, anzahl_ungueltig) VALUES(?,?,?,?,?,?,?,?,?)",
+        (bankkonto_id, datei.filename, len(zeilen) - 1, "csv", hashlib.sha256(rohbytes).hexdigest(), 2, min(p["datum"] for p in posten), max(p["datum"] for p in posten), len(ungueltig)),
     )
-    batch_id = cur.lastrowid
-
-    neu = 0
-    dubletten = 0
+    batch_id, neu, dubletten = batch.lastrowid, 0, 0
     for p in posten:
-        import_hash = hashlib.sha256(
-            f"{bankkonto_id}|{p['datum']}|{p['betrag_cent']}|{p['text']}".encode("utf-8")
-        ).hexdigest()
-        # INSERT OR IGNORE: verstoesst gegen UNIQUE(bankkonto_id, import_hash) -> uebersprungen.
-        c = con.execute(
-            "INSERT OR IGNORE INTO bankumsatz("
-            "bankkonto_id, import_batch_id, datum, valuta, betrag_cent, "
-            "saldo_nachher_cent, text, gegenpartei, iban_gegenpartei, import_hash) "
-            "VALUES(?,?,?,?,?,?,?,?,?,?)",
-            (bankkonto_id, batch_id, p["datum"], p["valuta"], p["betrag_cent"],
-             p["saldo_cent"], p["text"], p["gegenpartei"], p["iban_gegenpartei"],
-             import_hash),
-        )
-        if c.rowcount == 1:
-            neu += 1
-        else:
+        neuer_hash = fingerabdruck(bankkonto_id, p["datum"], p["betrag_cent"], p["text"], p["gegenpartei"], p["iban_gegenpartei"], p["vorkommen"])
+        alter_hash = hashlib.sha256(f"{bankkonto_id}|{p['datum']}|{p['betrag_cent']}|{p['text']}".encode("utf-8")).hexdigest()
+        if con.execute("SELECT 1 FROM bankumsatz WHERE bankkonto_id = ? AND import_hash IN (?, ?)", (bankkonto_id, neuer_hash, alter_hash)).fetchone():
             dubletten += 1
-
-    con.execute(
-        "UPDATE import_batch SET anzahl_neu = ?, anzahl_dubletten = ? WHERE id = ?",
-        (neu, dubletten, batch_id),
-    )
+            continue
+        cur = con.execute(
+            "INSERT INTO bankumsatz(bankkonto_id, import_batch_id, datum, valuta, betrag_cent, saldo_nachher_cent, text, gegenpartei, iban_gegenpartei, import_hash) VALUES(?,?,?,?,?,?,?,?,?,?)",
+            (bankkonto_id, batch_id, p["datum"], p["valuta"], p["betrag_cent"], p["saldo_cent"], p["text"], p["gegenpartei"], p["iban_gegenpartei"], neuer_hash),
+        )
+        neu += cur.rowcount
+    con.execute("UPDATE import_batch SET anzahl_neu = ?, anzahl_dubletten = ? WHERE id = ?", (neu, dubletten, batch_id))
     con.commit()
-
-    return {
-        "batch_id": batch_id,
-        "neu": neu,
-        "dubletten": dubletten,
-        "gesamt": len(posten),
-        "saldo_ok": saldo_ok,
-        "saldo_hinweis": saldo_hinweis,
-    }
+    erkannt = {**erkannt_basis, "zeilen_gesamt": len(zeilen) - 1, "zeilen_ungueltig": ungueltig}
+    return {"batch_id": batch_id, "neu": neu, "dubletten": dubletten, "gesamt": len(posten), "saldo_ok": saldo_ok, "saldo_hinweis": saldo_hinweis, "erkannt": erkannt}
 
 
 def _saldo_pruefen(posten: list[dict], hat_saldo: bool):
     """Prueft die Saldo-Kette. Rueckgabe (saldo_ok, hinweis).
 
-    Ohne Saldo-Spalte: (None, None). Passt saldo[n]-saldo[n-1] nicht zu
+    Ohne Saldo-Spalte: (None, Hinweis). Passt saldo[n]-saldo[n-1] nicht zu
     betrag[n], deutet das auf einen fehlenden oder doppelten Umsatz hin.
     """
     if not hat_saldo:
-        return None, None
+        return None, "Keine Saldospalte vorhanden."
     mit_saldo = [p for p in posten if p["saldo_cent"] is not None]
     if len(mit_saldo) < 2:
         return None, "Zu wenige Saldo-Werte fuer einen Abgleich"

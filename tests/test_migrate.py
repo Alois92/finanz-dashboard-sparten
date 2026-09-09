@@ -64,6 +64,11 @@ def _asgi_request(method, path, json_body=None):
 
 
 class MigrationTest(unittest.TestCase):
+    @staticmethod
+    def _alte_import_batch_form(con):
+        for spalte in ("dateihash", "parser_version", "zeitraum_von", "zeitraum_bis", "anzahl_ungueltig"):
+            con.execute(f"ALTER TABLE import_batch DROP COLUMN {spalte}")
+
     def setUp(self):
         self.root = pathlib.Path(tempfile.gettempdir()) / f"finanz-migrate-{uuid.uuid4().hex}"
         self.root.mkdir()
@@ -81,7 +86,7 @@ class MigrationTest(unittest.TestCase):
             self.addCleanup(p.stop)
         self.addCleanup(shutil.rmtree, self.root, ignore_errors=True)
 
-    def test_neue_datenbank_ist_auf_version_1_ohne_anstehende_migrationen(self):
+    def test_neue_datenbank_ist_auf_version_2_ohne_anstehende_migrationen(self):
         from app import migrate
 
         db.init_db()
@@ -91,9 +96,9 @@ class MigrationTest(unittest.TestCase):
             versionen = con.execute(
                 "SELECT version, name FROM schema_version ORDER BY version"
             ).fetchall()
-            self.assertEqual([(1, "schema_version")], [tuple(r) for r in versionen])
+            self.assertEqual([(1, "schema_version"), (2, "import_batch_erkennung")], [tuple(r) for r in versionen])
             self.assertEqual(
-                {"aktuell": 1, "anstehend": [], "basis": False},
+                {"aktuell": 2, "anstehend": [], "basis": False},
                 migrate.status(con),
             )
         finally:
@@ -105,6 +110,7 @@ class MigrationTest(unittest.TestCase):
         con = sqlite3.connect(self.db_path)
         try:
             con.executescript(db.SCHEMA.read_text(encoding="utf-8"))
+            self._alte_import_batch_form(con)
             con.execute("DROP TABLE schema_version")
             con.commit()
         finally:
@@ -115,7 +121,7 @@ class MigrationTest(unittest.TestCase):
         con = db.get_connection()
         try:
             self.assertEqual(
-                [(0, "basis"), (1, "schema_version")],
+                [(0, "basis"), (1, "schema_version"), (2, "import_batch_erkennung")],
                 [
                     tuple(r)
                     for r in con.execute(
@@ -198,6 +204,7 @@ class MigrationTest(unittest.TestCase):
         con = sqlite3.connect(self.db_path)
         try:
             con.executescript(db.SCHEMA.read_text(encoding="utf-8"))
+            self._alte_import_batch_form(con)
             con.execute("DROP TABLE schema_version")
             con.commit()
         finally:
@@ -221,6 +228,7 @@ class MigrationTest(unittest.TestCase):
         con = sqlite3.connect(self.db_path)
         try:
             con.executescript(db.SCHEMA.read_text(encoding="utf-8"))
+            self._alte_import_batch_form(con)
             con.execute("DROP TABLE schema_version")
             con.commit()
         finally:
@@ -267,7 +275,7 @@ class MigrationTest(unittest.TestCase):
         self.assertEqual(200, response.status_code)
         self.assertEqual(
             {
-                "aktuell": 1,
+                "aktuell": 2,
                 "anstehend": [],
                 "schreibgeschuetzt": False,
                 "fehler": None,
@@ -293,6 +301,7 @@ class MigrationTest(unittest.TestCase):
             con = sqlite3.connect(alt_path)
             try:
                 con.executescript(db.SCHEMA.read_text(encoding="utf-8"))
+                self._alte_import_batch_form(con)
                 con.execute("DROP TABLE schema_version")
                 con.commit()
             finally:
