@@ -130,7 +130,12 @@ CREATE TABLE import_batch (
     anzahl_zeilen  INTEGER,
     anzahl_neu     INTEGER,
     anzahl_dubletten INTEGER,
-    quelle         TEXT
+    quelle         TEXT,
+    dateihash       TEXT,
+    parser_version  INTEGER NOT NULL DEFAULT 2,
+    zeitraum_von    TEXT,
+    zeitraum_bis    TEXT,
+    anzahl_ungueltig INTEGER
 );
 
 CREATE TABLE bankumsatz (

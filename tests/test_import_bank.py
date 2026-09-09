@@ -14,13 +14,40 @@ from fastapi import HTTPException
 from starlette.datastructures import UploadFile
 
 
-TEST_DIR = tempfile.TemporaryDirectory(prefix="finanz-import-bank-")
-os.environ["FINANZ_DB"] = str(Path(TEST_DIR.name) / "import-bank-test.db")
+TEST_DIR = None
+if not os.environ.get("FINANZ_DB"):
+    TEST_DIR = tempfile.TemporaryDirectory(prefix="finanz-import-bank-")
+    os.environ["FINANZ_DB"] = str(Path(TEST_DIR.name) / "import-bank-test.db")
 
 from app.db import get_connection, init_db
 from app.routers.import_bank import (
-    UmsatzVerbuchenIn, import_csv, verbuche_umsatz,
+    UmsatzVerbuchenIn, dekodiere, erkenne_spalten, erkenne_trennzeichen,
+    import_csv, parse_betrag_cent, parse_datum, verbuche_umsatz,
 )
+
+
+class ParserTest(unittest.TestCase):
+    def test_parse_betrag_cent(self):
+        self.assertEqual(-123456, parse_betrag_cent("-1.234,56"))
+        self.assertEqual(123456, parse_betrag_cent("1234.56"))
+        self.assertEqual(123456, parse_betrag_cent("1,234.56"))
+        self.assertEqual(0, parse_betrag_cent("0,00"))
+        with self.assertRaises(ValueError):
+            parse_betrag_cent("abc")
+
+    def test_parse_datum(self):
+        self.assertEqual("2025-12-31", parse_datum("31.12.2025"))
+        self.assertEqual("2025-12-31", parse_datum("2025-12-31"))
+        self.assertEqual("2025-12-31", parse_datum("12/31/2025"))
+        with self.assertRaises(ValueError):
+            parse_datum("31.02.2025")
+
+    def test_erkennung_und_utf16(self):
+        text, kodierung = dekodiere("Datum,Betrag\n31.12.2025,\"1,00\"\n".encode("utf-16"))
+        self.assertEqual("utf-16", kodierung)
+        self.assertEqual(",", erkenne_trennzeichen(text))
+        spalten = erkenne_spalten(["Eigener Kontoname", "Buchungsdatum", "Betrag", "Buchungs-Details", "Partnername", "Partner IBAN"])
+        self.assertEqual({"datum": 1, "betrag": 2, "text": 3, "gegenpartei": 4, "iban": 5, "waehrung": None, "saldo": None}, spalten)
 
 
 def _upload(inhalt: bytes, dateiname: str = "umsaetze.csv") -> UploadFile:
@@ -32,6 +59,8 @@ CSV_INHALT = (
     "01.03.2026;-1.234,56;Einkauf Supermarkt;Handelskette AG\n"
     "02.03.2026;2.500,00;Gehalt Maerz;Arbeitgeber GmbH\n"
 ).encode("utf-8-sig")
+
+GEORGE_FIXTURE = Path(__file__).parent / "fixtures" / "george_2025_auszug.csv"
 
 
 class ImportBankApiTest(unittest.TestCase):
@@ -86,6 +115,22 @@ class ImportBankApiTest(unittest.TestCase):
         self.assertEqual(rows[0]["gegenpartei"], "Handelskette AG")
         self.assertEqual(rows[1]["datum"], "2026-03-02")
         self.assertEqual(rows[1]["betrag_cent"], 250000)
+
+    def test_semikolon_beispiel_prueft_und_speichert_saldo(self):
+        con = get_connection()
+        self.addCleanup(con.close)
+        ergebnis = import_csv(
+            bankkonto_id=self.bankkonto_id,
+            datei=_upload(Path("beispiele/bank_beispiel.csv").read_bytes()),
+            con=con,
+        )
+        self.assertTrue(ergebnis["saldo_ok"])
+        self.assertEqual(
+            [350000, 265000, 252655, 245875, 247109],
+            [row[0] for row in con.execute(
+                "SELECT saldo_nachher_cent FROM bankumsatz ORDER BY datum"
+            )],
+        )
 
     def test_dublettenschutz_bei_wiederholtem_import(self):
         con = get_connection()
@@ -154,6 +199,42 @@ class ImportBankApiTest(unittest.TestCase):
         with self.assertRaises(HTTPException) as ctx:
             import_csv(bankkonto_id=self.bankkonto_id, datei=_upload(b""), con=con)
         self.assertTrue(400 <= ctx.exception.status_code < 500)
+
+    def test_george_fixture_importiert_alle_zeilen_und_erkennt_spalten(self):
+        con = get_connection()
+        self.addCleanup(con.close)
+        ergebnis = import_csv(bankkonto_id=self.bankkonto_id, datei=_upload(GEORGE_FIXTURE.read_bytes()), con=con)
+        self.assertEqual(8, ergebnis["neu"])
+        self.assertEqual("utf-16", ergebnis["erkannt"]["kodierung"])
+        self.assertEqual(",", ergebnis["erkannt"]["trennzeichen"])
+        self.assertEqual(8, ergebnis["erkannt"]["zeilen_gesamt"])
+        self.assertEqual(0, len(ergebnis["erkannt"]["zeilen_ungueltig"]))
+        row = con.execute("SELECT text, gegenpartei, iban_gegenpartei FROM bankumsatz ORDER BY id LIMIT 1").fetchone()
+        self.assertEqual("Zahlung für Käsekuchen", row["text"])
+        self.assertEqual("Fiktive Partnerin", row["gegenpartei"])
+        self.assertEqual("DE00123456789012345678", row["iban_gegenpartei"])
+        self.assertIsNone(ergebnis["saldo_ok"])
+        self.assertIn("keine saldospalte", ergebnis["saldo_hinweis"].lower())
+
+    def test_george_identische_zeilen_bleiben_zwei_und_reimport_ist_dubletten(self):
+        con = get_connection()
+        self.addCleanup(con.close)
+        erste = import_csv(bankkonto_id=self.bankkonto_id, datei=_upload(GEORGE_FIXTURE.read_bytes()), con=con)
+        zweite = import_csv(bankkonto_id=self.bankkonto_id, datei=_upload(GEORGE_FIXTURE.read_bytes()), con=con)
+        self.assertEqual(8, erste["neu"])
+        self.assertEqual(0, zweite["neu"])
+        self.assertEqual(8, zweite["dubletten"])
+        self.assertEqual(2, con.execute("SELECT COUNT(*) FROM bankumsatz WHERE text = 'Doppelte Testzahlung'").fetchone()[0])
+
+    def test_alter_fingerabdruck_verhindert_neuen_umsatz(self):
+        con = get_connection()
+        self.addCleanup(con.close)
+        import hashlib
+        alter = hashlib.sha256(f"{self.bankkonto_id}|2025-12-31|100|Alte Testzahlung".encode()).hexdigest()
+        con.execute("INSERT INTO bankumsatz(bankkonto_id, datum, betrag_cent, text, import_hash) VALUES(?,?,?,?,?)", (self.bankkonto_id, "2025-12-31", 100, "Alte Testzahlung", alter))
+        con.commit()
+        csv_inhalt = "Buchungsdatum,Betrag,Buchungs-Details\n31.12.2025,\"1,00\",Alte Testzahlung\n".encode("utf-16")
+        self.assertEqual(0, import_csv(bankkonto_id=self.bankkonto_id, datei=_upload(csv_inhalt), con=con)["neu"])
 
         with self.assertRaises(HTTPException) as ctx:
             import_csv(
