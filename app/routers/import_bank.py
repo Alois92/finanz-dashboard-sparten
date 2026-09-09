@@ -25,6 +25,10 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from ..db import db_dep
+from ..bereiche import (
+    Bereich, BereichDep, pruefe_sparte, pruefe_kategorie, pruefe_konto,
+    pruefe_umsatz, pruefe_regel,
+)
 from ..regeln import aktive_regeln, normalisiere_regeltext
 
 router = APIRouter(tags=["import"])
@@ -173,26 +177,28 @@ class VorschlaegeUebernehmenIn(BaseModel):
 # ---------------------------------------------------------------------------
 
 @router.get("/bankkonten")
-def list_bankkonten(con: sqlite3.Connection = Depends(db_dep)):
+def list_bankkonten(con: sqlite3.Connection = Depends(db_dep),
+                       bereich: BereichDep = Bereich(1)):
     rows = con.execute(
         "SELECT id, sparte_id, inhaber, name, iban, bank, aktiv "
-        "FROM bankkonto WHERE aktiv = 1 ORDER BY name"
+        "FROM bankkonto WHERE aktiv = 1 AND bereich_id = ? ORDER BY name",
+        (bereich.id,),
     ).fetchall()
     return [dict(r) for r in rows]
 
 
 @router.post("/bankkonten", status_code=201)
-def create_bankkonto(k: BankkontoIn, con: sqlite3.Connection = Depends(db_dep)):
+def create_bankkonto(k: BankkontoIn, con: sqlite3.Connection = Depends(db_dep),
+                       bereich: BereichDep = Bereich(1)):
     name = k.name.strip()
     if not name:
         raise HTTPException(400, "Name darf nicht leer sein")
-    if k.sparte_id is not None and not con.execute(
-            "SELECT 1 FROM sparte WHERE id = ?", (k.sparte_id,)).fetchone():
-        raise HTTPException(404, "Sparte nicht gefunden")
+    if k.sparte_id is not None:
+        pruefe_sparte(con, k.sparte_id, bereich)
     cur = con.execute(
-        "INSERT INTO bankkonto(sparte_id, inhaber, name, iban, bank) "
-        "VALUES(?,?,?,?,?)",
-        (k.sparte_id, k.inhaber, name, k.iban, k.bank),
+        "INSERT INTO bankkonto(sparte_id, inhaber, name, iban, bank, bereich_id) "
+        "VALUES(?,?,?,?,?,?)",
+        (k.sparte_id, k.inhaber, name, k.iban, k.bank, bereich.id),
     )
     con.commit()
     row = con.execute(
@@ -211,9 +217,9 @@ def import_csv(
     bankkonto_id: int = Form(...),
     datei: UploadFile = File(...),
     con: sqlite3.Connection = Depends(db_dep),
+    bereich: BereichDep = Bereich(1),
 ):
-    if not con.execute("SELECT 1 FROM bankkonto WHERE id = ?", (bankkonto_id,)).fetchone():
-        raise HTTPException(404, "Bankkonto nicht gefunden")
+    pruefe_konto(con, bankkonto_id, bereich)
     rohbytes = datei.file.read()
     if not rohbytes:
         raise HTTPException(400, "Datei ist leer")
@@ -333,10 +339,12 @@ def _regel_haystack(umsatz) -> str:
 
 
 @router.get("/regeln")
-def list_regeln(con: sqlite3.Connection = Depends(db_dep)):
+def list_regeln(con: sqlite3.Connection = Depends(db_dep),
+                       bereich: BereichDep = Bereich(1)):
     rows = con.execute(
         "SELECT id, name, aktiv, prioritaet, bedingung_text, ziel_sparte_id, "
-        "ziel_kategorie_id, ziel_typ FROM regel ORDER BY prioritaet, id"
+        "ziel_kategorie_id, ziel_typ FROM regel WHERE bereich_id = ? ORDER BY prioritaet, id",
+        (bereich.id,),
     ).fetchall()
     return [dict(row) for row in rows]
 
@@ -346,16 +354,18 @@ def patch_regel(
     regel_id: int,
     body: RegelPatchIn,
     con: sqlite3.Connection = Depends(db_dep),
+    bereich: BereichDep = Bereich(1),
 ):
-    if not con.execute("SELECT 1 FROM regel WHERE id = ?", (regel_id,)).fetchone():
-        raise HTTPException(404, "Regel nicht gefunden")
+    pruefe_regel(con, regel_id, bereich)
     con.execute("UPDATE regel SET aktiv = ? WHERE id = ?", (body.aktiv, regel_id))
     con.commit()
-    return next(row for row in list_regeln(con) if row["id"] == regel_id)
+    return next(row for row in list_regeln(con, bereich) if row["id"] == regel_id)
 
 
 @router.delete("/regeln/{regel_id}", status_code=204)
-def delete_regel(regel_id: int, con: sqlite3.Connection = Depends(db_dep)):
+def delete_regel(regel_id: int, con: sqlite3.Connection = Depends(db_dep),
+                       bereich: BereichDep = Bereich(1)):
+    pruefe_regel(con, regel_id, bereich)
     cur = con.execute("DELETE FROM regel WHERE id = ?", (regel_id,))
     if cur.rowcount == 0:
         raise HTTPException(404, "Regel nicht gefunden")
@@ -369,14 +379,17 @@ def list_bankumsaetze(
     bis: Optional[str] = None,
     status: Optional[str] = None,
     con: sqlite3.Connection = Depends(db_dep),
+    bereich: BereichDep = Bereich(1),
 ):
     sql = (
         "SELECT id, bankkonto_id, import_batch_id, datum, valuta, betrag_cent, "
         "saldo_nachher_cent, text, gegenpartei, iban_gegenpartei, importstatus "
-        "FROM bankumsatz WHERE 1=1"
+        "FROM bankumsatz WHERE bankkonto_id IN "
+        "(SELECT id FROM bankkonto WHERE bereich_id = ?)"
     )
-    params: list = []
+    params: list = [bereich.id]
     if bankkonto_id is not None:
+        pruefe_konto(con, bankkonto_id, bereich)
         sql += " AND bankkonto_id = ?"
         params.append(bankkonto_id)
     if von:
@@ -394,7 +407,7 @@ def list_bankumsaetze(
     # Offenen Umsaetzen den ersten passenden aktiven Regelvorschlag mitgeben.
     offene = [r for r in rows if r["importstatus"] == "offen"]
     if offene:
-        regeln = aktive_regeln(con)
+        regeln = aktive_regeln(con, bereich.id)
         for u in offene:
             u["vorschlag"] = _vorschlag_fuer_umsatz(con, u, regeln)
     return rows
@@ -430,7 +443,11 @@ def _vorschlag_fuer_umsatz(con, u: dict, regeln) -> Optional[dict]:
 def uebernehme_vorschlaege(
     body: VorschlaegeUebernehmenIn,
     con: sqlite3.Connection = Depends(db_dep),
+    bereich: BereichDep = Bereich(1),
 ):
+    # Alle expliziten Kennungen pruefen, bevor die erste Einzelbuchung committet.
+    for umsatz_id in body.umsatz_ids:
+        pruefe_umsatz(con, umsatz_id, bereich)
     verbucht = 0
     uebersprungen = 0
     for umsatz_id in body.umsatz_ids:
@@ -442,7 +459,7 @@ def uebernehme_vorschlaege(
             uebersprungen += 1
             continue
         vorschlag = _vorschlag_fuer_umsatz(
-            con, dict(umsatz), aktive_regeln(con),
+            con, dict(umsatz), aktive_regeln(con, bereich.id),
         )
         if not vorschlag:
             uebersprungen += 1
@@ -456,6 +473,7 @@ def uebernehme_vorschlaege(
                     typ=vorschlag["typ"],
                 ),
                 con,
+                bereich,
             )
             verbucht += 1
         except (HTTPException, sqlite3.Error):
@@ -470,7 +488,11 @@ def uebernehme_vorschlaege(
 
 @router.post("/bankumsaetze/{umsatz_id}/verbuchen", status_code=201)
 def verbuche_umsatz(umsatz_id: int, body: UmsatzVerbuchenIn,
-                    con: sqlite3.Connection = Depends(db_dep)):
+                    con: sqlite3.Connection = Depends(db_dep),
+                       bereich: BereichDep = Bereich(1)):
+    pruefe_umsatz(con, umsatz_id, bereich)
+    pruefe_sparte(con, body.sparte_id, bereich)
+    pruefe_kategorie(con, body.kategorie_id, bereich)
     u = con.execute("SELECT * FROM bankumsatz WHERE id = ?", (umsatz_id,)).fetchone()
     if not u:
         raise HTTPException(404, "Umsatz nicht gefunden")
@@ -518,8 +540,8 @@ def verbuche_umsatz(umsatz_id: int, body: UmsatzVerbuchenIn,
         muster = _regel_text(u)
         if muster:
             vorhanden = con.execute(
-                "SELECT id FROM regel WHERE LOWER(bedingung_text) = ? ORDER BY id LIMIT 1",
-                (muster,),
+                "SELECT id FROM regel WHERE LOWER(bedingung_text) = ? AND bereich_id = ? ORDER BY id LIMIT 1",
+                (muster, bereich.id),
             ).fetchone()
             if vorhanden:
                 con.execute(
@@ -530,8 +552,8 @@ def verbuche_umsatz(umsatz_id: int, body: UmsatzVerbuchenIn,
             else:
                 con.execute(
                     "INSERT INTO regel(name, bedingung_text, ziel_sparte_id, "
-                    "ziel_kategorie_id, ziel_typ) VALUES(?,?,?,?,?)",
-                    (muster, muster, body.sparte_id, body.kategorie_id, typ),
+                    "ziel_kategorie_id, ziel_typ, bereich_id) VALUES(?,?,?,?,?,?)",
+                    (muster, muster, body.sparte_id, body.kategorie_id, typ, bereich.id),
                 )
                 regel_angelegt = True
         con.commit()
@@ -545,7 +567,9 @@ def verbuche_umsatz(umsatz_id: int, body: UmsatzVerbuchenIn,
 
 @router.patch("/bankumsaetze/{umsatz_id}")
 def setze_umsatzstatus(umsatz_id: int, body: UmsatzStatusIn,
-                       con: sqlite3.Connection = Depends(db_dep)):
+                       con: sqlite3.Connection = Depends(db_dep),
+                       bereich: BereichDep = Bereich(1)):
+    pruefe_umsatz(con, umsatz_id, bereich)
     if body.importstatus not in ("offen", "ignoriert"):
         raise HTTPException(400, "importstatus muss 'offen' oder 'ignoriert' sein")
     u = con.execute("SELECT importstatus FROM bankumsatz WHERE id = ?",

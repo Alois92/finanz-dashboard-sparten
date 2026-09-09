@@ -27,7 +27,7 @@ def _signifikante_tokens(text: Optional[str]) -> set:
     return {t.lower() for t in _SIGNIFIKANTES_WORT_RE.findall(text or "") if len(t) >= 3}
 
 
-def aktive_regeln(con: sqlite3.Connection):
+def aktive_regeln(con: sqlite3.Connection, bereich_id: int):
     """Alle aktiven Regeln, inkl. Sparte der Zielkategorie (kat_sparte_id).
 
     Sortierung: prioritaet, dann laengster bedingung_text zuerst (spezifischere
@@ -36,13 +36,20 @@ def aktive_regeln(con: sqlite3.Connection):
     return con.execute(
         "SELECT r.*, k.sparte_id AS kat_sparte_id FROM regel r "
         "LEFT JOIN kategorie k ON k.id = r.ziel_kategorie_id "
-        "WHERE r.aktiv = 1 "
-        "ORDER BY r.prioritaet, LENGTH(r.bedingung_text) DESC, r.id"
+        "WHERE r.aktiv = 1 AND r.bereich_id = ? "
+        "AND (r.ziel_sparte_id IS NULL OR r.ziel_sparte_id IN "
+        "(SELECT id FROM sparte WHERE bereich_id = ?)) "
+        "AND (r.ziel_kategorie_id IS NULL OR k.sparte_id IN "
+        "(SELECT id FROM sparte WHERE bereich_id = ?)) "
+        "AND (r.bankkonto_id IS NULL OR r.bankkonto_id IN "
+        "(SELECT id FROM bankkonto WHERE bereich_id = ?)) "
+        "ORDER BY r.prioritaet, LENGTH(r.bedingung_text) DESC, r.id",
+        (bereich_id, bereich_id, bereich_id, bereich_id)
     ).fetchall()
 
 
 def finde_regel(
-    con_oder_regeln: Union[sqlite3.Connection, list], text: Optional[str]
+    con_oder_regeln: Union[sqlite3.Connection, list], text: Optional[str], bereich_id: int
 ) -> Optional[dict]:
     """Erste aktive Regel, die zum ``text`` passt (Reihenfolge wie
     ``aktive_regeln``). Eine Regel trifft, wenn EINE der beiden Richtungen
@@ -67,7 +74,7 @@ def finde_regel(
       regel_id, name, ziel_sparte_id, ziel_kategorie_id, ziel_typ, kat_sparte_id
     """
     if isinstance(con_oder_regeln, sqlite3.Connection):
-        regeln = aktive_regeln(con_oder_regeln)
+        regeln = aktive_regeln(con_oder_regeln, bereich_id)
     else:
         regeln = con_oder_regeln
     haystack = normalisiere_regeltext(text)
@@ -75,6 +82,8 @@ def finde_regel(
         return None
     eingabe_tokens = _signifikante_tokens(text)
     for r in regeln:
+        if r["bereich_id"] != bereich_id:
+            continue
         bedingung = normalisiere_regeltext(r["bedingung_text"])
         if not bedingung:
             continue

@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from ..db import db_dep
+from ..bereiche import Bereich, BereichDep
 from ..regeln import finde_regel
 
 router = APIRouter(tags=["schnellerfassung"])
@@ -90,22 +91,22 @@ _SEGMENT_RE = re.compile(r"[;\n]|,(?!\d)")
 
 
 @router.post("/parse")
-def parse_text(payload: ParseIn, con: sqlite3.Connection = Depends(db_dep)):
+def parse_text(payload: ParseIn, con: sqlite3.Connection = Depends(db_dep), bereich: BereichDep = Bereich(1)):
     text = (payload.text or "").strip()
-    return _parse_einzeltext(text, con)
+    return _parse_einzeltext(text, con, bereich.id)
 
 
 @router.post("/parse-mehrere")
-def parse_mehrere(payload: ParseIn, con: sqlite3.Connection = Depends(db_dep)):
+def parse_mehrere(payload: ParseIn, con: sqlite3.Connection = Depends(db_dep), bereich: BereichDep = Bereich(1)):
     text = (payload.text or "").strip()
     segmente = [s.strip(" ,;") for s in _SEGMENT_RE.split(text)]
     eintraege = [
-        _parse_einzeltext(segment, con) for segment in segmente if segment.strip()
+        _parse_einzeltext(segment, con, bereich.id) for segment in segmente if segment.strip()
     ]
     return {"eintraege": eintraege}
 
 
-def _parse_einzeltext(text: str, con: sqlite3.Connection) -> dict:
+def _parse_einzeltext(text: str, con: sqlite3.Connection, bereich_id: int) -> dict:
     heute = dt.date.today()
 
     # Arbeitskopie, aus der erkannte Datums-/Betrags-Teile entfernt werden,
@@ -165,13 +166,14 @@ def _parse_einzeltext(text: str, con: sqlite3.Connection) -> dict:
     # ---- Sparte / Kategorie per Namensabgleich ----
     text_lower = text.lower()
     sparten = [dict(r) for r in con.execute(
-        "SELECT id, name FROM sparte WHERE aktiv = 1").fetchall()]
+        "SELECT id, name FROM sparte WHERE aktiv = 1 AND bereich_id = ?", (bereich_id,)).fetchall()]
     sparte = _match_name(text_lower, tokens, sparten)
     sparte_id = sparte["id"] if sparte else None
     sparte_name = sparte["name"] if sparte else None
 
     kategorien = [dict(r) for r in con.execute(
-        "SELECT id, name, sparte_id FROM kategorie WHERE aktiv = 1").fetchall()]
+        "SELECT id, name, sparte_id FROM kategorie WHERE aktiv = 1 "
+        "AND sparte_id IN (SELECT id FROM sparte WHERE bereich_id = ?)", (bereich_id,)).fetchall()]
     kategorie = None
     if sparte_id is not None:
         kategorie = _match_name(
@@ -189,7 +191,7 @@ def _parse_einzeltext(text: str, con: sqlite3.Connection) -> dict:
 
     # ---- Merkregeln: greifen nur, wenn der Namensabgleich keine Kategorie fand ----
     if kategorie_id is None:
-        regel = finde_regel(con, text)
+        regel = finde_regel(con, text, bereich_id)
         if regel and regel["ziel_kategorie_id"]:
             kategorie_id = regel["ziel_kategorie_id"]
             kat_row = next((k for k in kategorien if k["id"] == kategorie_id), None)

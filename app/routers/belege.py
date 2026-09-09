@@ -16,6 +16,7 @@ from pydantic import BaseModel
 
 from ..backup import sicherungs_lock
 from ..db import DB_PATH, db_dep
+from ..bereiche import Bereich, BereichDep, pruefe_sparte, pruefe_beleg, pruefe_buchung
 
 router = APIRouter(tags=["belege"])
 
@@ -88,8 +89,10 @@ def _aktualisiere_belegstatus(con: sqlite3.Connection, buchung_id: int) -> None:
 def upload_beleg(
     datei: UploadFile = File(...),
     sparte_id: int | None = Form(None),
-    con: sqlite3.Connection = Depends(db_dep),
+    con: sqlite3.Connection = Depends(db_dep), bereich: BereichDep = Bereich(1),
 ):
+    if sparte_id is not None:
+        pruefe_sparte(con, sparte_id, bereich)
     original = datei.filename or "unbenannt"
     endung = _endung(original)
     if endung not in ERLAUBTE_ENDUNGEN:
@@ -99,10 +102,6 @@ def upload_beleg(
             f"{', '.join(sorted(ERLAUBTE_ENDUNGEN))}",
         )
 
-    if sparte_id is not None and not con.execute(
-        "SELECT 1 FROM sparte WHERE id = ?", (sparte_id,)
-    ).fetchone():
-        raise HTTPException(404, "Sparte nicht gefunden")
 
     inhalt = datei.file.read()
     sha256 = hashlib.sha256(inhalt).hexdigest()
@@ -111,8 +110,8 @@ def upload_beleg(
     # geben wir den vorhandenen zurueck (kein Doppel, keine neue Datei).
     vorhanden = con.execute(
         "SELECT id, dateiname, sparte_id, sha256_hash, pfad FROM beleg "
-        "WHERE sha256_hash = ?",
-        (sha256,),
+        "WHERE sha256_hash = ? AND bereich_id = ?",
+        (sha256, bereich.id),
     ).fetchone()
     if vorhanden:
         result = dict(vorhanden)
@@ -123,9 +122,9 @@ def upload_beleg(
     # bekommen; danach die Datei physisch schreiben und den Pfad nachtragen.
     try:
         cur = con.execute(
-            "INSERT INTO beleg(sparte_id, dateiname, pfad, sha256_hash) "
-            "VALUES(?,?,?,?)",
-            (sparte_id, original, "", sha256),
+            "INSERT INTO beleg(sparte_id, dateiname, pfad, sha256_hash, bereich_id) "
+            "VALUES(?,?,?,?,?)",
+            (sparte_id, original, "", sha256, bereich.id),
         )
         beleg_id = cur.lastrowid
 
@@ -138,17 +137,6 @@ def upload_beleg(
         con.commit()
     except sqlite3.IntegrityError as e:
         con.rollback()
-        # Das aktuelle DB-Schema (db/schema.sql, anderer Track) erzwingt
-        # beleg.sparte_id NOT NULL. Ein echter Eingangskorb ohne Sparte ist
-        # damit (noch) nicht speicherbar; sobald die Spalte NULL zulaesst,
-        # funktioniert dieser Pfad unveraendert.
-        if sparte_id is None:
-            raise HTTPException(
-                400,
-                "Upload ohne sparte_id derzeit nicht moeglich: Das DB-Schema "
-                "verlangt eine Sparte (beleg.sparte_id NOT NULL). Bitte "
-                "sparte_id angeben.",
-            )
         raise HTTPException(400, f"Datenbankfehler: {e}")
 
     return {
@@ -164,13 +152,15 @@ def upload_beleg(
 @router.get("/belege")
 def list_belege(
     sparte_id: int | None = None,
-    con: sqlite3.Connection = Depends(db_dep),
+    con: sqlite3.Connection = Depends(db_dep), bereich: BereichDep = Bereich(1),
 ):
+    if sparte_id is not None:
+        pruefe_sparte(con, sparte_id, bereich)
     sql = (
         "SELECT id, dateiname, sparte_id, belegdatum, betrag_erkannt_cent, "
-        "sha256_hash FROM beleg WHERE 1=1"
+        "sha256_hash FROM beleg WHERE bereich_id = ?"
     )
-    params: list = []
+    params: list = [bereich.id]
     if sparte_id is not None:
         sql += " AND sparte_id = ?"
         params.append(sparte_id)
@@ -179,7 +169,8 @@ def list_belege(
 
 
 @router.get("/belege/{beleg_id}/datei")
-def download_beleg(beleg_id: int, con: sqlite3.Connection = Depends(db_dep)):
+def download_beleg(beleg_id: int, con: sqlite3.Connection = Depends(db_dep), bereich: BereichDep = Bereich(1)):
+    pruefe_beleg(con, beleg_id, bereich)
     row = con.execute(
         "SELECT dateiname, pfad FROM beleg WHERE id = ?", (beleg_id,)
     ).fetchone()
@@ -194,7 +185,8 @@ def download_beleg(beleg_id: int, con: sqlite3.Connection = Depends(db_dep)):
 
 
 @router.delete("/belege/{beleg_id}", status_code=204)
-def delete_beleg(beleg_id: int, con: sqlite3.Connection = Depends(db_dep)):
+def delete_beleg(beleg_id: int, con: sqlite3.Connection = Depends(db_dep), bereich: BereichDep = Bereich(1)):
+    pruefe_beleg(con, beleg_id, bereich)
     with sicherungs_lock:
         row = con.execute(
             "SELECT pfad FROM beleg WHERE id = ?", (beleg_id,)
@@ -209,6 +201,8 @@ def delete_beleg(beleg_id: int, con: sqlite3.Connection = Depends(db_dep)):
                 "SELECT buchung_id FROM buchung_beleg WHERE beleg_id = ?", (beleg_id,)
             ).fetchall()
         ]
+        for buchung_id in betroffene_buchungen:
+            pruefe_buchung(con, buchung_id, bereich)
         con.execute("DELETE FROM beleg WHERE id = ?", (beleg_id,))  # Verknuepfungen via CASCADE
         for buchung_id in betroffene_buchungen:
             _aktualisiere_belegstatus(con, buchung_id)
@@ -229,17 +223,11 @@ def delete_beleg(beleg_id: int, con: sqlite3.Connection = Depends(db_dep)):
 def verknuepfe_beleg(
     buchung_id: int,
     body: BelegVerknuepfung,
-    con: sqlite3.Connection = Depends(db_dep),
+    con: sqlite3.Connection = Depends(db_dep), bereich: BereichDep = Bereich(1),
 ):
-    if not con.execute(
-        "SELECT 1 FROM buchung WHERE id = ?", (buchung_id,)
-    ).fetchone():
-        raise HTTPException(404, "Buchung nicht gefunden")
-    if not con.execute(
-        "SELECT 1 FROM beleg WHERE id = ?", (body.beleg_id,)
-    ).fetchone():
-        raise HTTPException(404, "Beleg nicht gefunden")
+    pruefe_buchung(con, buchung_id, bereich)
 
+    pruefe_beleg(con, body.beleg_id, bereich)
     # Idempotent: bei bereits bestehender Verknuepfung kein Fehler.
     con.execute(
         "INSERT OR IGNORE INTO buchung_beleg(buchung_id, beleg_id) VALUES(?,?)",
@@ -256,8 +244,10 @@ def verknuepfe_beleg(
 def loese_verknuepfung(
     buchung_id: int,
     beleg_id: int,
-    con: sqlite3.Connection = Depends(db_dep),
+    con: sqlite3.Connection = Depends(db_dep), bereich: BereichDep = Bereich(1),
 ):
+    pruefe_buchung(con, buchung_id, bereich)
+    pruefe_beleg(con, beleg_id, bereich)
     con.execute(
         "DELETE FROM buchung_beleg WHERE buchung_id = ? AND beleg_id = ?",
         (buchung_id, beleg_id),
@@ -268,17 +258,14 @@ def loese_verknuepfung(
 
 @router.get("/buchungen/{buchung_id}/belege")
 def belege_der_buchung(
-    buchung_id: int, con: sqlite3.Connection = Depends(db_dep)
+    buchung_id: int, con: sqlite3.Connection = Depends(db_dep), bereich: BereichDep = Bereich(1)
 ):
-    if not con.execute(
-        "SELECT 1 FROM buchung WHERE id = ?", (buchung_id,)
-    ).fetchone():
-        raise HTTPException(404, "Buchung nicht gefunden")
+    pruefe_buchung(con, buchung_id, bereich)
     rows = con.execute(
         "SELECT b.id, b.dateiname, b.sparte_id, b.belegdatum, "
         "b.betrag_erkannt_cent, b.sha256_hash "
         "FROM beleg b JOIN buchung_beleg bb ON bb.beleg_id = b.id "
-        "WHERE bb.buchung_id = ? ORDER BY b.id DESC",
-        (buchung_id,),
+        "WHERE bb.buchung_id = ? AND b.bereich_id = ? ORDER BY b.id DESC",
+        (buchung_id, bereich.id),
     ).fetchall()
     return [dict(r) for r in rows]

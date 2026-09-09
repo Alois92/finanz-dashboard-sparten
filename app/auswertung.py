@@ -28,6 +28,7 @@ import urllib.error
 import urllib.request
 
 from .db import get_connection
+from .bereiche import Bereich, bereich_dep, pruefe_sparte
 from .regeln import finde_regel
 from .routers.schnellerfassung import _match_name, _WORT_RE
 
@@ -260,7 +261,7 @@ def _brutto_abgleich(ergebnis: dict) -> dict:
 # Kategorien-Mapping je Position
 # ---------------------------------------------------------------------------
 
-def _kategorie_fuer_position(con: sqlite3.Connection, text: str, sparte_id):
+def _kategorie_fuer_position(con: sqlite3.Connection, text: str, sparte_id, bereich_id: int):
     """Kategorie fuer eine Beleg-Position bestimmen.
 
     Reihenfolge (Sparte ist immer die feste Beleg-Sparte):
@@ -270,6 +271,7 @@ def _kategorie_fuer_position(con: sqlite3.Connection, text: str, sparte_id):
     """
     if sparte_id is None:
         return None, None
+    pruefe_sparte(con, sparte_id, Bereich(bereich_id))
     kategorien = [dict(r) for r in con.execute(
         "SELECT id, name, sparte_id FROM kategorie "
         "WHERE aktiv = 1 AND sparte_id = ?", (sparte_id,)
@@ -280,7 +282,7 @@ def _kategorie_fuer_position(con: sqlite3.Connection, text: str, sparte_id):
     if treffer:
         return treffer["id"], treffer["name"]
 
-    regel = finde_regel(con, text)
+    regel = finde_regel(con, text, bereich_id)
     if regel and regel["ziel_kategorie_id"] and regel["kat_sparte_id"] == sparte_id:
         row = con.execute(
             "SELECT name FROM kategorie WHERE id = ?", (regel["ziel_kategorie_id"],)
@@ -304,12 +306,15 @@ def _auswerten(con: sqlite3.Connection, beleg_id: int) -> dict:
     bleibt 'offen' und wird spaeter erneut versucht).
     """
     beleg = con.execute(
-        "SELECT id, sparte_id, dateiname, pfad FROM beleg WHERE id = ?",
+        "SELECT id, sparte_id, dateiname, pfad, bereich_id FROM beleg WHERE id = ?",
         (beleg_id,),
     ).fetchone()
     if not beleg:
         raise ValueError("Beleg nicht gefunden")
 
+    bereich = bereich_dep(beleg["bereich_id"], con)
+    if beleg["sparte_id"] is not None:
+        pruefe_sparte(con, beleg["sparte_id"], bereich)
     endung = pathlib.Path(beleg["dateiname"] or "").suffix.lower().lstrip(".")
     if endung not in ERLAUBTE_ENDUNGEN:
         raise ValueError("Nur JPG/PNG/WebP-Fotos können lokal ausgewertet werden")
@@ -336,7 +341,7 @@ def _auswerten(con: sqlite3.Connection, beleg_id: int) -> dict:
     ergebnis = _brutto_abgleich(ergebnis)
 
     for p in ergebnis["positionen"]:
-        kat_id, kat_name = _kategorie_fuer_position(con, p["text"], beleg["sparte_id"])
+        kat_id, kat_name = _kategorie_fuer_position(con, p["text"], beleg["sparte_id"], bereich.id)
         p["kategorie_id"] = kat_id
         p["kategorie_name"] = kat_name
 
