@@ -13,6 +13,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from .auswertung import auswertung_schleife
 from .auth import AuthMiddleware, router as auth_router
+from . import backup
 from .backup import backup_schleife
 from .db import get_connection, init_db
 from .migrate import MigrationsFehler, status as migrationsstatus
@@ -131,6 +132,41 @@ def schema_status():
         "anstehend": stand["anstehend"],
         "schreibgeschuetzt": app.state.schreibgeschuetzt,
         "fehler": app.state.migrationsfehler,
+    }
+
+
+@app.get("/api/betrieb/status")
+def betrieb_status():
+    con = get_connection()
+    try:
+        schema = migrationsstatus(con)
+    finally:
+        con.close()
+    ordner = backup.DB_PATH.parent / "backup"
+    sicherungen = sorted(ordner.glob("finanz-????-??-??.db"))
+    letzte = sicherungen[-1].stem.removeprefix("finanz-") if sicherungen else None
+    pruefung = backup.pruefe_sicherung(letzte) if letzte else {
+        "db_ok": False,
+        "belege_ok": 0,
+        "belege_fehlend": 0,
+        "manifest_ok": False,
+    }
+    if backup.BACKUP_ZIEL2 is None:
+        zweitziel = "nicht konfiguriert"
+    elif letzte and backup._vollstaendiger_satz(backup.BACKUP_ZIEL2, letzte):
+        zweitziel = "ok"
+    else:
+        zweitziel = "fehlt"
+    return {
+        "schema": {"aktuell": schema["aktuell"], "anstehend": schema["anstehend"]},
+        "sicherung": {
+            "letzte": letzte,
+            "db_ok": pruefung["db_ok"],
+            "belege_ok": pruefung["belege_ok"],
+            "belege_fehlend": pruefung["belege_fehlend"],
+            "zweitziel": zweitziel,
+        },
+        "schreibgeschuetzt": app.state.schreibgeschuetzt,
     }
 
 

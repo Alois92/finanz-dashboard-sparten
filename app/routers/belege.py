@@ -14,6 +14,7 @@ from fastapi import (APIRouter, Depends, File, Form, HTTPException, UploadFile)
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
+from ..backup import sicherungs_lock
 from ..db import DB_PATH, db_dep
 
 router = APIRouter(tags=["belege"])
@@ -194,28 +195,29 @@ def download_beleg(beleg_id: int, con: sqlite3.Connection = Depends(db_dep)):
 
 @router.delete("/belege/{beleg_id}", status_code=204)
 def delete_beleg(beleg_id: int, con: sqlite3.Connection = Depends(db_dep)):
-    row = con.execute(
-        "SELECT pfad FROM beleg WHERE id = ?", (beleg_id,)
-    ).fetchone()
-    if not row:
-        raise HTTPException(404, "Beleg nicht gefunden")
-    # Betroffene Buchungen vor dem Loeschen ermitteln, da die Verknuepfungen
-    # per CASCADE mitgeloescht werden.
-    betroffene_buchungen = [
-        r["buchung_id"]
-        for r in con.execute(
-            "SELECT buchung_id FROM buchung_beleg WHERE beleg_id = ?", (beleg_id,)
-        ).fetchall()
-    ]
-    con.execute("DELETE FROM beleg WHERE id = ?", (beleg_id,))  # Verknuepfungen via CASCADE
-    for buchung_id in betroffene_buchungen:
-        _aktualisiere_belegstatus(con, buchung_id)
-    con.commit()
-    # Datei nach erfolgreichem DB-Loeschen entfernen (falls vorhanden).
-    if row["pfad"]:
-        pfad = pathlib.Path(row["pfad"])
-        if pfad.exists():
-            pfad.unlink()
+    with sicherungs_lock:
+        row = con.execute(
+            "SELECT pfad FROM beleg WHERE id = ?", (beleg_id,)
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "Beleg nicht gefunden")
+        # Betroffene Buchungen vor dem Loeschen ermitteln, da die Verknuepfungen
+        # per CASCADE mitgeloescht werden.
+        betroffene_buchungen = [
+            r["buchung_id"]
+            for r in con.execute(
+                "SELECT buchung_id FROM buchung_beleg WHERE beleg_id = ?", (beleg_id,)
+            ).fetchall()
+        ]
+        con.execute("DELETE FROM beleg WHERE id = ?", (beleg_id,))  # Verknuepfungen via CASCADE
+        for buchung_id in betroffene_buchungen:
+            _aktualisiere_belegstatus(con, buchung_id)
+        con.commit()
+        # Datei nach erfolgreichem DB-Loeschen entfernen (falls vorhanden).
+        if row["pfad"]:
+            pfad = pathlib.Path(row["pfad"])
+            if pfad.exists():
+                pfad.unlink()
 
 
 # ---------------------------------------------------------------------------
