@@ -103,6 +103,13 @@ Bewusste Nutzer-Entscheidung: **keine Cloud-KI** für Rechnungsfotos.
 - **App-internes Backup** (`app/backup.py`): Tageskopie nach `<DB-Ordner>/backup/`, 30 Stück, SQLite-Backup-API, beim Start + alle 6 h. Zweitziel via `FINANZ_BACKUP_ZIEL2` möglich (UNC-Pfad, im CT als Drop-In).
 - **Proxmox-Backup:** manueller `vzdump` von CT 101 auf lokale Platte existiert; **automatisches NAS-Backup fehlt noch** (siehe Abschnitt 9).
 
+### Wiederherstellung eines app-internen Sicherungssatzes
+
+1. Dienst anhalten und die zugehörige `finanz-JJJJ-MM-TT.db` als `finanz.db` an den konfigurierten DB-Speicherort zurückkopieren.
+2. Den Inhalt von `belege-JJJJ-MM-TT/` nach `belege/` an denselben Speicherort zurückkopieren; die Unterordnerstruktur bleibt dabei unverändert.
+3. Das Manifest `manifest-JJJJ-MM-TT.json` prüfen und insbesondere DB- sowie Beleg-Prüfsummen mit den zurückkopierten Dateien vergleichen.
+4. Dienst wieder starten und anschließend `GET /api/betrieb/status` als angemeldeter Benutzer prüfen.
+
 ---
 
 ## 7. Code, Tests & produktives Update
