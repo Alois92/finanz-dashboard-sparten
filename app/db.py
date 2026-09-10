@@ -141,7 +141,8 @@ def init_db() -> None:
         con.commit()
 
         def _sicherung():
-            pfad = backup.sichere_datenbank()
+            zielversion = max(version for version, _ in migrate.status(con)["anstehend"])
+            pfad = backup.sichere_datenbank(vor_nachzug_version=zielversion)
             return pathlib.Path(pfad) if pfad else None
 
         migrate.anwenden(con, _sicherung, sicherung_pflicht=backup.DB_PERSISTENT)

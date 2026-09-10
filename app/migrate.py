@@ -205,11 +205,11 @@ def _lade_python_migration(pfad: pathlib.Path):
     return module
 
 
-def _sicherung_aus_backup() -> pathlib.Path:
+def _sicherung_aus_backup(zielversion: int) -> pathlib.Path | None:
     from . import backup
 
-    pfad = backup.sichere_datenbank()
-    return pathlib.Path(pfad) if pfad else pathlib.Path("")
+    pfad = backup.sichere_datenbank(vor_nachzug_version=zielversion)
+    return pathlib.Path(pfad) if pfad else None
 
 
 def _main() -> int:
@@ -227,7 +227,11 @@ def _main() -> int:
         from . import backup
 
         angewendet = anwenden(
-            con, _sicherung_aus_backup, sicherung_pflicht=backup.DB_PERSISTENT
+            con,
+            lambda: _sicherung_aus_backup(
+                max(version for version, _ in status(con)["anstehend"])
+            ),
+            sicherung_pflicht=backup.DB_PERSISTENT,
         )
         print(f"Angewendet: {angewendet}")
         return 0

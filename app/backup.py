@@ -21,6 +21,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import shutil
 import sqlite3
 import threading
@@ -32,6 +33,7 @@ from .db import DB_PATH, DB_PERSISTENT, get_connection
 log = logging.getLogger("finanz.backup")
 
 BACKUP_AUFBEWAHREN = 30          # so viele Tageskopien bleiben liegen
+NACHZUG_AUFBEWAHREN = 10         # unabhaengig von den Tageskopien
 PRUEF_INTERVALL_SEKUNDEN = 6 * 3600  # laeuft der Server tagelang: alle 6 h pruefen
 
 _ziel2_env = os.environ.get("FINANZ_BACKUP_ZIEL2")
@@ -229,7 +231,83 @@ def _abschliessen(temp_ziel, ziel, ziel_ordner, beschreibung: str) -> None:
     _rotiere(ziel_ordner)
 
 
-def sichere_datenbank() -> str | None:
+def _sichere_vor_nachzug(zielversion: int) -> str | None:
+    """Schreibt unter sicherungs_lock immer einen neuen Stand vor dem Nachzug."""
+    ziel_ordner = DB_PATH.parent / "backup"
+    name = f"finanz-{dt.datetime.now():%Y-%m-%d-%H%M}-vor-nachzug-v{zielversion}"
+    ziel = None
+    temp_ziel = None
+    erfolgreich = False
+    try:
+        ziel_ordner.mkdir(parents=True, exist_ok=True)
+        nummer = 1
+        for vorhanden in ziel_ordner.glob(f"{name}*.db"):
+            zusatz = vorhanden.stem.removeprefix(name)
+            if not zusatz:
+                nummer = max(nummer, 2)
+            elif zusatz.startswith("-") and zusatz[1:].isdigit():
+                nummer = max(nummer, int(zusatz[1:]) + 1)
+        while True:
+            zusatz = "" if nummer == 1 else f"-{nummer}"
+            kandidat = ziel_ordner / f"{name}{zusatz}.db"
+            try:
+                # Exklusiv reservieren: auch ein weiterer Prozess darf keine
+                # bereits vorhandene Nachzugssicherung ueberschreiben.
+                with kandidat.open("xb"):
+                    pass
+                ziel = kandidat
+                break
+            except FileExistsError:
+                nummer += 1
+        temp_ziel = _temp_pfad(ziel)
+        quelle = get_connection()
+        try:
+            kopie = sqlite3.connect(temp_ziel)
+            try:
+                quelle.backup(kopie)
+            finally:
+                kopie.close()
+        finally:
+            quelle.close()
+        if not _ist_gueltige_sqlite_datei(temp_ziel):
+            raise sqlite3.DatabaseError("Sicherung vor Nachzug ist nicht intakt")
+        temp_ziel.replace(ziel)
+        erfolgreich = True
+        log.info("DB-Sicherung vor Schema-Nachzug angelegt: %s", ziel)
+        _rotiere_nachzug(ziel_ordner)
+        return str(ziel)
+    except Exception:
+        log.exception("DB-Sicherung vor Schema-Nachzug fehlgeschlagen")
+        return None
+    finally:
+        for rest in (temp_ziel, ziel if not erfolgreich else None):
+            if rest is not None:
+                try:
+                    rest.unlink(missing_ok=True)
+                except OSError:
+                    log.warning("Unvollstaendige Nachzugssicherung nicht loeschbar: %s", rest)
+
+
+def _rotiere_nachzug(ordner: Path) -> None:
+    """Behaelt die zehn zuletzt geschriebenen Nachzugssicherungen."""
+    kopien = []
+    for pfad in ordner.glob("finanz-????-??-??-????-vor-nachzug-v*.db"):
+        treffer = re.fullmatch(
+            r"finanz-(\d{4}-\d{2}-\d{2}-\d{4})-vor-nachzug-v(\d+)(?:-(\d+))?\.db",
+            pfad.name,
+        )
+        if treffer is not None:
+            zeit, version, nummer = treffer.groups()
+            kopien.append((pfad.stat().st_mtime_ns, zeit, int(version), int(nummer or 1), pfad))
+    for *_, alt in sorted(kopien)[:-NACHZUG_AUFBEWAHREN]:
+        try:
+            alt.unlink()
+            log.info("Alte Nachzugssicherung entfernt: %s", alt.name)
+        except OSError:
+            log.warning("Alte Nachzugssicherung nicht loeschbar: %s", alt)
+
+
+def sichere_datenbank(vor_nachzug_version: int | None = None) -> str | None:
     """Legt die heutige Tageskopie an (falls noch nicht vorhanden).
 
     Rueckgabe: Pfad der Kopie oder None (uebersprungen/fehlgeschlagen).
@@ -240,12 +318,18 @@ def sichere_datenbank() -> str | None:
     validierten Erstkopie in dieses Verzeichnis geschrieben. Ein Fehlschlag
     dabei (z. B. NAS gerade nicht erreichbar) wird nur geloggt und aendert
     nichts am Rueckgabewert der Erstkopie.
+
+    Mit vor_nachzug_version wird stattdessen immer eine eigene frische
+    Datenbankkopie erstellt; davon bleiben die letzten zehn erhalten.
+    Dieser Modus erstellt weder Tagesmanifest noch Beleg- oder Zweitkopie.
     """
     with sicherungs_lock:
         if not DB_PERSISTENT:
             return None
         if not DB_PATH.exists():
             return None
+        if vor_nachzug_version is not None:
+            return _sichere_vor_nachzug(vor_nachzug_version)
         datum = dt.date.today().isoformat()
         dateiname = f"finanz-{datum}.db"
         ziel_ordner = DB_PATH.parent / "backup"

@@ -131,11 +131,13 @@ class MigrationTest(unittest.TestCase):
         finally:
             con.close()
         backup_dir = self.db_path.parent / "backup"
-        self.assertEqual(1, len(list(backup_dir.glob("finanz-????-??-??.db"))))
+        sicherungen = list(backup_dir.glob("finanz-????-??-??-????-vor-nachzug-v9.db"))
+        self.assertEqual(1, len(sicherungen))
+        self.assertEqual([], list(backup_dir.glob("finanz-????-??-??.db")))
 
         db.init_db()
 
-        self.assertEqual(1, len(list(backup_dir.glob("finanz-????-??-??.db"))))
+        self.assertEqual(sicherungen, list(backup_dir.glob("finanz-*-vor-nachzug-*.db")))
 
     def test_fehlerhafte_migration_rollt_zurueck_und_sperrt_version(self):
         from app import migrate
