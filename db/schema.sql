@@ -309,6 +309,8 @@ CREATE TABLE kennzahl_term (
 
 CREATE INDEX idx_kennzahl_sparte ON kennzahl(sparte_id);
 CREATE INDEX idx_kennzahl_term_kennzahl ON kennzahl_term(kennzahl_id);
+CREATE UNIQUE INDEX idx_kennzahl_term_eindeutig
+    ON kennzahl_term (kennzahl_id, kategorie_id, vorzeichen);
 
 -- ---------------------------------------------------------------------------
 -- Beleg-Auswertung (ab Phase 4; lokale Foto-Auswertung via Ollama)
