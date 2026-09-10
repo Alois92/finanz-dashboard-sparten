@@ -1,0 +1,199 @@
+{
+  "summen_vorher": {
+    "1": {
+      "2025": {
+        "einnahmen_cent": 200,
+        "ausgaben_cent": 100
+      },
+      "2026": {
+        "einnahmen_cent": 0,
+        "ausgaben_cent": 90
+      }
+    },
+    "2": {
+      "2026": {
+        "einnahmen_cent": 80,
+        "ausgaben_cent": 0
+      }
+    }
+  },
+  "summen_nachher": {
+    "1": {
+      "2025": {
+        "einnahmen_cent": 200,
+        "ausgaben_cent": 100
+      },
+      "2026": {
+        "einnahmen_cent": 0,
+        "ausgaben_cent": 90
+      }
+    },
+    "2": {
+      "2026": {
+        "einnahmen_cent": 80,
+        "ausgaben_cent": 0
+      }
+    }
+  },
+  "vergleich": {
+    "gleich": true,
+    "abweichungen": []
+  },
+  "migrationslog": [
+    "DB-Sicherung vor Schema-Nachzug: C:\\Users\\lblet\\AppData\\Local\\Temp\\p61-abnahme-zhfpvyk2\\lauf1\\sicherung.db",
+    "Migration 004: Kassen=2, Bewegungen=7, Transfers=2, ungeklärte Transfers=1, ungeklärte Barbuchungen=0",
+    "Migration 004: Zahlung unbekannt: Anzahl=1; Buchungs-IDs=[9]; Barbuchungs-IDs=[]"
+  ],
+  "migrationsprotokoll": [
+    {
+      "id": 1,
+      "version": 4,
+      "zeitpunkt": "2026-09-10 18:53:48",
+      "art": "umbuchung_ungeklaert",
+      "objektkennung": "umbuchungsgruppe:probe-offen",
+      "hinweis": "Umbuchungsgruppe probe-offen: Die Buchungen konnten nicht eindeutig aufgeloest werden."
+    },
+    {
+      "id": 2,
+      "version": 4,
+      "zeitpunkt": "2026-09-10 18:53:48",
+      "art": "zahlung_ungeklaert",
+      "objektkennung": "buchung:9",
+      "hinweis": "Buchung 9: Bank- oder Kartenbuchung ohne zugehoerigen Umsatz."
+    }
+  ],
+  "ungeklaerte_transfers": 1,
+  "zahlung_unbekannt": 1,
+  "ungeklaerte_faelle": {
+    "transfer_objekte": [
+      "umbuchungsgruppe:probe-offen"
+    ],
+    "zahlungs_objekte": [
+      "buchung:9"
+    ],
+    "log": {
+      "transfers": 1,
+      "zahlungen": 1,
+      "barbuchungen": 0
+    },
+    "transfers": 1,
+    "zahlungen": 1
+  },
+  "bereiche": {
+    "korrekt": true,
+    "je_sparte_jahr": [
+      {
+        "sparte_id": 1,
+        "jahr": 2025,
+        "vorher": 1,
+        "nachher": 1,
+        "erwartet": 1,
+        "korrekt": true
+      },
+      {
+        "sparte_id": 1,
+        "jahr": 2026,
+        "vorher": 1,
+        "nachher": 1,
+        "erwartet": 1,
+        "korrekt": true
+      },
+      {
+        "sparte_id": 2,
+        "jahr": 2026,
+        "vorher": 2,
+        "nachher": 2,
+        "erwartet": 2,
+        "korrekt": true
+      }
+    ]
+  },
+  "anzahl_vorher": {
+    "buchung": 9,
+    "buchungszeile": 18
+  },
+  "anzahl_nachher": {
+    "buchung": 9,
+    "buchungszeile": 18
+  },
+  "foreign_key_check": [],
+  "integrity_check": [
+    "ok"
+  ],
+  "angewendet": [
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14
+  ],
+  "zweiter_anwenden_lauf": [],
+  "status_vorher": {
+    "aktuell": 3,
+    "anstehend": [
+      [
+        4,
+        "konten_bewegungen"
+      ],
+      [
+        5,
+        "auslagen_ausgleich"
+      ],
+      [
+        6,
+        "saldoanker_kassa"
+      ],
+      [
+        7,
+        "kredit"
+      ],
+      [
+        8,
+        "regeln_kennzahlen"
+      ],
+      [
+        9,
+        "export_profil"
+      ],
+      [
+        10,
+        "regeln_bestand_herkunft"
+      ],
+      [
+        11,
+        "adhoc_schema"
+      ],
+      [
+        12,
+        "migrationsprotokoll"
+      ],
+      [
+        13,
+        "kennzahl_eindeutigkeit"
+      ],
+      [
+        14,
+        "hinweis_aus"
+      ]
+    ],
+    "basis": false
+  },
+  "status_nachher": {
+    "aktuell": 14,
+    "anstehend": [],
+    "basis": false
+  },
+  "kostenstorno_spalten": {
+    "buchung": false,
+    "buchungszeile": false
+  },
+  "quelle_sha256_vorher": "5fcb720c4e4af9c6694046df9aed01698bbc6e1249e7142da57bd0904a53260f",
+  "quelle_sha256_nachher": "5fcb720c4e4af9c6694046df9aed01698bbc6e1249e7142da57bd0904a53260f",
+  "erfolgreich": true
+}
