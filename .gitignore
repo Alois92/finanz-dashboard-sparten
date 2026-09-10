@@ -17,6 +17,8 @@
 /exports/
 /backups/
 *.csv
+# Rein synthetische Regressionstestdaten fuer N5.
+!/tests/fixtures/saldo_absteigend.csv
 *.camt.xml
 
 # (Falls einzelne CSV-Beispiele bewusst versioniert werden sollen,

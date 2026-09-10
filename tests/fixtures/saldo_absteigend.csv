@@ -1,0 +1,4 @@
+Buchungsdatum;Betrag;Saldo;Buchungs-Details;Partnername
+02.03.2026;-5,00;115,00;Letzte Buchung;Partner C
+02.03.2026;20,00;120,00;Erste Buchung am letzten Tag;Partner B
+01.03.2026;10,00;100,00;Vortag;Partner A
