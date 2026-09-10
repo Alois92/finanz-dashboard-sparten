@@ -80,7 +80,7 @@ class BereicheTest(unittest.TestCase):
         status, rows = self.request("GET", "/api/bereiche")
         self.assertEqual(200, status)
         self.assertEqual([1, 2], [r["id"] for r in rows])
-        self.assertEqual({"id", "name", "kuerzel", "typ"}, set(rows[0]))
+        self.assertEqual({"id", "name", "kuerzel", "typ", "aktiv", "sortierung"}, set(rows[0]))
         self.assertEqual([self.verein], [r["id"] for r in self.request("GET", "/api/sparten?bereich_id=2")[1]])
         self.assertNotIn(self.verein, [r["id"] for r in self.request("GET", "/api/sparten")[1]])
         self.assertEqual(404, self.request("GET", "/api/sparten?bereich_id=999")[0])

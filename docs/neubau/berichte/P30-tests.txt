@@ -1,0 +1,29 @@
+P30 isolierter Testlauf
+========================
+Befehl:
+$env:FINANZ_DB = "%TEMP%\\p30-isolated-final.db"; $env:FINANZ_INSTANZ='test'; C:\Users\lblet\dev\finanz-dashboard-sparten\.venv\Scripts\python.exe -m unittest tests.test_static_neu -v
+
+test_frontend_assets_and_schema_contract (tests.test_static_neu.StaticNeuTest.test_frontend_assets_and_schema_contract) ... ok
+test_jahre_enthalten_buchungsjahre_und_laufendes_jahr_absteigend (tests.test_static_neu.StaticNeuTest.test_jahre_enthalten_buchungsjahre_und_laufendes_jahr_absteigend) ... ok
+test_neu_ohne_login_wird_wie_studio_umgeleitet (tests.test_static_neu.StaticNeuTest.test_neu_ohne_login_wird_wie_studio_umgeleitet) ... ok
+
+----------------------------------------------------------------------
+Ran 3 tests in 1.227s
+
+OK
+
+JavaScript-Syntaxprüfung
+========================
+Befehl: node --check für alle Dateien unter static-neu/**/*.js
+Ergebnis: node --check: 15 Dateien geprüft
+
+Gesamtsuite (nicht auswertbar in dieser Sandbox)
+=================================================
+Befehl: FINANZ_DB=%TEMP%\\p30-suite-final-2.db FINANZ_TEST_AUTH_BYPASS=1 C:\Users\lblet\dev\finanz-dashboard-sparten\.venv\Scripts\python.exe -m unittest discover -s tests
+Ausgabe bis zum kontrollierten Abbruch nach mehreren Minuten:
+EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+Danach folgte keine Abschlussausgabe und kein Testfortschritt; der Prozess wurde mit Ctrl+C beendet (Exit 1). Ursache konnte innerhalb der Sandbox nicht belastbar eingegrenzt werden.
+
+Browserprüfung
+==============
+npx war verfügbar. Der Playwright-Wrapper konnte wegen eines Windows-Git-Bash-Zugriffsfehlers (CreateFileMapping, Win32 error 5) nicht gestartet werden; die verfügbare Browseroberfläche meldete ebenfalls keine Browser.

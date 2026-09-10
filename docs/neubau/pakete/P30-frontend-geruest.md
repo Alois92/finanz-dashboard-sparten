@@ -65,3 +65,17 @@ Keine fertigen Seiteninhalte (P31 ff.). Keine Änderung an `static-studio`. Kein
 ## 8. Bericht zurück
 
 Geänderte und neue Dateien mit je einem Satz. Testausgabe. Was im Browser geprüft wurde oder nicht geprüft werden konnte. Offene Punkte mit Grund. Keine Commits, kein Push.
+
+---
+
+## 9. Nachtrag aus der Kontrolle (Fable, 10. September 2026) — verbindlich
+
+- **Arbeitsort:** `C:\Users\lblet\dev\wt-p30`, Zweig `pkt/p30-frontend-geruest` (steht auf `neubau` nach P20). Keine Commits, kein Push.
+- **Interpreter für Tests:** `C:\Users\lblet\dev\finanz-dashboard-sparten\.venv\Scripts\python.exe -m unittest discover -s tests`. Vorher **immer** `FINANZ_DB` auf eine Wegwerf-Datei unter `%TEMP%` setzen. Wird die Auth-Suite in der Sandbox wegen Dateirechten nicht startbar, das im Bericht sagen und mindestens `tests/test_static_neu.py` isoliert grün zeigen; die Gesamtsuite fährt der Kopf.
+- **Login-Umleitung:** `AuthMiddleware` leitet unangemeldete Nicht-API-Pfade auf `/login.html` (Root-Mount des Studios) um; öffentliche Pfade sind `OEFFENTLICHE_PFADE` in `app/auth.py`. Für `/neu` ist **keine** eigene Login-Seite nötig: `login.html`/`login.js` in `static-neu/` nur, wenn `static-studio/login.js` nach dem Login fest auf `/studio` zeigt — dann Kopie mit Ziel `/neu/` und Pfade `/neu/login.html`, `/neu/login.js` in `OEFFENTLICHE_PFADE` aufnehmen. Sonst weglassen und im Bericht begründen.
+- **`GET /api/jahre`:** neu in `app/routers/dashboard.py`, nutzt `rechenbasis.filter_dep`/`bereich_dep`, liefert `{"jahre":[...]}` absteigend aus `v_einnahmen_ausgaben` des Bereichs plus laufendes Jahr (`stichtag_heute()`), ohne Dubletten. Test dazu in `tests/test_static_neu.py`.
+- **`instanz` in `/api/schema`:** Wert aus `os.environ.get("FINANZ_INSTANZ", "prod")`, nur `"test"` löst das Banner aus.
+- **Echte Antwort-JSON der Endpunkte, die das Gerüst braucht** (Stand `neubau` nach P20): `GET /api/bereiche` → Liste `{id,name,kuerzel,typ,aktiv,sortierung}`; `GET /api/sparten?bereich_id=` → Liste `{id,name,kuerzel,farbe,typ,aktiv,...}`; `GET /api/auswertungsgruppen?bereich_id=` → Liste mit `sparten_ids`. Vor dem Bauen die Router lesen und die exakten Feldnamen übernehmen, nichts raten.
+- **Playwright:** Ist in der Sandbox ein Browser verfügbar, die Browserprüfung aus Abschnitt 6 fahren; sonst ausdrücklich „nicht geprüft“ schreiben. Der Kopf prüft im Browser nach.
+- **Sauberkeit:** keine `.tmp-tests`, keine Testdatenbanken im Repo lassen. Neue Dateien mit `git status` prüfen; die `.gitignore` schließt `*.csv` aus.
+- **Bericht:** `docs/neubau/berichte/P30-runde1.md`, Testausgabe vollständig als `docs/neubau/berichte/P30-tests.txt`.

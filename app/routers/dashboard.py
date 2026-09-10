@@ -15,6 +15,19 @@ from .auslagen import list_auslagen
 router = APIRouter(tags=["dashboard"])
 
 
+@router.get('/jahre')
+def jahre(con: sqlite3.Connection = Depends(db_dep), bereich: BereichDep = Bereich(1)):
+    """Jahre mit Buchungen im Bereich plus das laufende Wiener Jahr."""
+    rows = con.execute(
+        "SELECT DISTINCT CAST(strftime('%Y', v.datum) AS INTEGER) AS jahr "
+        "FROM v_einnahmen_ausgaben v JOIN sparte s ON s.id=v.sparte_id "
+        "WHERE s.bereich_id=? AND v.datum IS NOT NULL", (bereich.id,)
+    ).fetchall()
+    years = {int(row['jahr']) for row in rows if row['jahr'] is not None}
+    years.add(int(rb.stichtag_heute()[:4]))
+    return {'jahre': sorted(years, reverse=True)}
+
+
 def _where(con, sparte_id, globalgruppe_id, von, bis, bereich):
     f = rb.Filter(bereich_id=bereich.id, sparte_id=sparte_id,
                   globalgruppe_id=globalgruppe_id, von=von, bis=bis, stichtag=None)
