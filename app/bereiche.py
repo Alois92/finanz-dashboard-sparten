@@ -68,6 +68,11 @@ def pruefe_regel(con, regel_id, bereich) -> None:
     _pruefe(con, "SELECT 1 FROM regel WHERE id=? AND bereich_id=?", regel_id, bereich, "Regel")
 
 
+def pruefe_kennzahl(con, kennzahl_id, bereich) -> None:
+    _pruefe(con, "SELECT 1 FROM kennzahl k JOIN sparte s ON s.id=k.sparte_id "
+             "WHERE k.id=? AND s.bereich_id=?", kennzahl_id, bereich, "Kennzahl")
+
+
 def pruefe_auswertung(con, auswertung_id, bereich) -> None:
     _pruefe(con, "SELECT 1 FROM beleg_auswertung a JOIN beleg b ON b.id=a.beleg_id WHERE a.id=? AND b.bereich_id=?", auswertung_id, bereich, "Auswertungsauftrag")
 

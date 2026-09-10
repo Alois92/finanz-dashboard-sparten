@@ -153,13 +153,12 @@ class RegelvorschlagApiTest(unittest.TestCase):
         regeln = import_bank.list_regeln(con)
         self.assertEqual(len(regeln), 1)
         regel_id = regeln[0]["id"]
-        self.assertEqual(
-            set(regeln[0]),
-            {
-                "id", "name", "aktiv", "prioritaet", "bedingung_text",
-                "ziel_sparte_id", "ziel_kategorie_id", "ziel_typ",
-            },
-        )
+        self.assertTrue({
+            "id", "name", "aktiv", "prioritaet", "bedingung_text",
+            "ziel_sparte_id", "ziel_kategorie_id", "ziel_typ", "quelle",
+            "auto_verbuchen", "eingabe_sparte_id", "gelernt_aus_buchung_id",
+            "erstellt_am",
+        }.issubset(regeln[0]))
 
         import_bank.patch_regel(
             regel_id, import_bank.RegelPatchIn(aktiv=0), con,

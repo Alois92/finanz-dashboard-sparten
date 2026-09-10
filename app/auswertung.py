@@ -282,8 +282,8 @@ def _kategorie_fuer_position(con: sqlite3.Connection, text: str, sparte_id, bere
     if treffer:
         return treffer["id"], treffer["name"]
 
-    regel = finde_regel(con, text, bereich_id)
-    if regel and regel["ziel_kategorie_id"] and regel["kat_sparte_id"] == sparte_id:
+    regel = finde_regel(con, text, bereich_id=bereich_id, sparte_id=sparte_id)
+    if regel and not regel.get("konflikt") and regel["ziel_kategorie_id"] and regel["kat_sparte_id"] == sparte_id:
         row = con.execute(
             "SELECT name FROM kategorie WHERE id = ?", (regel["ziel_kategorie_id"],)
         ).fetchone()
