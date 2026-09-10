@@ -73,6 +73,7 @@ class AutoKategorienTest(unittest.TestCase):
         self.assertEqual(self.kategorie_id, regel["ziel_kategorie_id"])
         self.assertEqual("ausgabe", regel["ziel_typ"])
         self.assertTrue(regel["name"].startswith("Gelernt: "))
+        self.assertEqual(0, regel["auto_verbuchen"])
 
     def test_parse_ordnet_per_regel_zu_ohne_kategorienamen(self):
         con = get_connection()

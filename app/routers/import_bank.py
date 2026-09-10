@@ -673,7 +673,7 @@ def verbuche_umsatz(umsatz_id: int, body: UmsatzVerbuchenIn,
             if vorhanden:
                 con.execute(
                     "UPDATE regel SET name = ?, ziel_sparte_id = ?, ziel_kategorie_id = ?, "
-                    "ziel_typ = ?, quelle = 'gelernt', auto_verbuchen = 1, "
+                    "ziel_typ = ?, quelle = 'gelernt', auto_verbuchen = 0, "
                     "eingabe_sparte_id = ?, gelernt_aus_buchung_id = ? WHERE id = ?",
                     (muster, body.sparte_id, body.kategorie_id, typ, body.sparte_id,
                      buchung_id, vorhanden["id"]),
@@ -684,7 +684,7 @@ def verbuche_umsatz(umsatz_id: int, body: UmsatzVerbuchenIn,
                     "ziel_kategorie_id, ziel_typ, bereich_id, quelle, auto_verbuchen, "
                     "eingabe_sparte_id, gelernt_aus_buchung_id) VALUES(?,?,?,?,?,?,?,?,?,?)",
                     (muster, muster, body.sparte_id, body.kategorie_id, typ, bereich.id,
-                     "gelernt", 1, body.sparte_id, buchung_id),
+                     "gelernt", 0, body.sparte_id, buchung_id),
                 )
                 regel_angelegt = True
         con.commit()

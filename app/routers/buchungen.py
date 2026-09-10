@@ -97,7 +97,7 @@ def _lerne_regel(con: sqlite3.Connection, text: str, sparte_id: int,
         if vorhanden:
             con.execute(
                 "UPDATE regel SET name = ?, ziel_sparte_id = ?, ziel_kategorie_id = ?, "
-                "ziel_typ = ?, quelle = 'gelernt', auto_verbuchen = 1, "
+                "ziel_typ = ?, quelle = 'gelernt', auto_verbuchen = 0, "
                 "eingabe_sparte_id = ?, gelernt_aus_buchung_id = ? WHERE id = ?",
                 (name, sparte_id, kategorie_id, typ, sparte_id,
                  gelernt_aus_buchung_id, vorhanden["id"]),
@@ -108,7 +108,7 @@ def _lerne_regel(con: sqlite3.Connection, text: str, sparte_id: int,
                 "ziel_kategorie_id, ziel_typ, bereich_id, quelle, auto_verbuchen, "
                 "eingabe_sparte_id, gelernt_aus_buchung_id) VALUES(?,?,?,?,?,?,?,?,?,?)",
                 (name, bedingung, sparte_id, kategorie_id, typ, bereich_id,
-                 "gelernt", 1, sparte_id, gelernt_aus_buchung_id),
+                 "gelernt", 0, sparte_id, gelernt_aus_buchung_id),
             )
         con.commit()
     except Exception:

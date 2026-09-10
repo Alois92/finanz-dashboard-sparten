@@ -1,9 +1,12 @@
 import os
+import io
 import sqlite3
 import tempfile
 import unittest
 import uuid
 from pathlib import Path
+
+from starlette.datastructures import UploadFile
 
 
 class P15KernTest(unittest.TestCase):
@@ -43,6 +46,49 @@ class P15KernTest(unittest.TestCase):
         self.assertIsNotNone(self.con.execute(
             "SELECT 1 FROM sqlite_master WHERE type='table' AND name='kennzahl'"
         ).fetchone())
+
+    def test_bestandsregeln_bleiben_vorschlaege_und_csv_import_verbucht_nichts(self):
+        from app import migrate
+        from app.routers.import_bank import import_csv
+
+        self.con.executemany(
+            "INSERT INTO regel(name, bedingung_text, ziel_sparte_id, ziel_kategorie_id, "
+            "ziel_typ, bereich_id, quelle, auto_verbuchen) VALUES(?,?,?,?,?,?,?,?)",
+            [
+                ("alt 1", "altlieferant", self.sparte, self.kategorie, "ausgabe", 1, "gelernt", 1),
+                ("alt 2", "zweiterlieferant", self.sparte, self.kategorie, "ausgabe", 1, "gelernt", 1),
+            ],
+        )
+        konto_id = self.con.execute(
+            "INSERT INTO bankkonto(name, sparte_id) VALUES(?, ?)",
+            ("P15 Bestandskonto", self.sparte),
+        ).lastrowid
+        self.con.execute("DELETE FROM schema_version WHERE version=8")
+        self.con.commit()
+
+        self.assertEqual([8], migrate.anwenden(self.con, None))
+        self.assertEqual(
+            [0, 0],
+            [row[0] for row in self.con.execute(
+                "SELECT auto_verbuchen FROM regel WHERE quelle='gelernt' ORDER BY id"
+            )],
+        )
+
+        import_csv(
+            bankkonto_id=konto_id,
+            datei=UploadFile(file=io.BytesIO(
+                b"Buchungsdatum;Betrag;Verwendungszweck\n"
+                b"01.09.2026;-12,34;Altlieferant Rechnung\n"
+            ), filename="bestand.csv"),
+            con=self.con,
+        )
+        self.assertEqual(0, self.con.execute("SELECT COUNT(*) FROM buchung").fetchone()[0])
+        self.assertEqual(
+            1,
+            self.con.execute(
+                "SELECT COUNT(*) FROM bankumsatz WHERE importstatus='offen'"
+            ).fetchone()[0],
+        )
 
     def test_category_list_includes_inactive_and_patch_preserves_id(self):
         from app.routers.stammdaten import list_kategorien, patch_kategorie

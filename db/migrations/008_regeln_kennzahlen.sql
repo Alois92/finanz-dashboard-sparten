@@ -3,7 +3,9 @@ ALTER TABLE regel ADD COLUMN auto_verbuchen INTEGER NOT NULL DEFAULT 0 CHECK (au
 ALTER TABLE regel ADD COLUMN eingabe_sparte_id INTEGER REFERENCES sparte(id);
 ALTER TABLE regel ADD COLUMN gelernt_aus_buchung_id INTEGER REFERENCES buchung(id);
 ALTER TABLE regel ADD COLUMN erstellt_am TEXT NOT NULL DEFAULT (datetime('now'));
-UPDATE regel SET auto_verbuchen = 1 WHERE quelle = 'gelernt';
+-- Bestandsregeln bleiben Vorschlaege. Automatik wird nur ueber eine
+-- ausdrueckliche Freigabe der einzelnen Regel aktiviert.
+UPDATE regel SET auto_verbuchen = 0 WHERE quelle = 'gelernt';
 
 CREATE TABLE IF NOT EXISTS kennzahl (
     id INTEGER PRIMARY KEY,

@@ -191,6 +191,7 @@ class ImportBankApiTest(unittest.TestCase):
         self.assertEqual(len(regeln), 1)
         self.assertEqual(regeln[0]["bedingung_text"], "handelskette ag")
         self.assertEqual(regeln[0]["ziel_kategorie_id"], self.kategorie_id)
+        self.assertEqual(0, regeln[0]["auto_verbuchen"])
 
     def test_kaputte_csv_liefert_4xx_statt_500(self):
         con = get_connection()
