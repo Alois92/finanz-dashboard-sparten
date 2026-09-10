@@ -10,18 +10,23 @@ Endpunkte:
   POST /api/beleg-auswertungen/{id}/status  - Status auf verworfen/verbucht setzen
   GET  /api/auswertung/status               - Erreichbarkeit des Ollama-Servers pruefen
 """
+import datetime as dt
 import json
 import sqlite3
 import urllib.error
 import urllib.request
-from typing import Literal, Optional
+from typing import List, Literal, Optional
 
-from fastapi import APIRouter, Depends
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field, field_validator
 
 from ..auswertung import OLLAMA_MODEL, OLLAMA_URL
 from ..db import db_dep
-from ..bereiche import Bereich, BereichDep, pruefe_beleg, pruefe_auswertung
+from ..bereiche import Bereich, BereichDep, pruefe_beleg, pruefe_auswertung, pruefe_sparte, pruefe_kategorie
+from ..schemas import ZAHLUNGSARTEN, ZeileIn
+from ..wiederholung import speichere_antwort, wiederhole
+from .belege import _aktualisiere_belegstatus
+from .buchungen import erstelle_buchung
 
 router = APIRouter(tags=["beleg-auswertung"])
 
@@ -34,6 +39,48 @@ STATUS_TIMEOUT_SEKUNDEN = 3
 
 class AuswertungStatusIn(BaseModel):
     status: Literal["verworfen", "verbucht"]
+
+
+class UebernehmenPosition(BaseModel):
+    text: str
+    betrag_cent: int = Field(gt=0)
+    kategorie_id: int
+    typ: Literal["einnahme", "ausgabe"] = "ausgabe"
+
+
+class UebernehmenIn(BaseModel):
+    sparte_id: int
+    datum: Optional[str] = None
+    bezahlt_von_sparte_id: Optional[int] = None
+    zahlungsart: str = "bar"
+    positionen: List[UebernehmenPosition]
+    client_request_id: Optional[str] = Field(default=None, min_length=1)
+
+    @field_validator("zahlungsart")
+    @classmethod
+    def _zahlungsart(cls, v: str) -> str:
+        if v not in ZAHLUNGSARTEN:
+            raise ValueError(f"zahlungsart muss eine von {sorted(ZAHLUNGSARTEN)} sein")
+        return v
+
+    @field_validator("datum")
+    @classmethod
+    def _datum(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        try:
+            if dt.date.fromisoformat(v).isoformat() != v:
+                raise ValueError
+        except ValueError:
+            raise ValueError("datum muss YYYY-MM-DD entsprechen")
+        return v
+
+    @field_validator("positionen")
+    @classmethod
+    def _positionen(cls, v: List[UebernehmenPosition]) -> List[UebernehmenPosition]:
+        if not v:
+            raise ValueError("positionen darf nicht leer sein")
+        return v
 
 
 def _auftrag_dict(row) -> dict:
@@ -130,3 +177,88 @@ def auswertung_status(bereich: BereichDep = Bereich(1)):
     except (urllib.error.URLError, OSError, ValueError, TimeoutError):
         pass
     return ergebnis
+
+
+@router.post("/beleg-auswertungen/{auswertung_id}/uebernehmen", status_code=201)
+def auswertung_uebernehmen(
+    auswertung_id: int,
+    body: UebernehmenIn,
+    con: sqlite3.Connection = Depends(db_dep), bereich: BereichDep = Bereich(1),
+):
+    """Uebernimmt einen fertigen Auswertungsauftrag als Buchung (P43).
+
+    Erzeugt ueber `erstelle_buchung` (app/routers/buchungen.py) eine Buchung mit
+    einer Zeile je Position, verknuepft den Beleg und schliesst den Auftrag als
+    'verbucht' ab. Die Wiederholungspruefung (client_request_id) laeuft VOR der
+    Statuspruefung, damit ein wiederholter Aufruf auch nach dem Statuswechsel auf
+    'verbucht' noch die gleiche Antwort liefert statt faelschlich 409 zu melden.
+    """
+    pruefe_auswertung(con, auswertung_id, bereich)
+
+    # request_wiederholung.art laesst laut Schema nur 'buchung'/'ausgleich' zu
+    # (keine Migration in diesem Paket) - die Uebernahme erzeugt am Ende genau
+    # eine Buchung, daher wird derselbe 'buchung'-Topf wie bei POST /api/buchungen
+    # mitbenutzt. client_request_id ist ein pro Aktion vom Client erzeugter UUID,
+    # eine Kollision mit einer echten Buchungserfassung ist praktisch ausgeschlossen.
+    antwort = wiederhole(con, 'buchung', body, bereich)
+    if antwort is not None:
+        return antwort
+
+    pruefe_sparte(con, body.sparte_id, bereich)
+
+    auftrag = con.execute(
+        "SELECT id, beleg_id, status, ergebnis_json FROM beleg_auswertung WHERE id = ?",
+        (auswertung_id,),
+    ).fetchone()
+    if auftrag["status"] != "fertig":
+        raise HTTPException(409, "Auswertung ist noch nicht fertig oder bereits abgeschlossen")
+
+    for p in body.positionen:
+        pruefe_kategorie(con, p.kategorie_id, bereich)
+        krow = con.execute(
+            "SELECT sparte_id FROM kategorie WHERE id = ? AND aktiv = 1",
+            (p.kategorie_id,),
+        ).fetchone()
+        if not krow:
+            raise HTTPException(404, f"Kategorie {p.kategorie_id} nicht gefunden")
+        if krow["sparte_id"] != body.sparte_id:
+            raise HTTPException(400, "Kategorie gehoert nicht zur gewaehlten Sparte")
+
+    typen = {p.typ for p in body.positionen}
+    if len(typen) > 1:
+        raise HTTPException(422, "Alle Positionen einer Uebernahme muessen denselben Typ haben")
+    typ = next(iter(typen))
+
+    datum = body.datum
+    if datum is None:
+        ergebnis = json.loads(auftrag["ergebnis_json"]) if auftrag["ergebnis_json"] else {}
+        datum = ergebnis.get("datum") or dt.date.today().isoformat()
+
+    zeilen = [
+        ZeileIn(kategorie_id=p.kategorie_id, betrag_cent=p.betrag_cent, notiz=p.text)
+        for p in body.positionen
+    ]
+
+    # client_request_id=None: die Wiederholungspruefung fuer diese Aktion ist
+    # bereits oben (derselbe 'buchung'-Topf) erledigt - erstelle_buchung soll
+    # hier keinen zweiten, unabhaengigen Wiederholungs-Eintrag anlegen.
+    buchung_antwort, buchung_id = erstelle_buchung(
+        con, bereich, sparte_id=body.sparte_id, datum=datum, typ=typ,
+        zahlungsart=body.zahlungsart, bezahlt_von_sparte_id=body.bezahlt_von_sparte_id,
+        positionen=zeilen, client_request_id=None,
+    )
+
+    con.execute(
+        "INSERT OR IGNORE INTO buchung_beleg(buchung_id, beleg_id) VALUES(?, ?)",
+        (buchung_id, auftrag["beleg_id"]),
+    )
+    _aktualisiere_belegstatus(con, buchung_id)
+    con.execute(
+        "UPDATE beleg_auswertung SET status = 'verbucht', aktualisiert = datetime('now') WHERE id = ?",
+        (auswertung_id,),
+    )
+    con.commit()
+
+    ergebnis_antwort = {"buchung_id": buchung_id, "version": buchung_antwort["version"]}
+    speichere_antwort(con, 'buchung', body, bereich, ergebnis_antwort)
+    return ergebnis_antwort
