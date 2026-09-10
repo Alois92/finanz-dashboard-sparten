@@ -312,6 +312,7 @@ CREATE INDEX idx_kennzahl_term_kennzahl ON kennzahl_term(kennzahl_id);
 
 -- ---------------------------------------------------------------------------
 -- Beleg-Auswertung (ab Phase 4; lokale Foto-Auswertung via Ollama)
+-- Bestandsdatenbanken: idempotenter Nachzug durch Migration 011.
 -- ---------------------------------------------------------------------------
 
 CREATE TABLE beleg_auswertung (

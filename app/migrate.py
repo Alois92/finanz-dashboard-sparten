@@ -92,6 +92,20 @@ def alle_markieren(con) -> None:
     con.commit()
 
 
+def initialisieren(con, schema: pathlib.Path, seed: pathlib.Path) -> None:
+    """Leere Datenbanken aus dem Sollschema anlegen, Bestand als Basis erfassen."""
+    exists = con.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='sparte'"
+    ).fetchone()
+    if not exists:
+        con.executescript(schema.read_text(encoding="utf-8"))
+        con.executescript(seed.read_text(encoding="utf-8"))
+        con.commit()
+        alle_markieren(con)
+    elif not _hat_schema_version(con):
+        basis_setzen(con)
+
+
 def anwenden(
     con,
     sicherung: Callable[[], pathlib.Path | None] | None,
