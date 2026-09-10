@@ -17,8 +17,6 @@ Offene Punkte aus Abnahmen und aus dem unabhängigen Prüfbericht (Fable, 9. Sep
 | Nr. | Befund | Fällig in |
 |---|---|---|
 | A3 | Zwei Runner-Semantiken in `app/migrate.py`: SQL-Migrationen laufen mit Fremdschlüsselprüfung und sauberem Anweisungs-Splitting, Python-Migrationen bekommen nichts davon. Migration 004 (P11) bettet SQL in Python ein und splittet mit `SQL.split(';')` — genau die Schwäche, die für SQL-Dateien schon behoben ist. | P20 |
-| A5 | `app/backup.py` kopiert jeden Tag alle Belege vollständig, ohne Deduplizierung über Tage, und schiebt alle sechs Stunden den ganzen Belegordner übers Netz aufs Zweitziel — alles unter dem Sicherungs-Lock, das währenddessen Löschungen und den Start blockiert. Betriebsproblem, das erst mit echten Mengen auffällt. | vor M6 |
-| A6 | Fehlgeschlagene Beleg- oder Zweitziel-Sicherung wird nur geloggt; `sichere_datenbank()` meldet trotzdem Erfolg. Am Zweitziel wird nur Existenz geprüft, keine Prüfsummen. | vor M6 |
 | B2 | Drei Wahrheiten für „Verein": `sparte.typ`, `sparte.geschuetzt`, `sparte.bereich_id`. Die Architektur legt nicht fest, dass `bereich_id` maßgeblich ist. | P20 |
 | B3 | Umbuchungen existieren doppelt: altes Buchungspaar mit `transfer_gruppe_id` und neues `transfer` + `bewegung`. Quelle der Wahrheit ist nicht festgelegt. | P20 |
 | B6 | `bewegung.waehrung` ohne Umrechnung (Kontostand summiert blind über Währungen), `client_request_id` ohne Bereichs- oder Zeitbezug, `hinweis_aus` ohne Bereich. | vor M6 |
@@ -43,18 +41,20 @@ Offene Punkte aus Abnahmen und aus dem unabhängigen Prüfbericht (Fable, 9. Sep
 
 | Nr. | Befund | Fällig |
 |---|---|---|
-| **A2neu** (weiter offen nach P20, siehe `abnahme/P20.md`) | **Die Migrationsprobe auf einer Kopie der Produktionsdatenbank ist nur für 001–004 gefahren.** Für 005–009 (P12–P16) steht sie aus, entgegen der eigenen Prozessregel 1. Das ist die eigentliche Abnahme von M1. | **vor P20** |
+| **A2neu** (Skript P61 fertig und gemergt; Lauf auf Prod-Kopie steht aus, Kopie liegt auf pve unter /tmp) | **Die Migrationsprobe auf einer Kopie der Produktionsdatenbank ist nur für 001–004 gefahren.** Für 005–009 (P12–P16) steht sie aus, entgegen der eigenen Prozessregel 1. Das ist die eigentliche Abnahme von M1. | **vor P20** |
 
 ### Wichtig, nicht sperrend
 
 | Nr. | Befund | Fällig |
 |---|---|---|
-| N3 | Kreditraten werden über den Freitext `buchung.notiz = 'Kreditrate:<id>'` erkannt. Bearbeitet der Nutzer die Notiz, fällt die Rate still aus der Zinsverteilung. Eigene Spalte statt Marker. | vor M6, spätestens P50 |
-| N4 | **Kontostand zählt doppelt**, solange eine manuell erfasste Bankbuchung und der später importierte Umsatz nicht einander zugeordnet sind (`app/bewegungen.py:97-108` gegen `import_bank.py:275`). Die Karte P42 braucht deshalb einen **Backend**-Anteil (Kandidatensuche über Betrag und Datum, Zuordnungs-Endpunkt), nicht nur Frontend. | vor P42 |
 | N10 | Prozessregel 1 (Migrationsprobe in der Abnahme) wurde bei P12, P14, P15 und P16 nicht angewendet. | Prozess |
 
 ### Erledigt
 
+- **A5** — Belege inhaltsadressiert im Store, Zweitziel inkrementell mit Prüfsumme, Übertragung außerhalb des Locks (gemergt 10.09., Abnahme A5-A6.md).
+- **A6** — `sichere_datenbank()` liefert Ergebnisobjekt, Betriebsstatus zeigt es, nur voll erfolgreicher Lauf gilt als gesichert (gemergt 10.09.).
+- **N3** — Kreditraten über `buchung.kredit_id`, Migration 015, Altmarker nachgezogen (gemergt 10.09., Abnahme N3.md).
+- **N4** — Backend-Abgleich: Kandidaten, Zuordnen, Lösen, offene Abgleiche; Kontostand zählt nach Zuordnung einfach (gemergt 10.09., Abnahme N4.md). Frontend-Teil in P42.
 - **B2** — entschieden in P20: Verein-Ausschluss ausschließlich über `sparte.bereich_id`; `typ` und `geschuetzt` sind informativ (gemergt 10.09.).
 - **B3** — entschieden in P20: Summen aus `v_einnahmen_ausgaben`, Kontostände aus `bewegung` (gemergt 10.09.).
 - **A1** — eigene frische Sicherung `…-vor-nachzug-<version>.db` vor jedem Nachzug (Zweig fix/a1, gemergt 10.09.).
