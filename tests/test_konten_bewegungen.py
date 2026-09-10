@@ -40,7 +40,7 @@ class KontenMigrationTest(unittest.TestCase):
                     original.backup(con)
                     con.row_factory = sqlite3.Row
                     vorher = list(con.execute('SELECT * FROM v_einnahmen_ausgaben'))
-                    self.assertEqual([4, 5, 6], migrate.anwenden(con, None))
+                    self.assertEqual([4, 5, 6, 9], migrate.anwenden(con, None))
                     self.assertEqual(2, con.execute("SELECT count(*) FROM bankkonto WHERE art='kassa'").fetchone()[0])
                     self.assertEqual(3, con.execute("SELECT count(*) FROM bewegung WHERE quelle='import'").fetchone()[0])
                     self.assertEqual(2, con.execute('SELECT count(*) FROM transfer').fetchone()[0])
