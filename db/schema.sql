@@ -542,3 +542,15 @@ CREATE TABLE kredit_jahr (
 );
 CREATE INDEX idx_kredit_sparte ON kredit (sparte_id);
 CREATE INDEX idx_kredit_jahr_jahr ON kredit_jahr (kredit_id, jahr);
+
+-- P12: Dauerhaftes Protokoll fuer nicht eindeutig aufgeloeste Nachzugsfaelle.
+CREATE TABLE migrationsprotokoll (
+    id INTEGER PRIMARY KEY,
+    version INTEGER NOT NULL,
+    zeitpunkt TEXT NOT NULL DEFAULT (datetime('now')),
+    art TEXT NOT NULL,
+    objektkennung TEXT NOT NULL,
+    hinweis TEXT NOT NULL,
+    UNIQUE (version, art, objektkennung)
+);
+CREATE INDEX idx_migrationsprotokoll_zeitpunkt ON migrationsprotokoll (zeitpunkt, id);
