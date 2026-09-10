@@ -215,6 +215,92 @@ class P50BuchungenTest(unittest.TestCase):
         self.assertEqual("Erste Aenderung", text)
         self.assertNotEqual("Sollte nicht ankommen", text)
 
+    def test_put_ohne_kontakt_und_person_id_behaelt_vorhandene_werte(self):
+        kontakt_id = self.con.execute(
+            "INSERT INTO kontakt(name) VALUES('Testkontakt')"
+        ).lastrowid
+        person_id = self.con.execute(
+            "INSERT INTO person(name) VALUES('Testperson')"
+        ).lastrowid
+        self.con.execute(
+            "UPDATE buchung SET kontakt_id=?, person_id=? WHERE id=?",
+            (kontakt_id, person_id, self.buchung_id),
+        )
+        self.con.commit()
+        version = self.con.execute(
+            "SELECT version FROM buchung WHERE id=?", (self.buchung_id,)
+        ).fetchone()[0]
+        body = {
+            "sparte_id": self.sparte_id, "datum": "2026-01-15", "typ": "ausgabe",
+            "zahlungsart": "bar", "text": "Ohne Kontakt/Person im Body", "zeilen": [
+                {"kategorie_id": self.kategorie_id, "betrag_cent": 999}
+            ], "version": version,
+        }
+        status, data = self.request(
+            "PUT", f"/api/buchungen/{self.buchung_id}?bereich_id=1", body
+        )
+        self.assertEqual(200, status, data)
+        kontakt_nach, person_nach = self.con.execute(
+            "SELECT kontakt_id, person_id FROM buchung WHERE id=?", (self.buchung_id,)
+        ).fetchone()
+        self.assertEqual(kontakt_id, kontakt_nach)
+        self.assertEqual(person_id, person_nach)
+
+    def test_put_mit_explizitem_kontakt_id_null_loescht_verknuepfung(self):
+        kontakt_id = self.con.execute(
+            "INSERT INTO kontakt(name) VALUES('Testkontakt2')"
+        ).lastrowid
+        self.con.execute(
+            "UPDATE buchung SET kontakt_id=? WHERE id=?", (kontakt_id, self.buchung_id)
+        )
+        self.con.commit()
+        version = self.con.execute(
+            "SELECT version FROM buchung WHERE id=?", (self.buchung_id,)
+        ).fetchone()[0]
+        body = {
+            "sparte_id": self.sparte_id, "datum": "2026-01-15", "typ": "ausgabe",
+            "zahlungsart": "bar", "text": "Kontakt bewusst geloescht", "kontakt_id": None,
+            "zeilen": [{"kategorie_id": self.kategorie_id, "betrag_cent": 999}],
+            "version": version,
+        }
+        status, data = self.request(
+            "PUT", f"/api/buchungen/{self.buchung_id}?bereich_id=1", body
+        )
+        self.assertEqual(200, status, data)
+        kontakt_nach = self.con.execute(
+            "SELECT kontakt_id FROM buchung WHERE id=?", (self.buchung_id,)
+        ).fetchone()[0]
+        self.assertIsNone(kontakt_nach)
+
+    def test_put_mit_neuem_kontakt_id_uebernimmt_wert(self):
+        alter_kontakt_id = self.con.execute(
+            "INSERT INTO kontakt(name) VALUES('Alter Kontakt')"
+        ).lastrowid
+        neuer_kontakt_id = self.con.execute(
+            "INSERT INTO kontakt(name) VALUES('Neuer Kontakt')"
+        ).lastrowid
+        self.con.execute(
+            "UPDATE buchung SET kontakt_id=? WHERE id=?", (alter_kontakt_id, self.buchung_id)
+        )
+        self.con.commit()
+        version = self.con.execute(
+            "SELECT version FROM buchung WHERE id=?", (self.buchung_id,)
+        ).fetchone()[0]
+        body = {
+            "sparte_id": self.sparte_id, "datum": "2026-01-15", "typ": "ausgabe",
+            "zahlungsart": "bar", "text": "Neuer Kontakt", "kontakt_id": neuer_kontakt_id,
+            "zeilen": [{"kategorie_id": self.kategorie_id, "betrag_cent": 999}],
+            "version": version,
+        }
+        status, data = self.request(
+            "PUT", f"/api/buchungen/{self.buchung_id}?bereich_id=1", body
+        )
+        self.assertEqual(200, status, data)
+        kontakt_nach = self.con.execute(
+            "SELECT kontakt_id FROM buchung WHERE id=?", (self.buchung_id,)
+        ).fetchone()[0]
+        self.assertEqual(neuer_kontakt_id, kontakt_nach)
+
     def test_delete_entfernt_buchung(self):
         status, _ = self.request("DELETE", f"/api/buchungen/{self.buchung_id2}?bereich_id=1")
         self.assertEqual(204, status)
