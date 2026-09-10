@@ -12,7 +12,7 @@ Lies `docs/neubau/ARCHITEKTUR.md` Abschnitt 8, dann `app/routers/dashboard.py` (
 
 ## 3. Schnittstellen
 
-Neues Modul `app/auswertungen.py`:
+Neues Modul `app/rechenbasis.py`:
 
 ```python
 @dataclass
@@ -27,7 +27,7 @@ class Filter:
     kategorie_id: int | None = None
     richtung: str | None = None        # 'einnahme'|'ausgabe'
     zahlungsart: str | None = None     # 'bar'|'bank'|'karte'
-    stichtag: str | None = None        # Standard: heute in Europe/Vienna
+    stichtag: str | None = None        # Standard: heute, siehe stichtag_heute()
 
 def filter_dep(...) -> Filter                     # FastAPI-Dependency aus Query-Parametern, prüft Bereich und Sparten-/Gruppen-Zugehörigkeit
 def sparten_ids(con, f: Filter) -> list[int]      # Sparte, Gruppe oder alle Sparten des Bereichs (ohne Verein im Hauptbereich)
@@ -35,7 +35,10 @@ def where_zeilen(con, f) -> tuple[str, list]      # WHERE auf v_einnahmen_ausgab
 def summen(con, f) -> dict                        # {einnahmen_cent, ausgaben_cent, saldo_cent}
 def monatsreihe(con, f) -> dict                   # {einnahmen: [12], ausgaben: [12]}
 def je_kategorie(con, f) -> list[dict]            # [{kategorie_id, name, sparte_id, aktiv, einnahmen_cent, ausgaben_cent}]
-def stichtag_heute() -> str                       # Europe/Vienna, ISO
+def stichtag_heute() -> str   # ISO-Datum. Europe/Vienna über zoneinfo, ABER mit Rückfall auf die
+                              # lokale Zeit, wenn die Zeitzonendaten fehlen (unter Windows ist das
+                              # Paket tzdata nicht installiert und darf nicht ergänzt werden).
+                              # Test: die Funktion liefert auch ohne Zeitzonendaten ein gültiges Datum.
 def vorjahresrest(con, f, stichtag) -> dict       # Summen des Vorjahres mit datum > stichtag im Vorjahr (29.02. → 28.02.)
 def erwartung(con, f, stichtag) -> dict           # Ist + Vorjahresrest, nur wenn f.jahr == Jahr des Stichtags
 def hinweise(con, f, stichtag) -> list[dict]      # [{schluessel, art, text, drill: Filter-Parameter}]
@@ -54,13 +57,13 @@ GET /api/uebersicht?<Filter>
 GET /api/jahresmatrix?<Filter>&jahre=2023,2024,2025,2026
  → {jahre: [...], stichtag, zeilen: [{kategorie_id, name, sparte_id, aktiv, richtung, werte: {"2025": {einnahmen_cent, ausgaben_cent}, ...}, erwartung_cent: {einnahmen, ausgaben}|null, monatsdurchschnitt_cent}], summen: {...je Jahr}}
 GET /api/buchungen?<Filter>&q=&limit=100&cursor=
- → {buchungen: [...wie bisher plus auslage, neutral_cent, version, storniert_am], summen: {anzahl, einnahmen_cent, ausgaben_cent}, naechster_cursor}
+ → {buchungen: [...wie bisher plus auslage, neutral_cent, version] — **kein `storniert_am`**: die Tabelle `buchung` hat keine solche Spalte, Storno kommt erst mit P51, summen: {anzahl, einnahmen_cent, ausgaben_cent}, naechster_cursor}
    Cursor = base64 von "datum|id" der letzten Zeile; Summen über alle Treffer, nicht nur die Seite
 GET /api/buchungen/suche  → delegiert an GET /api/buchungen mit q (bleibt aus Kompatibilität)
 GET /api/hinweise/aus  und  POST /api/hinweise/aus {schluessel, bis_wert}   → ausgeblendete Hinweise (Tabelle hinweis_aus)
 ```
 
-Migration `db/migrations/009_hinweis_aus.sql`: `hinweis_aus(schluessel TEXT PRIMARY KEY, bis_wert TEXT, erstellt_am)`. Ein Hinweis erscheint wieder, wenn sein aktueller Wert (im Schlüssel kodiert, z. B. Prozent auf 5 gerundet oder Cent) von `bis_wert` abweicht.
+Migration `db/migrations/013_hinweis_aus.sql` (009 bis 012 sind belegt): `hinweis_aus(id INTEGER PRIMARY KEY, bereich_id INTEGER NOT NULL REFERENCES bereich(id), schluessel TEXT NOT NULL, bis_wert TEXT, erstellt_am TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE(bereich_id, schluessel))` — **mit `bereich_id`**, sonst blendet ein Hinweis im Hauptbereich denselben Schlüssel im Vereinsbereich mit aus. Ein Hinweis erscheint wieder, wenn sein aktueller Wert (im Schlüssel kodiert, z. B. Prozent auf 5 gerundet oder Cent) von `bis_wert` abweicht.
 
 Regeln:
 - Verein-Sparten (Bereich 2) tauchen im Hauptbereich nirgends auf; im Bereich 2 sind sie die einzigen.
@@ -75,14 +78,14 @@ Kein Frontend. Keine Export-Änderung (M6). Keine Kennzahl-Definition (P15), nur
 
 ## 5. Schritte
 
-1. `app/auswertungen.py` mit Filter und Funktionen; bestehende `_where`-Logik dorthin ziehen.
-2. `/api/uebersicht`, `/api/jahresmatrix`, Cursor-Buchungsliste, Hinweise, Migration 009.
+1. `app/rechenbasis.py` mit Filter und Funktionen; bestehende `_where`-Logik dorthin ziehen. **Nicht** `app/auswertungen.py` — der Name kollidiert mit dem bestehenden `app/auswertung.py` (Rechnungsfoto-Auswertung mit Ollama).
+2. `/api/uebersicht`, `/api/jahresmatrix`, Cursor-Buchungsliste, Hinweise, Migration 013.
 3. Bestehende Endpoints auf die neuen Funktionen umstellen (gleiche Antworten wie bisher, Regression durch bestehende Tests).
 4. Tests, Gesamtlauf, Bericht.
 
 ## 6. Tests
 
-Neue Datei `tests/test_auswertungen.py` mit reproduzierbarem Seed (feste Buchungen in zwei Jahren, zwei Sparten, Verein-Sparte, Umbuchung, neutrale Zeile, stornierte Buchung):
+Neue Datei `tests/test_rechenbasis.py` mit reproduzierbarem Seed (feste Buchungen in zwei Jahren, zwei Sparten, Verein-Sparte, Umbuchung, neutrale Zeile, gelöschte Buchung — **keine** stornierte, die gibt es erst ab P51):
 - Summen der Übersicht = Summe der Kacheln = Summe der Buchungsliste (gleicher Filter).
 - Umbuchung, neutrale Zeile und stornierte Buchung zählen nirgends.
 - Verein erscheint nicht im Hauptbereich; mit `bereich_id=2` nur Verein.
@@ -106,3 +109,60 @@ Neue Datei `tests/test_auswertungen.py` mit reproduzierbarem Seed (feste Buchung
 ## 8. Bericht zurück
 
 Geänderte und neue Dateien mit je einem Satz. Vollständige Testausgabe. Laufzeitmessung. Offene Punkte mit Grund. Keine Commits, kein Push.
+
+---
+
+## 10. Nachtrag aus der Kontrolle (Fable, 10. September 2026) — verbindlich
+
+### 10.1 Rechenbasis: was zählt wo hinein
+
+Diese Tabelle ist der Kern des Pakets. Jede Zeile bekommt einen eigenen Testfall im Seed.
+
+| Vorgang | Einnahmen/Ausgaben | Kontostand | Bemerkung |
+|---|---|---|---|
+| Normale Einnahme oder Ausgabe | ja | über die Bewegung | |
+| **Umbuchung** | **nein** | ja | Quelle der Wahrheit: `buchung.typ='umbuchung'` wird ausgeschlossen, nicht der Transfer |
+| **Neutrale Zeile** (Kredittilgung) | **nein** | ja, voller Ratenbetrag | `buchungszeile.neutral = 1` |
+| Kreditzins | ja, als Ausgabe | im Ratenbetrag enthalten | |
+| **Auslage** | bei der Sparte der **Buchung**, nicht beim Zahler | beim Konto des Zahlers | |
+| **Ausgleich** | **nirgends** | ja, Transfer zwischen zwei Konten | erzeugt keine Buchung |
+| Kassadifferenz | ja | ja | |
+| Gelöschte Buchung | nein | nein | Storno gibt es erst ab P51 |
+
+### 10.2 Festlegungen, die vorher offen waren
+
+- **Verein-Ausschluss ausschließlich über `sparte.bereich_id`.** Nicht über `sparte.typ='verein'`,
+  nicht über `geschuetzt`. Diese beiden Felder sind ab jetzt rein informativ. (Schuld B2)
+- **Quelle der Wahrheit** (Schuld B3): Einnahmen- und Ausgabensummen kommen aus den Buchungen
+  (`v_einnahmen_ausgaben`), Kontostände aus den Bewegungen (`bewegung`). Niemals mischen.
+- **Konten in der Übersicht:** Summe **je Währung**, nie über Währungen hinweg. `stand_cent` darf
+  `null` sein, wenn kein Anker existiert — eine Kassa ohne Anker wird **nicht** als 0 ausgewiesen.
+- **Ist und Erwartung:** Ist ist `datum <= stichtag`. Vordatierte Buchungen des laufenden Jahres
+  zählen weder ins Ist noch zusätzlich in die Erwartung. `richtung` filtert `buchung.typ`, nicht
+  `kategorie.richtung`.
+
+### 10.3 Cursor
+
+Ein Format für alle Listen: Base64 von `datum|id`, **mit `id` als Tiebreaker** bei gleichem Datum.
+Ohne Tiebreaker entstehen Lücken, sobald mehrere Buchungen dasselbe Datum tragen — genau der Fall
+im Test mit 250 Buchungen. Der bestehende Cursor in `app/routers/konten.py` (`datum_id`) wird auf
+dasselbe Format umgestellt.
+
+### 10.4 Regressionsschutz vor dem Umbau
+
+**Zuerst** Snapshot-Tests der heutigen Antworten von `/api/dashboard`, `/api/jahresvergleich`,
+`/api/verlauf` und `/api/buchungen/suche` anlegen (echte Testdaten, Antwort als erwartetes JSON
+festhalten), **dann** die Logik nach `app/rechenbasis.py` ziehen. `scripts/test_drilldown_api.py`
+ist ein Skript und zählt nicht als Test.
+
+### 10.5 Nicht Teil dieses Pakets
+
+Die Schulden A3 (zwei Runner-Semantiken) und A4 (Ad-hoc-Schema in `db.py`) waren früher hier
+verortet. Sie werden separat behandelt und gehören **nicht** in P20. Dieses Paket ist ohnehin das
+schwerste; es trägt keine Fremdaufgaben.
+
+### 10.6 Laufzeit
+
+Das Kriterium (Übersicht unter 300 ms) wird mit einem Seed von 5.000 Buchungen geprüft; das
+Seed-Skript gehört zum Paket. Kennzahlen dürfen nicht je Term in Python iterieren, sondern müssen
+in einer Abfrage rechnen — sonst reißt die Übersicht die Grenze.

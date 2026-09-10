@@ -20,6 +20,7 @@ class BereicheMigrationTest(unittest.TestCase):
 
     def old_schema(self):
         self.con.execute('PRAGMA foreign_keys = OFF')
+        self.con.execute('DROP TABLE beleg_auswertung')
         # Auch die spaeter durch 008 angehaengten Regelspalten entfernen:
         # sonst bleiben sie vor dem von 003 erneut angehaengten bereich_id.
         for column in ('quelle', 'auto_verbuchen', 'eingabe_sparte_id',

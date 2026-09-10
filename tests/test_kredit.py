@@ -30,7 +30,7 @@ class KreditLogikTest(unittest.TestCase):
 class KreditApiTest(unittest.TestCase):
     def setUp(self):
         self.tempdir = tempfile.TemporaryDirectory(
-            prefix="finanz-kredit-", dir="C:\\Users\\lblet\\dev"
+            prefix="finanz-kredit-"
         )
         self.addCleanup(self.tempdir.cleanup)
         self.path = pathlib.Path(self.tempdir.name) / "test.db"

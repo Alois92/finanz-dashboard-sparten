@@ -131,7 +131,7 @@ class MigrationTest(unittest.TestCase):
         finally:
             con.close()
         backup_dir = self.db_path.parent / "backup"
-        sicherungen = list(backup_dir.glob("finanz-????-??-??-????-vor-nachzug-v9.db"))
+        sicherungen = list(backup_dir.glob("finanz-????-??-??-????-vor-nachzug-v11.db"))
         self.assertEqual(1, len(sicherungen))
         self.assertEqual([], list(backup_dir.glob("finanz-????-??-??.db")))
 
