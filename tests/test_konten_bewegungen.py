@@ -40,7 +40,7 @@ class KontenMigrationTest(unittest.TestCase):
                     original.backup(con)
                     con.row_factory = sqlite3.Row
                     vorher = [dict(r) for r in con.execute('SELECT * FROM v_einnahmen_ausgaben')]
-                    self.assertEqual([4, 5, 6, 7, 8, 9, 10, 11, 12, 13], migrate.anwenden(con, None))
+                    self.assertEqual([4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14], migrate.anwenden(con, None))
                     self.assertEqual(2, con.execute("SELECT count(*) FROM bankkonto WHERE art='kassa'").fetchone()[0])
                     self.assertEqual(3, con.execute("SELECT count(*) FROM bewegung WHERE quelle='import'").fetchone()[0])
                     self.assertEqual(2, con.execute('SELECT count(*) FROM transfer').fetchone()[0])
@@ -132,7 +132,7 @@ class KontenApiTest(unittest.TestCase):
     def test_unbekannte_zahlung_und_fremdes_konto(self):
         kid = self.konto()
         self.assertEqual(201,self.request('POST','/api/buchungen',self.payload())[0])
-        self.assertTrue(any(r.get('zahlungsstatus')=='Zahlung unbekannt' for r in self.request('GET','/api/buchungen')[1]))
+        self.assertTrue(any(r.get('zahlungsstatus')=='Zahlung unbekannt' for r in self.request('GET','/api/buchungen')[1]['buchungen']))
         self.assertEqual(0,self.stand(kid))
         fremd = self.con.execute("INSERT INTO bankkonto(name,bereich_id) VALUES('Fremd',2)").lastrowid
         self.con.commit()

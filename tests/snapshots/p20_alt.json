@@ -1,0 +1,193 @@
+{
+  "/api/dashboard": {
+    "einnahmen_cent": 12345,
+    "ausgaben_cent": 100,
+    "saldo_cent": 12245,
+    "per_kategorie": [
+      {
+        "kategorie_id": 1,
+        "kategorie": "Hauptmarker",
+        "sparte": "Privatvermietung",
+        "typ": "einnahme",
+        "betrag_cent": 12345
+      },
+      {
+        "kategorie_id": 1,
+        "kategorie": "Hauptmarker",
+        "sparte": "Privatvermietung",
+        "typ": "ausgabe",
+        "betrag_cent": 100
+      }
+    ],
+    "per_sparte": [
+      {
+        "sparte": "Privatvermietung",
+        "einnahmen_cent": 12345,
+        "ausgaben_cent": 100
+      }
+    ]
+  },
+  "/api/jahresvergleich": {
+    "jahre": [
+      "2025",
+      "2026"
+    ],
+    "gesamt": [
+      {
+        "jahr": "2025",
+        "einnahmen_cent": 12345,
+        "ausgaben_cent": 0,
+        "saldo_cent": 12345
+      },
+      {
+        "jahr": "2026",
+        "einnahmen_cent": 0,
+        "ausgaben_cent": 100,
+        "saldo_cent": -100
+      }
+    ],
+    "per_sparte": [
+      {
+        "sparte": "Privatvermietung",
+        "werte": {
+          "2025": 12345,
+          "2026": -100
+        }
+      }
+    ],
+    "per_kategorie": [
+      {
+        "sparte": "Privatvermietung",
+        "kategorie": "Hauptmarker",
+        "werte": {
+          "2025": 12345,
+          "2026": -100
+        }
+      }
+    ]
+  },
+  "/api/verlauf": {
+    "monate": [
+      {
+        "monat": "2025-11",
+        "einnahmen_cent": 12345,
+        "ausgaben_cent": 0,
+        "saldo_cent": 12345
+      },
+      {
+        "monat": "2026-01",
+        "einnahmen_cent": 0,
+        "ausgaben_cent": 100,
+        "saldo_cent": -100
+      }
+    ]
+  },
+  "/api/buchungen/suche?q=marker": [
+    {
+      "id": 1,
+      "sparte_id": 1,
+      "sparte_name": "Privatvermietung",
+      "datum": "2026-01-01",
+      "typ": "ausgabe",
+      "version": 1,
+      "betrag_cent": 100,
+      "zahlungsart": "bank",
+      "belegstatus": "beleg_fehlt",
+      "buchungsstatus": "offen",
+      "text": "Hauptmarker",
+      "notiz": null,
+      "transfer_gruppe_id": null,
+      "kontakt_id": null,
+      "kontakt_name": null,
+      "zeilen": [
+        {
+          "buchung_id": 1,
+          "id": 1,
+          "kategorie_id": 1,
+          "kategorie_name": "Hauptmarker",
+          "betrag_cent": 100,
+          "notiz": null,
+          "neutral": 0
+        }
+      ],
+      "neutral_cent": 0,
+      "belege": [],
+      "zahlungsstatus": "Zahlung unbekannt",
+      "bezahlt_von_sparte_id": null
+    },
+    {
+      "id": 3,
+      "sparte_id": 1,
+      "sparte_name": "Privatvermietung",
+      "datum": "2025-11-15",
+      "typ": "einnahme",
+      "version": 1,
+      "betrag_cent": 12345,
+      "zahlungsart": "bank",
+      "belegstatus": "beleg_fehlt",
+      "buchungsstatus": "offen",
+      "text": "Altmarker",
+      "notiz": null,
+      "transfer_gruppe_id": null,
+      "kontakt_id": null,
+      "kontakt_name": null,
+      "zeilen": [
+        {
+          "buchung_id": 3,
+          "id": 3,
+          "kategorie_id": 1,
+          "kategorie_name": "Hauptmarker",
+          "betrag_cent": 12345,
+          "notiz": null,
+          "neutral": 0
+        }
+      ],
+      "neutral_cent": 0,
+      "belege": [],
+      "zahlungsstatus": "Zahlung unbekannt",
+      "bezahlt_von_sparte_id": null
+    }
+  ],
+  "/api/dashboard?bereich_id=2": {
+    "einnahmen_cent": 0,
+    "ausgaben_cent": 900,
+    "saldo_cent": -900,
+    "per_kategorie": [
+      {
+        "kategorie_id": 2,
+        "kategorie": "Vereinsmarker",
+        "sparte": "Verein",
+        "typ": "ausgabe",
+        "betrag_cent": 900
+      }
+    ],
+    "per_sparte": [
+      {
+        "sparte": "Verein",
+        "einnahmen_cent": 0,
+        "ausgaben_cent": 900
+      }
+    ]
+  },
+  "/api/dashboard?von=2026-01-01&bis=2026-12-31": {
+    "einnahmen_cent": 0,
+    "ausgaben_cent": 100,
+    "saldo_cent": -100,
+    "per_kategorie": [
+      {
+        "kategorie_id": 1,
+        "kategorie": "Hauptmarker",
+        "sparte": "Privatvermietung",
+        "typ": "ausgabe",
+        "betrag_cent": 100
+      }
+    ],
+    "per_sparte": [
+      {
+        "sparte": "Privatvermietung",
+        "einnahmen_cent": 0,
+        "ausgaben_cent": 100
+      }
+    ]
+  }
+}

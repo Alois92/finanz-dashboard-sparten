@@ -84,7 +84,7 @@ class MigrationTest(unittest.TestCase):
             p.start()
             self.addCleanup(p.stop)
 
-    def test_neue_datenbank_ist_auf_version_10_ohne_anstehende_migrationen(self):
+    def test_neue_datenbank_ist_auf_version_14_ohne_anstehende_migrationen(self):
         from app import migrate
 
         db.init_db()
@@ -94,9 +94,9 @@ class MigrationTest(unittest.TestCase):
             versionen = con.execute(
                 "SELECT version, name FROM schema_version ORDER BY version"
             ).fetchall()
-            self.assertEqual([(1, "schema_version"), (2, "import_batch_erkennung"), (3, "bereiche"), (4, "konten_bewegungen"), (5, "auslagen_ausgleich"), (6, "saldoanker_kassa"), (7, "kredit"), (8, "regeln_kennzahlen"), (9, "export_profil"), (10, "regeln_bestand_herkunft"), (11, "adhoc_schema"), (12, "migrationsprotokoll"), (13, "kennzahl_eindeutigkeit")], [tuple(r) for r in versionen])
+            self.assertEqual([(1, "schema_version"), (2, "import_batch_erkennung"), (3, "bereiche"), (4, "konten_bewegungen"), (5, "auslagen_ausgleich"), (6, "saldoanker_kassa"), (7, "kredit"), (8, "regeln_kennzahlen"), (9, "export_profil"), (10, "regeln_bestand_herkunft"), (11, "adhoc_schema"), (12, "migrationsprotokoll"), (13, "kennzahl_eindeutigkeit"), (14, "hinweis_aus")], [tuple(r) for r in versionen])
             self.assertEqual(
-                {"aktuell": 13, "anstehend": [], "basis": False},
+                {"aktuell": 14, "anstehend": [], "basis": False},
                 migrate.status(con),
             )
         finally:
@@ -119,7 +119,7 @@ class MigrationTest(unittest.TestCase):
         con = db.get_connection()
         try:
             self.assertEqual(
-                [(0, "basis"), (1, "schema_version"), (2, "import_batch_erkennung"), (3, "bereiche"), (4, "konten_bewegungen"), (5, "auslagen_ausgleich"), (6, "saldoanker_kassa"), (7, "kredit"), (8, "regeln_kennzahlen"), (9, "export_profil"), (10, "regeln_bestand_herkunft"), (11, "adhoc_schema"), (12, "migrationsprotokoll"), (13, "kennzahl_eindeutigkeit")],
+                [(0, "basis"), (1, "schema_version"), (2, "import_batch_erkennung"), (3, "bereiche"), (4, "konten_bewegungen"), (5, "auslagen_ausgleich"), (6, "saldoanker_kassa"), (7, "kredit"), (8, "regeln_kennzahlen"), (9, "export_profil"), (10, "regeln_bestand_herkunft"), (11, "adhoc_schema"), (12, "migrationsprotokoll"), (13, "kennzahl_eindeutigkeit"), (14, "hinweis_aus")],
                 [
                     tuple(r)
                     for r in con.execute(
@@ -277,7 +277,7 @@ class MigrationTest(unittest.TestCase):
         self.assertEqual(200, response.status_code)
         self.assertEqual(
             {
-                "aktuell": 13,
+                "aktuell": 14,
                 "anstehend": [],
                 "schreibgeschuetzt": False,
                 "fehler": None,

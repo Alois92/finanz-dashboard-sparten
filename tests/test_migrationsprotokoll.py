@@ -16,7 +16,7 @@ class MigrationsprotokollTest(unittest.TestCase):
             path = pathlib.Path(tmp) / "bestand.db"
             with closing(sqlite3.connect(path)) as con:
                 bestand(con)
-                self.assertEqual([4, 5, 6, 7, 8, 9, 10, 11, 12, 13], migrate.anwenden(con, None))
+                self.assertEqual([4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14], migrate.anwenden(con, None))
                 eintrag = con.execute(
                     "SELECT version, art, objektkennung, hinweis FROM migrationsprotokoll "
                     "WHERE art='umbuchung_ungeklaert'"

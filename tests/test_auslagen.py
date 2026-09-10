@@ -84,7 +84,7 @@ class AuslagenTest(unittest.TestCase):
         self.assertEqual((-7000, -3000), (self.stand(self.zahler), self.stand(self.hof)))
         self.assertEqual(7000, self.offen())
         self.assertEqual(kosten, [tuple(r) for r in self.con.execute('SELECT * FROM v_einnahmen_ausgaben')])
-        listed = self.request('GET', '/api/buchungen')[1]
+        listed = self.request('GET', '/api/buchungen')[1]['buchungen']
         self.assertEqual(7000, next(r for r in listed if r['id'] == b['id'])['auslage']['offen_cent'])
         self.assertEqual(204, self.request('DELETE', f"/api/ausgleiche/{a['id']}")[0])
         self.assertEqual(10000, self.offen())
@@ -265,7 +265,7 @@ class AuslagenTest(unittest.TestCase):
         self.assertEqual(201, self.request('POST', '/api/ausgleiche',
                                          self.ausgleich_payload([aid], 7000))[0])
         self.assertEqual([], self.request('GET', '/api/auslagen')[1])
-        listed = next(r for r in self.request('GET', '/api/buchungen')[1] if r['id'] == b['id'])
+        listed = next(r for r in self.request('GET', '/api/buchungen')[1]['buchungen'] if r['id'] == b['id'])
         self.assertEqual({'zahler_sparte_id': self.zahler, 'offen_cent': 0, 'ausgeglichen': True},
                          listed['auslage'])
 
@@ -331,7 +331,7 @@ class AuslagenMigrationTest(unittest.TestCase):
                 con.executemany('INSERT INTO schema_version(version, name) VALUES(?, ?)',
                                 [(v, name) for v, name, _ in migrate.liste_migrationen() if v <= 4])
                 con.commit()
-                self.assertEqual([5, 6, 7, 8, 9, 10, 11, 12, 13], migrate.anwenden(con, None))
+                self.assertEqual([5, 6, 7, 8, 9, 10, 11, 12, 13, 14], migrate.anwenden(con, None))
                 snapshot = '\n'.join(con.iterdump())
                 self.assertEqual([], migrate.anwenden(con, None))
                 self.assertEqual(snapshot, '\n'.join(con.iterdump()))
