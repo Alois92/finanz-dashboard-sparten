@@ -20,7 +20,9 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+from .. import abgleich
 
 from ..db import db_dep
 from ..bewegungen import import_bewegung, synchronisiere_buchung
@@ -31,6 +33,26 @@ from ..bereiche import (
 from ..regeln import aktive_regeln, finde_regel, normalisiere_regeltext
 
 router = APIRouter(tags=["import"])
+
+
+class UmsatzZuordnenIn(BaseModel):
+    buchung_id: int = Field(strict=True, gt=0)
+
+
+@router.get('/bankumsaetze/{umsatz_id}/kandidaten')
+def abgleich_kandidaten(umsatz_id: int, con=Depends(db_dep), bereich: BereichDep = Bereich(1)):
+    return {'kandidaten': abgleich.kandidaten(con, umsatz_id, bereich)}
+
+
+@router.post('/bankumsaetze/{umsatz_id}/zuordnen')
+def abgleich_zuordnen(umsatz_id: int, body: UmsatzZuordnenIn,
+                     con=Depends(db_dep), bereich: BereichDep = Bereich(1)):
+    return abgleich.zuordnen(con, umsatz_id, body.buchung_id, bereich)
+
+
+@router.post('/bankumsaetze/{umsatz_id}/zuordnung-loesen')
+def abgleich_loesen(umsatz_id: int, con=Depends(db_dep), bereich: BereichDep = Bereich(1)):
+    return abgleich.loesen(con, umsatz_id, bereich)
 
 
 # ---------------------------------------------------------------------------

@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
 
 from ..db import db_dep
+from ..abgleich import offene_abgleiche
 from ..rechenbasis import cursor_encode, cursor_decode
 from ..bereiche import Bereich, BereichDep, pruefe_konto, pruefe_sparte
 from ..bewegungen import erzeuge_transfer, storniere_transfer, pruefe_transfer
@@ -17,6 +18,11 @@ router = APIRouter(tags=['konten'])
 KontoArt = Literal['bank','karte','kassa','depot','wallet']
 TransferArt = Literal['bankomat','umbuchung','ausgleich','kartenabrechnung','sonstig']
 FELDER = 'id,name,art,waehrung,sparte_id,iban,bank,kartenendnummer,aktiv,sortierung'
+
+
+@router.get('/konten/{konto_id}/offene-abgleiche')
+def list_offene_abgleiche(konto_id: int, con=Depends(db_dep), bereich: BereichDep = Bereich(1)):
+    return offene_abgleiche(con, konto_id, bereich)
 
 
 class KontoIn(BaseModel):

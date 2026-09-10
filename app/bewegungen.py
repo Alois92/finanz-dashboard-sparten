@@ -82,6 +82,13 @@ def synchronisiere_buchung(con, buchung_id, bereich):
     cent = -b['betrag_cent'] if b['typ']=='ausgabe' else b['betrag_cent']
     alt = con.execute("""SELECT m.* FROM bewegung m JOIN buchung_bewegung x ON x.bewegung_id=m.id
         WHERE x.buchung_id=?""",(buchung_id,)).fetchall()
+    ruecknahme = [m for m in alt if m['quelle']=='manuell' and m['bankumsatz_id'] is None
+                 and m['transfer_id'] is None and m['storniert_am'] is not None]
+    if b['bankumsatz_id'] is not None and ruecknahme:
+        if (b['typ'] not in ('einnahme','ausgabe') or b['zahlungsart'] not in ('bank','karte')
+                or any(m['konto_id'] != b['bankkonto_id'] for m in ruecknahme)
+                or any(m['quelle']=='import' and m['bankumsatz_id'] != b['bankumsatz_id'] for m in alt)):
+            raise HTTPException(409, 'Abgleich zuerst lösen, bevor Konto oder Zahlungsweg geändert wird')
     mid = None
     if b['bankumsatz_id'] is not None:
         mid = import_bewegung(con,b['bankumsatz_id'],bereich)
@@ -109,7 +116,15 @@ def synchronisiere_buchung(con, buchung_id, bereich):
     for m in alt:
         if m['id']!=mid and m['quelle'] in ('manuell','nachzug') and m['transfer_id'] is None:
             con.execute("UPDATE bewegung SET storniert_am=COALESCE(storniert_am,datetime('now')) WHERE id=?",(m['id'],))
-    con.execute('DELETE FROM buchung_bewegung WHERE buchung_id=?',(buchung_id,))
+    # Beim Bearbeiten einer abgeglichenen Buchung bleibt die bereits stornierte
+    # manuelle Bewegung als Rücknahmereferenz erhalten.
+    erhalten = [m['id'] for m in alt if b['bankumsatz_id'] is not None
+                and m['quelle']=='manuell' and m['bankumsatz_id'] is None
+                and m['transfer_id'] is None and m['storniert_am'] is not None]
+    for m in alt:
+        if m['id'] not in erhalten:
+            con.execute('DELETE FROM buchung_bewegung WHERE buchung_id=? AND bewegung_id=?',
+                        (buchung_id,m['id']))
     if mid is not None:
         con.execute('INSERT INTO buchung_bewegung VALUES(?,?,?)',(buchung_id,mid,cent))
 
