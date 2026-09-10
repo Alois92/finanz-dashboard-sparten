@@ -1,4 +1,5 @@
 """Pydantic-Modelle fuer die API. Betraege durchgaengig in Cent (int)."""
+from datetime import date
 from typing import List, Optional
 
 from pydantic import BaseModel, Field, field_validator
@@ -35,6 +36,7 @@ class AuswertungsgruppeIn(BaseModel):
 
 
 class ZeileIn(BaseModel):
+    id: Optional[int] = None
     kategorie_id: int
     betrag_cent: int = Field(ge=0)
     notiz: Optional[str] = None
@@ -52,6 +54,16 @@ class BuchungIn(BaseModel):
     text: Optional[str] = None
     notiz: Optional[str] = None
     zeilen: List[ZeileIn]
+    bezahlt_von_sparte_id: Optional[int] = None
+    client_request_id: Optional[str] = Field(default=None, min_length=1)
+    version: Optional[int] = Field(default=None, ge=1, strict=True)
+
+    @field_validator('datum')
+    @classmethod
+    def _datum(cls, value: str) -> str:
+        if date.fromisoformat(value).isoformat() != value:
+            raise ValueError('Datum muss YYYY-MM-DD entsprechen')
+        return value
 
     @field_validator("typ")
     @classmethod

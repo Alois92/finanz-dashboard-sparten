@@ -15,6 +15,9 @@ from ..bereiche import (Bereich, BereichDep, pruefe_sparte, pruefe_kategorie,
                         pruefe_globalgruppe)
 from ..regeln import normalisiere_regeltext
 from ..schemas import BuchungIn
+from ..auslagen import (ergaenze_auslage, pruefe_zahler, synchronisiere_auslage,
+                       zuordnungskonflikt)
+from ..wiederholung import wiederhole, speichere_antwort
 from ..bewegungen import (synchronisiere_buchung, storniere_buchungsbewegungen, kassa_fuer_sparte,
                           erzeuge_transfer, pruefe_bewegungsreferenzen, storniere_transfer, pruefe_transfer)
 
@@ -47,6 +50,7 @@ def _pruefe_sparte_und_zeilen(con: sqlite3.Connection, b: BuchungIn, bereich: Be
             raise HTTPException(422, 'Barbuchung darf keinen Bankumsatz referenzieren')
     if b.bankkonto_id is not None:
         pruefe_konto(con, b.bankkonto_id, bereich)
+    pruefe_zahler(con, b, bereich)
     for z in b.zeilen:
         pruefe_kategorie(con, z.kategorie_id, bereich)
         krow = con.execute(
@@ -60,36 +64,42 @@ def _pruefe_sparte_und_zeilen(con: sqlite3.Connection, b: BuchungIn, bereich: Be
 
 
 @router.post("/buchungen", status_code=201)
-def create_buchung(b: BuchungIn, con: sqlite3.Connection = Depends(db_dep), bereich: BereichDep = Bereich(1)):
-    _pruefe_sparte_und_zeilen(con, b, bereich)
-
+def create_buchung(b: BuchungIn, con: sqlite3.Connection = Depends(db_dep),
+                   bereich: BereichDep = Bereich(1)):
     try:
-        cur = con.execute(
-            "INSERT INTO buchung(sparte_id, datum, typ, zahlungsart, kontakt_id, "
-            "person_id, bankkonto_id, text, notiz, bankumsatz_id) VALUES(?,?,?,?,?,?,?,?,?,?)",
-            (b.sparte_id, b.datum, b.typ, b.zahlungsart, b.kontakt_id,
-             b.person_id, b.bankkonto_id, b.text, b.notiz, b.bankumsatz_id),
-        )
-        buchung_id = cur.lastrowid
-        for z in b.zeilen:
-            con.execute(
-                "INSERT INTO buchungszeile(buchung_id, kategorie_id, betrag_cent, notiz) "
-                "VALUES(?,?,?,?)",
-                (buchung_id, z.kategorie_id, z.betrag_cent, z.notiz),
+        with con:
+            con.execute('BEGIN IMMEDIATE')
+            antwort = wiederhole(con, 'buchung', b, bereich)
+            if antwort is not None:
+                return antwort
+            _pruefe_sparte_und_zeilen(con, b, bereich)
+            if any(z.id is not None for z in b.zeilen):
+                raise HTTPException(422, 'Neue Buchungen dürfen keine bestehenden Zeilen referenzieren')
+            cur = con.execute(
+                "INSERT INTO buchung(sparte_id, datum, typ, zahlungsart, kontakt_id, "
+                "person_id, bankkonto_id, text, notiz, bankumsatz_id, client_request_id) "
+                "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (b.sparte_id, b.datum, b.typ, b.zahlungsart, b.kontakt_id,
+                 b.person_id, b.bankkonto_id, b.text, b.notiz, b.bankumsatz_id,
+                 b.client_request_id),
             )
-        synchronisiere_buchung(con, buchung_id, bereich)
-        con.commit()
-    except sqlite3.IntegrityError as e:
-        con.rollback()
-        raise HTTPException(400, f"Datenbankfehler: {e}")
-    except HTTPException:
-        con.rollback()
-        raise
+            buchung_id = cur.lastrowid
+            for z in b.zeilen:
+                con.execute(
+                    "INSERT INTO buchungszeile(buchung_id, kategorie_id, betrag_cent, notiz) "
+                    "VALUES(?, ?, ?, ?)",
+                    (buchung_id, z.kategorie_id, z.betrag_cent, z.notiz),
+                )
+            synchronisiere_auslage(con, buchung_id, b, bereich)
+            synchronisiere_buchung(con, buchung_id, bereich)
+            antwort = _buchung_detail(con, buchung_id)
+            speichere_antwort(con, 'buchung', b, bereich, antwort)
+    except sqlite3.IntegrityError as exc:
+        raise HTTPException(400, f"Datenbankfehler: {exc}") from exc
 
     if b.typ != "umbuchung" and b.text and b.zeilen:
         _lerne_regel(con, b.text, b.sparte_id, b.zeilen[0].kategorie_id, b.typ, bereich.id)
-
-    return _buchung_detail(con, buchung_id)
+    return antwort
 
 
 def _lerne_regel(con: sqlite3.Connection, text: str, sparte_id: int,
@@ -146,7 +156,7 @@ def list_buchungen(sparte_id: int | None = None,
     if monat is not None and not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", monat):
         raise HTTPException(400, "Monat muss das Format JJJJ-MM haben")
     sql = ("SELECT b.id, b.sparte_id, s.name AS sparte_name, b.datum, b.typ, "
-           "b.betrag_cent, b.zahlungsart, b.belegstatus, b.buchungsstatus, "
+           "b.version, b.betrag_cent, b.zahlungsart, b.belegstatus, b.buchungsstatus, "
            "b.text, b.notiz, b.transfer_gruppe_id "
            "FROM buchung b JOIN sparte s ON s.id = b.sparte_id WHERE s.bereich_id = ?")
     params: list = [bereich.id]
@@ -218,7 +228,8 @@ def list_buchungen(sparte_id: int | None = None,
                 b["filter_betrag_cent"] = sum(
                     z["betrag_cent"] for z in passende_zeilen)
             b["belege"] = belege_by.get(b["id"], [])
-            b['zahlungsstatus'] = _zahlungsstatus(con,b['id'])
+            b['zahlungsstatus'] = _zahlungsstatus(con, b['id'])
+            ergaenze_auslage(con, b)
     return buchungen
 
 
@@ -232,7 +243,7 @@ def suche_buchungen(q: str, con: sqlite3.Connection = Depends(db_dep), bereich: 
     pattern = f"%{escaped}%"
     rows = con.execute(
         "SELECT b.id, b.sparte_id, s.name AS sparte_name, b.datum, b.typ, "
-        "b.betrag_cent, b.zahlungsart, b.belegstatus, b.buchungsstatus, "
+        "b.version, b.betrag_cent, b.zahlungsart, b.belegstatus, b.buchungsstatus, "
         "b.text, b.notiz, b.transfer_gruppe_id, b.kontakt_id, "
         "k.name AS kontakt_name "
         "FROM buchung b "
@@ -274,7 +285,8 @@ def suche_buchungen(q: str, con: sqlite3.Connection = Depends(db_dep), bereich: 
     for buchung in buchungen:
         buchung["zeilen"] = by_buchung.get(buchung["id"], [])
         buchung["belege"] = belege_by.get(buchung["id"], [])
-        buchung['zahlungsstatus'] = _zahlungsstatus(con,buchung['id'])
+        buchung['zahlungsstatus'] = _zahlungsstatus(con, buchung['id'])
+        ergaenze_auslage(con, buchung)
     return buchungen
 
 
@@ -365,6 +377,12 @@ def create_umbuchung(u: UmbuchungIn, con: sqlite3.Connection = Depends(db_dep), 
 @router.put("/buchungen/{buchung_id}")
 def update_buchung(buchung_id: int, b: BuchungIn,
                    con: sqlite3.Connection = Depends(db_dep), bereich: BereichDep = Bereich(1)):
+    with con:
+        con.execute('BEGIN IMMEDIATE')
+        return _update_buchung(buchung_id, b, con, bereich)
+
+
+def _update_buchung(buchung_id: int, b: BuchungIn, con: sqlite3.Connection, bereich: Bereich):
 
     """Buchung ueberschreiben: Kopf-Felder aktualisieren, Zeilen ersetzen.
 
@@ -373,6 +391,11 @@ def update_buchung(buchung_id: int, b: BuchungIn,
     """
     pruefe_buchung(con, buchung_id, bereich)
     _pruefe_buchungsreferenzen(con, buchung_id, bereich)
+    if b.version is None:
+        raise HTTPException(422, 'PUT benötigt version')
+    version = con.execute('SELECT version FROM buchung WHERE id = ?', (buchung_id,)).fetchone()[0]
+    if b.version != version:
+        raise HTTPException(409, 'Buchung wurde zwischenzeitlich geändert')
     alt = con.execute("SELECT transfer_gruppe_id, bankkonto_id, bankumsatz_id FROM buchung WHERE id = ?",
                       (buchung_id,)).fetchone()
     if not alt:
@@ -380,8 +403,24 @@ def update_buchung(buchung_id: int, b: BuchungIn,
     if alt["transfer_gruppe_id"]:
         raise HTTPException(400, "Umbuchungen sind gekoppelt - bitte loeschen "
                                  "und neu anlegen statt bearbeiten")
-    b = b.model_copy(update={feld: alt[feld] for feld in ('bankkonto_id','bankumsatz_id') if feld not in b.model_fields_set})
+    b = b.model_copy(update={
+        feld: alt[feld] for feld in ('bankkonto_id', 'bankumsatz_id')
+        if feld not in b.model_fields_set
+    })
     _pruefe_sparte_und_zeilen(con, b, bereich)
+    konflikt = zuordnungskonflikt(con, buchung_id, bereich, b)
+    if konflikt is not None:
+        return konflikt
+    zeilen_ids = [z.id for z in b.zeilen if z.id is not None]
+    if len(zeilen_ids) != len(set(zeilen_ids)):
+        raise HTTPException(422, 'Zeilen dürfen nicht doppelt referenziert werden')
+    for zid in zeilen_ids:
+        row = con.execute('SELECT buchung_id FROM buchungszeile WHERE id = ?', (zid,)).fetchone()
+        if row is None:
+            raise HTTPException(404, 'Buchungszeile nicht gefunden')
+        pruefe_buchung(con, row['buchung_id'], bereich)
+        if row['buchung_id'] != buchung_id:
+            raise HTTPException(422, 'Zeile gehört nicht zu dieser Buchung')
     try:
         con.execute(
             "UPDATE buchung SET sparte_id = ?, datum = ?, typ = ?, zahlungsart = ?, "
@@ -389,20 +428,34 @@ def update_buchung(buchung_id: int, b: BuchungIn,
             (b.sparte_id, b.datum, b.typ, b.zahlungsart, b.kontakt_id,
              b.person_id, b.text, b.notiz, buchung_id),
         )
-        con.execute("DELETE FROM buchungszeile WHERE buchung_id = ?", (buchung_id,))
+        erhalten = []
         for z in b.zeilen:
-            con.execute(
-                "INSERT INTO buchungszeile(buchung_id, kategorie_id, betrag_cent, notiz) "
-                "VALUES(?,?,?,?)",
-                (buchung_id, z.kategorie_id, z.betrag_cent, z.notiz),
-            )
+            if z.id is not None:
+                con.execute(
+                    'UPDATE buchungszeile SET kategorie_id = ?, betrag_cent = ?, notiz = ? '
+                    'WHERE id = ?', (z.kategorie_id, z.betrag_cent, z.notiz, z.id),
+                )
+                erhalten.append(z.id)
+            else:
+                zid = con.execute(
+                    'INSERT INTO buchungszeile(buchung_id, kategorie_id, betrag_cent, notiz) '
+                    'VALUES(?, ?, ?, ?)',
+                    (buchung_id, z.kategorie_id, z.betrag_cent, z.notiz),
+                ).lastrowid
+                erhalten.append(zid)
+        marks = ', '.join('?' for _ in erhalten)
+        con.execute(
+            f'DELETE FROM buchungszeile WHERE buchung_id = ? AND id NOT IN ({marks})',
+            (buchung_id, *erhalten),
+        )
         for feld in ('bankkonto_id', 'bankumsatz_id'):
             if feld in b.model_fields_set:
                 con.execute(f'UPDATE buchung SET {feld}=? WHERE id=?', (getattr(b, feld), buchung_id))
+        synchronisiere_auslage(con, buchung_id, b, bereich)
         synchronisiere_buchung(con, buchung_id, bereich)
+        con.execute('UPDATE buchung SET version = version + 1 WHERE id = ?', (buchung_id,))
         if alt['bankumsatz_id'] is not None and alt['bankumsatz_id'] != b.bankumsatz_id:
             con.execute("UPDATE bankumsatz SET importstatus='offen' WHERE id=? AND NOT EXISTS (SELECT 1 FROM buchung WHERE bankumsatz_id=?)",(alt['bankumsatz_id'],alt['bankumsatz_id']))
-        con.commit()
     except sqlite3.IntegrityError as e:
         con.rollback()
         raise HTTPException(400, f"Datenbankfehler: {e}")
@@ -414,12 +467,21 @@ def update_buchung(buchung_id: int, b: BuchungIn,
 
 @router.delete("/buchungen/{buchung_id}", status_code=204)
 def delete_buchung(buchung_id: int, con: sqlite3.Connection = Depends(db_dep), bereich: BereichDep = Bereich(1)):
+    with con:
+        con.execute('BEGIN IMMEDIATE')
+        return _delete_buchung(buchung_id, con, bereich)
+
+
+def _delete_buchung(buchung_id: int, con: sqlite3.Connection, bereich: Bereich):
     pruefe_buchung(con, buchung_id, bereich)
     row = con.execute(
         "SELECT bankumsatz_id, transfer_gruppe_id FROM buchung WHERE id = ?",
         (buchung_id,)).fetchone()
     if not row:
         raise HTTPException(404, "Buchung nicht gefunden")
+    konflikt = zuordnungskonflikt(con, buchung_id, bereich)
+    if konflikt is not None:
+        return konflikt
     # Umbuchungen sind gekoppelt: immer beide Seiten der Gruppe entfernen.
     if row["transfer_gruppe_id"]:
         betroffen = con.execute(
@@ -443,18 +505,18 @@ def delete_buchung(buchung_id: int, con: sqlite3.Connection = Depends(db_dep), b
         if b["bankumsatz_id"] is not None:
             con.execute("UPDATE bankumsatz SET importstatus = 'offen' WHERE id = ? AND NOT EXISTS (SELECT 1 FROM buchung WHERE bankumsatz_id=?)",
                         (b["bankumsatz_id"],b["bankumsatz_id"]))
-    con.commit()
 
 
 def _buchung_detail(con: sqlite3.Connection, buchung_id: int) -> dict:
     row = con.execute(
         "SELECT b.id, b.sparte_id, s.name AS sparte_name, b.datum, b.typ, "
-        "b.betrag_cent, b.zahlungsart, b.belegstatus, b.buchungsstatus, b.text, b.notiz "
+        "b.version, b.betrag_cent, b.zahlungsart, b.belegstatus, b.buchungsstatus, b.text, b.notiz "
         "FROM buchung b JOIN sparte s ON s.id = b.sparte_id WHERE b.id = ?",
         (buchung_id,),
     ).fetchone()
     result = dict(row)
-    result['zahlungsstatus'] = _zahlungsstatus(con,buchung_id)
+    result['zahlungsstatus'] = _zahlungsstatus(con, buchung_id)
+    ergaenze_auslage(con, result)
     result["zeilen"] = [
         dict(z) for z in con.execute(
             "SELECT z.id, z.kategorie_id, k.name AS kategorie_name, z.betrag_cent, z.notiz "
