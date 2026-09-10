@@ -84,7 +84,7 @@ class MigrationTest(unittest.TestCase):
             p.start()
             self.addCleanup(p.stop)
 
-    def test_neue_datenbank_ist_auf_version_9_ohne_anstehende_migrationen(self):
+    def test_neue_datenbank_ist_auf_version_12_ohne_anstehende_migrationen(self):
         from app import migrate
 
         db.init_db()
@@ -94,9 +94,9 @@ class MigrationTest(unittest.TestCase):
             versionen = con.execute(
                 "SELECT version, name FROM schema_version ORDER BY version"
             ).fetchall()
-            self.assertEqual([(1, "schema_version"), (2, "import_batch_erkennung"), (3, "bereiche"), (4, "konten_bewegungen"), (5, "auslagen_ausgleich"), (6, "saldoanker_kassa"), (7, "kredit"), (8, "regeln_kennzahlen"), (9, "export_profil")], [tuple(r) for r in versionen])
+            self.assertEqual([(1, "schema_version"), (2, "import_batch_erkennung"), (3, "bereiche"), (4, "konten_bewegungen"), (5, "auslagen_ausgleich"), (6, "saldoanker_kassa"), (7, "kredit"), (8, "regeln_kennzahlen"), (9, "export_profil"), (12, "migrationsprotokoll")], [tuple(r) for r in versionen])
             self.assertEqual(
-                {"aktuell": 9, "anstehend": [], "basis": False},
+                {"aktuell": 12, "anstehend": [], "basis": False},
                 migrate.status(con),
             )
         finally:
@@ -119,7 +119,7 @@ class MigrationTest(unittest.TestCase):
         con = db.get_connection()
         try:
             self.assertEqual(
-                [(0, "basis"), (1, "schema_version"), (2, "import_batch_erkennung"), (3, "bereiche"), (4, "konten_bewegungen"), (5, "auslagen_ausgleich"), (6, "saldoanker_kassa"), (7, "kredit"), (8, "regeln_kennzahlen"), (9, "export_profil")],
+                [(0, "basis"), (1, "schema_version"), (2, "import_batch_erkennung"), (3, "bereiche"), (4, "konten_bewegungen"), (5, "auslagen_ausgleich"), (6, "saldoanker_kassa"), (7, "kredit"), (8, "regeln_kennzahlen"), (9, "export_profil"), (12, "migrationsprotokoll")],
                 [
                     tuple(r)
                     for r in con.execute(
@@ -131,7 +131,7 @@ class MigrationTest(unittest.TestCase):
         finally:
             con.close()
         backup_dir = self.db_path.parent / "backup"
-        sicherungen = list(backup_dir.glob("finanz-????-??-??-????-vor-nachzug-v9.db"))
+        sicherungen = list(backup_dir.glob("finanz-????-??-??-????-vor-nachzug-v12.db"))
         self.assertEqual(1, len(sicherungen))
         self.assertEqual([], list(backup_dir.glob("finanz-????-??-??.db")))
 
@@ -275,7 +275,7 @@ class MigrationTest(unittest.TestCase):
         self.assertEqual(200, response.status_code)
         self.assertEqual(
             {
-                "aktuell": 9,
+                "aktuell": 12,
                 "anstehend": [],
                 "schreibgeschuetzt": False,
                 "fehler": None,

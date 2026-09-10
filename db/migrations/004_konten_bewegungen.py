@@ -8,6 +8,15 @@ import sqlite3
 
 log = logging.getLogger('finanz.migrate')
 
+
+def _protokoll(con, art, objektkennung, hinweis):
+    """Schreibt einen Nachzug-Hinweis, wenn Migration 012 bereits vorhanden ist."""
+    if con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='migrationsprotokoll'").fetchone():
+        con.execute(
+            "INSERT OR IGNORE INTO migrationsprotokoll(version, art, objektkennung, hinweis) "
+            "VALUES(4, ?, ?, ?)", (art, objektkennung, hinweis),
+        )
+
 KONTO_SPALTEN = {
     'art': "TEXT NOT NULL DEFAULT 'bank' CHECK (art IN ('bank','karte','kassa','depot','wallet'))",
     'waehrung': "TEXT NOT NULL DEFAULT 'EUR'",
@@ -89,6 +98,8 @@ def up(con):
         kassen = rows("SELECT id,waehrung FROM bankkonto WHERE art='kassa' AND sparte_id=?", (b['sparte_id'],))
         if len(kassen) != 1:
             bar_ungeklaert.append(b['id'])
+            _protokoll(con, 'barbuchung_ungeklaert', f"buchung:{b['id']}",
+                       f"Buchung {b['id']}: Barbuchung konnte keiner eindeutigen Kassa zugeordnet werden.")
             continue
         k = kassen[0]
         cent = -b['betrag_cent'] if b['typ']=='ausgabe' else b['betrag_cent']
@@ -104,12 +115,16 @@ def up(con):
             continue
         if len(paar)!=2 or paar[0]['betrag_cent']<=0 or paar[0]['betrag_cent']!=paar[1]['betrag_cent'] or paar[0]['datum']!=paar[1]['datum']:
             log.info('Migration 004: Umbuchungsgruppe %s nicht eindeutig; kein Betrag erfunden',gruppe['g'])
+            _protokoll(con, 'umbuchung_ungeklaert', f"umbuchungsgruppe:{gruppe['g']}",
+                       f"Umbuchungsgruppe {gruppe['g']}: Die beiden Buchungen konnten nicht eindeutig aufgeloest werden.")
             ungeklaert += 1
             continue
         konten = [b['bankkonto_id'] for b in paar]
         bekannt = all(k is not None for k in konten)
         if not bekannt:
             konten = [None,None]
+            _protokoll(con, 'umbuchung_ungeklaert', f"umbuchungsgruppe:{gruppe['g']}",
+                       f"Umbuchungsgruppe {gruppe['g']}: Die Konten konnten nicht eindeutig bestimmt werden.")
             ungeklaert += 1
         tid = con.execute("INSERT INTO transfer(art,von_konto_id,nach_konto_id,datum,betrag_cent,notiz) VALUES('umbuchung',?,?,?,?,?)",
             (*konten,paar[0]['datum'],paar[0]['betrag_cent'],marker if bekannt else marker+'; Konten ungeklärt')).lastrowid
@@ -126,6 +141,9 @@ def up(con):
                         SELECT id,?,?,waehrung,'transfer',?,'nachzug' FROM bankkonto WHERE id=?""", (b['datum'],cent,tid,kid)).lastrowid
                 con.execute('INSERT OR REPLACE INTO buchung_bewegung VALUES(?,?,?)',(b['id'],mid,cent))
     unbekannt = [r[0] for r in con.execute("SELECT id FROM buchung WHERE zahlungsart IN ('bank','karte') AND bankumsatz_id IS NULL AND typ IN ('einnahme','ausgabe') ORDER BY id")]
+    for buchung_id in unbekannt:
+        _protokoll(con, 'zahlung_ungeklaert', f"buchung:{buchung_id}",
+                   f"Buchung {buchung_id}: Bank- oder Kartenbuchung ohne zugehoerigen Umsatz.")
     if con.execute('PRAGMA foreign_key_check').fetchone() is not None:
         raise sqlite3.IntegrityError('Fremdschlüsselprüfung nach Migration 004 fehlgeschlagen')
     anzahl = {t: con.execute(f'SELECT count(*) FROM {t}').fetchone()[0]-n for t,n in vorher.items()}
