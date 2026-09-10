@@ -1,0 +1,36 @@
+P33: Testausgabe
+
+=== Eigene Testdatei isoliert ===
+Befehl:
+  set FINANZ_DB=%TEMP%\p33-tests-report.db
+  C:\Users\lblet\dev\finanz-dashboard-sparten\.venv\Scripts\python.exe -m unittest tests.test_static_neu_kategorien -v
+
+test_antwortformen_enthalten_die_von_kategorien_js_verwendeten_felder ... ok
+test_gelernte_regel_abschalten ... ok
+test_globalgruppe_summe_aus_bereichsweiter_jahresmatrix_entspricht_einzelsparten ... ok
+test_node_check_kategorien_js ... ok
+test_patch_kategorie_aendert_nur_namen_id_bleibt_stabil ... ok
+test_seite_liefert_js_das_auf_api_und_endpunkte_verweist ... ok
+test_stichwort_anlegen_und_entfernen ... ok
+
+----------------------------------------------------------------------
+Ran 7 tests in 18.279s
+
+OK
+
+=== Gesamtsuite (Kopf, ohne Auth-Bypass) ===
+Befehl:
+  set FINANZ_DB=%TEMP%\p33-full-suite.db
+  C:\Users\lblet\dev\finanz-dashboard-sparten\.venv\Scripts\python.exe -m unittest discover -s tests
+
+(Rohprotokoll gekuerzt auf die letzten Zeilen; die enthaltenen Tracebacks
+(PIL.UnidentifiedImageError aus Bild-Verkleinerungs-Fehlerpfaden anderer
+Test-Suiten, "Keine bestehende Auth-Datei ... Ohne bestehendes Passwort kann
+kein Recovery-Code erzeugt werden" aus einem Recovery-Code-Test ohne
+bestehendes Passwort) sind absichtlich simulierte Fehlerpfade anderer Suiten,
+enden jeweils mit "ok" und stehen in keinem Zusammenhang mit P33.)
+
+----------------------------------------------------------------------
+Ran 377 tests in 205.567s
+
+OK (skipped=1)

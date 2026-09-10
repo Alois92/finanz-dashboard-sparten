@@ -23,6 +23,8 @@ const state={
 };
 
 let kategorieOptionsKey=null;
+// Seiten, die Kategorien ändern (P33), melden das per Ereignis; der Optionen-Cache von #filter-kategorie wird dann beim nächsten Render neu geladen.
+window.addEventListener('neu:kategorien-geaendert',()=>{kategorieOptionsKey=null});
 
 function currentRoute(){const raw=location.hash.replace(/^#\//,'')||'uebersicht';const route=raw.split('/')[0];return routes[route]?route:'uebersicht'}
 function go(route){state.route=route;location.hash=`#/${route}`;render()}
