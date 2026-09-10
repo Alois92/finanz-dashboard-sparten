@@ -13,7 +13,7 @@ INSERT INTO sparte (name, kuerzel, typ, geschuetzt, sortierung, farbe) VALUES
   ('Bauernhof',             'HOF', 'hof',        0, 30, '#C084FC'),
   ('Verein',                'VER', 'verein',     1, 40, '#F472B6'),
   ('Alois privat',          'AL',  'privat',     0, 50, '#FB923C'),
-  ('Frau privat',           'FR',  'privat',     0, 60, '#818CF8');
+  ('Theresia privat',           'FR',  'privat',     0, 60, '#818CF8');
 
 UPDATE sparte SET bereich_id = 2 WHERE typ = 'verein';
 
@@ -36,7 +36,7 @@ INSERT INTO globale_kategoriegruppe (name) VALUES
 -- Auswertungsgruppen (Buendel von Sparten)
 INSERT INTO auswertungsgruppe (name, beschreibung) VALUES
   ('Vermietung gesamt', 'Privatvermietung + Zimmervermietung Hof'),
-  ('Privat gesamt',     'Alois privat + Frau privat'),
+  ('Privat gesamt',     'Alois privat + Theresia privat'),
   ('Hof gesamt',        'Bauernhof + Zimmervermietung Hof'),
   ('Alles ohne Verein', 'Alle Sparten ausser Verein'),
   ('Gesamtuebersicht',  'Alle Sparten');
@@ -49,7 +49,7 @@ WHERE g.name = 'Vermietung gesamt' AND s.name IN ('Privatvermietung','Zimmerverm
 -- Privat gesamt
 INSERT INTO auswertungsgruppe_sparte (auswertungsgruppe_id, sparte_id)
 SELECT g.id, s.id FROM auswertungsgruppe g, sparte s
-WHERE g.name = 'Privat gesamt' AND s.name IN ('Alois privat','Frau privat');
+WHERE g.name = 'Privat gesamt' AND s.name IN ('Alois privat','Theresia privat');
 -- Hof gesamt
 INSERT INTO auswertungsgruppe_sparte (auswertungsgruppe_id, sparte_id)
 SELECT g.id, s.id FROM auswertungsgruppe g, sparte s
