@@ -78,13 +78,9 @@ class SparteSeiteTest(unittest.TestCase):
     # docs/neubau/berichte/P32-runde1.md, Abschnitt "Wunsch ans Gerüst / gefundener Fehler".
 
     def _kennzahlen_get(self, query):
-        try:
-            return self.request('GET', '/api/' + 'kennzahlen' + ('?' + query if query else ''))
-        except Exception as error:  # noqa: BLE001 - bewusst breit, siehe Kommentar oben
-            self.skipTest(
-                'GET /api/kennzahlen ist aktuell defekt (ambiguous column name: id in '
-                f'app/routers/kennzahlen.py) - {error!r}. Siehe docs/neubau/berichte/P32-runde1.md.'
-            )
+        # Der frühere Selbst-Skip (ambiguous column name: id) ist seit dem Kopf-Nachzug in
+        # app/routers/kennzahlen.py nicht mehr nötig; Fehler sollen hier echt fehlschlagen.
+        return self.request('GET', '/api/' + 'kennzahlen' + ('?' + query if query else ''))
 
     def test_kennzahl_wert_gleich_einnahmen_minus_ausgaben(self):
         ein, aus = self._kategorien()
