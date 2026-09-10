@@ -31,7 +31,12 @@ class KennzahlUpdateIn(BaseModel):
 
 def _pruefe_terme(con, sparte_id, terme, bereich):
     pruefe_sparte(con, sparte_id, bereich)
+    gesehen = set()
     for term in terme:
+        schluessel = (term.kategorie_id, term.vorzeichen)
+        if schluessel in gesehen:
+            raise HTTPException(422, "Eine Kategorie darf je Vorzeichen nur einmal in einer Kennzahl vorkommen")
+        gesehen.add(schluessel)
         pruefe_kategorie(con, term.kategorie_id, bereich)
         row = con.execute("SELECT sparte_id FROM kategorie WHERE id=?", (term.kategorie_id,)).fetchone()
         if row["sparte_id"] != sparte_id:

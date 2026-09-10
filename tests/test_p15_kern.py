@@ -46,6 +46,10 @@ class P15KernTest(unittest.TestCase):
         self.assertIsNotNone(self.con.execute(
             "SELECT 1 FROM sqlite_master WHERE type='table' AND name='kennzahl'"
         ).fetchone())
+        self.con.execute("DELETE FROM schema_version WHERE version=10")
+        self.con.commit()
+        self.assertEqual([10], migrate.anwenden(self.con, None))
+        self.assertEqual([], migrate.anwenden(self.con, None))
 
     def test_bestandsregeln_bleiben_vorschlaege_und_csv_import_verbucht_nichts(self):
         from app import migrate
@@ -151,6 +155,69 @@ class P15KernTest(unittest.TestCase):
             )
         self.con.commit()
         self.assertEqual(7000, wert(self.con, kid, 2026, {}))
+
+    def test_metric_value_does_not_multiply_rows_for_duplicate_legacy_terms(self):
+        from app.kennzahlen import wert
+
+        self.con.execute("DROP INDEX IF EXISTS idx_kennzahl_term_eindeutig")
+        self.con.execute(
+            "INSERT INTO kennzahl(sparte_id,name) VALUES(?,?)", (self.sparte, "Alt")
+        )
+        kid = self.con.execute("SELECT last_insert_rowid()").fetchone()[0]
+        self.con.executemany(
+            "INSERT INTO kennzahl_term(kennzahl_id,kategorie_id,messgroesse,vorzeichen) VALUES(?,?,?,?)",
+            [(kid, self.kategorie, "einnahmen", 1), (kid, self.kategorie, "einnahmen", 1)],
+        )
+        bid = self.con.execute(
+            "INSERT INTO buchung(sparte_id,datum,typ,zahlungsart) VALUES(?,?,?,?)",
+            (self.sparte, "2026-01-10", "einnahme", "bank"),
+        ).lastrowid
+        self.con.execute(
+            "INSERT INTO buchungszeile(buchung_id,kategorie_id,betrag_cent) VALUES(?,?,?)",
+            (bid, self.kategorie, 10000),
+        )
+        self.con.commit()
+
+        self.assertEqual(20000, wert(self.con, kid, 2026, {}))
+
+    def test_duplicate_term_is_rejected_with_422_and_other_metric_allows_category(self):
+        from app.bereiche import Bereich
+        from app.routers.kennzahlen import KennzahlIn, TermIn, create_kennzahl
+        from fastapi import HTTPException
+
+        terme = [
+            TermIn(kategorie_id=self.kategorie, messgroesse="einnahmen", vorzeichen=1),
+            TermIn(kategorie_id=self.kategorie, messgroesse="netto", vorzeichen=1),
+        ]
+        with self.assertRaises(HTTPException) as raised:
+            create_kennzahl(
+                KennzahlIn(sparte_id=self.sparte, name="Doppelt", terme=terme),
+                self.con,
+                Bereich(1),
+            )
+        self.assertEqual(422, raised.exception.status_code)
+        create_kennzahl(
+            KennzahlIn(
+                sparte_id=self.sparte,
+                name="Gegenlaeufig",
+                terme=[
+                    TermIn(kategorie_id=self.kategorie, messgroesse="einnahmen", vorzeichen=1),
+                    TermIn(kategorie_id=self.kategorie, messgroesse="netto", vorzeichen=-1),
+                ],
+            ),
+            self.con,
+            Bereich(1),
+        )
+        create_kennzahl(
+            KennzahlIn(sparte_id=self.sparte, name="Kennzahl 1", terme=[terme[0]]),
+            self.con,
+            Bereich(1),
+        )
+        create_kennzahl(
+            KennzahlIn(sparte_id=self.sparte, name="Kennzahl 2", terme=[terme[0]]),
+            self.con,
+            Bereich(1),
+        )
 
 
 if __name__ == "__main__":
