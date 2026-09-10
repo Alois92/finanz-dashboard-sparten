@@ -317,6 +317,13 @@ def assign_rates(kredit_id: int, data: ZuordnenIn,
         row = con.execute("SELECT * FROM buchung WHERE id=?", (bid,)).fetchone()
         if row["sparte_id"] != kredit["sparte_id"] or row["typ"] != "ausgabe":
             raise HTTPException(422, "Buchung ist keine Ausgabe der Kreditsparte")
+        zeilen = con.execute(
+            "SELECT COUNT(*) FROM buchungszeile WHERE buchung_id=?", (bid,)
+        ).fetchone()[0]
+        if zeilen > 1:
+            raise HTTPException(
+                422, "Buchung enthaelt weitere Positionen, bitte zuerst aufteilen"
+            )
         total = con.execute(
             "SELECT COALESCE(SUM(betrag_cent),0) FROM buchungszeile WHERE buchung_id=? AND kategorie_id=?",
             (bid, kredit["kategorie_rate_id"]),

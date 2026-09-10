@@ -12,8 +12,9 @@ from app import auth
 from app import db
 from app.db import SCHEMA
 from app.bereiche import Bereich
-from app.routers.kredite import (JahreszinsIn, KreditIn, RateIn, confirm_year,
-                                  create_kredit, create_rate, list_rates)
+from app.routers.kredite import (JahreszinsIn, KreditIn, RateIn, ZuordnenIn,
+                                  assign_rates, confirm_year, create_kredit,
+                                  create_rate, list_rates)
 
 
 class KreditLogikTest(unittest.TestCase):
@@ -106,6 +107,81 @@ class KreditApiTest(unittest.TestCase):
                                     name="Fremd", monatsrate_cent=42000,
                                     beginn="2025-01-01", kategorie_zins_id=self.zins_id,
                                     kategorie_rate_id=self.rate_id), self.con, Bereich(1))
+
+    def test_zuordnen_lehnt_mehrzeilige_buchung_ohne_datenverlust_ab(self):
+        kredit_id = self.kredit()
+        sonstige_id = self.con.execute(
+            "INSERT INTO kategorie(sparte_id,name,richtung) "
+            "VALUES(?, 'Kontofuehrung', 'ausgabe')", (self.haupt,)
+        ).lastrowid
+        buchung_id = self.con.execute(
+            "INSERT INTO buchung(sparte_id,datum,typ,betrag_cent,bankkonto_id,"
+            "zahlungsart,buchungsstatus,text) VALUES(?, '2025-01-15', 'ausgabe', "
+            "50500, ?, 'bank', 'zugeordnet', 'Kreditrate')",
+            (self.haupt, self.konto_id),
+        ).lastrowid
+        self.con.execute(
+            "INSERT INTO buchungszeile(buchung_id,kategorie_id,betrag_cent,notiz) "
+            "VALUES(?,?,?,?)", (buchung_id, self.rate_id, 50000, "Rate")
+        )
+        self.con.execute(
+            "INSERT INTO buchungszeile(buchung_id,kategorie_id,betrag_cent,notiz) "
+            "VALUES(?,?,?,?)", (buchung_id, sonstige_id, 500, "Gebuehr")
+        )
+        self.con.commit()
+        vorher = [tuple(row) for row in self.con.execute(
+            "SELECT id,kategorie_id,betrag_cent,notiz,neutral "
+            "FROM buchungszeile WHERE buchung_id=? ORDER BY id", (buchung_id,)
+        )]
+        summe_vorher = self.con.execute(
+            "SELECT SUM(betrag_cent) FROM buchungszeile WHERE buchung_id=?",
+            (buchung_id,),
+        ).fetchone()[0]
+
+        with self.assertRaisesRegex(HTTPException, "weitere Positionen") as fehler:
+            assign_rates(kredit_id, ZuordnenIn(buchung_ids=[buchung_id]),
+                         self.con, Bereich(1))
+
+        self.assertEqual(422, fehler.exception.status_code)
+        nachher = [tuple(row) for row in self.con.execute(
+            "SELECT id,kategorie_id,betrag_cent,notiz,neutral "
+            "FROM buchungszeile WHERE buchung_id=? ORDER BY id", (buchung_id,)
+        )]
+        summe_nachher = self.con.execute(
+            "SELECT SUM(betrag_cent) FROM buchungszeile WHERE buchung_id=?",
+            (buchung_id,),
+        ).fetchone()[0]
+        self.assertEqual(vorher, nachher)
+        self.assertEqual(summe_vorher, summe_nachher)
+
+    def test_zuordnen_teilt_eine_einzelne_ratenzeile_in_zins_und_tilgung(self):
+        kredit_id = self.kredit()
+        buchung_id = self.con.execute(
+            "INSERT INTO buchung(sparte_id,datum,typ,betrag_cent,bankkonto_id,"
+            "zahlungsart,buchungsstatus,text) VALUES(?, '2025-01-15', 'ausgabe', "
+            "50000, ?, 'bank', 'zugeordnet', 'Kreditrate')",
+            (self.haupt, self.konto_id),
+        ).lastrowid
+        self.con.execute(
+            "INSERT INTO buchungszeile(buchung_id,kategorie_id,betrag_cent) "
+            "VALUES(?,?,?)", (buchung_id, self.rate_id, 50000)
+        )
+        self.con.commit()
+
+        result = assign_rates(kredit_id, ZuordnenIn(buchung_ids=[buchung_id]),
+                              self.con, Bereich(1))
+
+        self.assertEqual([buchung_id], result["buchung_ids"])
+        zeilen = self.con.execute(
+            "SELECT kategorie_id,betrag_cent,neutral FROM buchungszeile "
+            "WHERE buchung_id=? ORDER BY neutral", (buchung_id,)
+        ).fetchall()
+        self.assertEqual([(self.zins_id, 0, 0), (self.rate_id, 50000, 1)],
+                         [tuple(row) for row in zeilen])
+        self.assertEqual(50000, self.con.execute(
+            "SELECT SUM(betrag_cent) FROM buchungszeile WHERE buchung_id=?",
+            (buchung_id,),
+        ).fetchone()[0])
 
 
 class KreditMigrationTest(unittest.TestCase):
