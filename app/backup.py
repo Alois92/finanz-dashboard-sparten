@@ -39,6 +39,7 @@ PRUEF_INTERVALL_SEKUNDEN = 6 * 3600  # laeuft der Server tagelang: alle 6 h prue
 _ziel2_env = os.environ.get("FINANZ_BACKUP_ZIEL2")
 BACKUP_ZIEL2 = Path(_ziel2_env.strip()) if _ziel2_env and _ziel2_env.strip() else None
 sicherungs_lock = threading.Lock()
+_letztes_ergebnis = None
 
 
 def _ist_gueltige_sqlite_datei(pfad) -> bool:
@@ -100,6 +101,11 @@ def _beleg_ziel(zielordner: Path, datei: str) -> Path | None:
     return ziel
 
 
+def _store_pfad(ordner: Path, sha256: str, dateiname: str) -> Path:
+    suffix = Path(dateiname).suffix
+    return ordner / "belege-store" / sha256[:2] / f"{sha256}{suffix}"
+
+
 def _sichere_belege(datum: str) -> dict:
     ordner = DB_PATH.parent / "backup"
     belege = []
@@ -109,60 +115,40 @@ def _sichere_belege(datum: str) -> dict:
         rows = con.execute("SELECT id, dateiname, pfad FROM beleg ORDER BY id").fetchall()
     finally:
         con.close()
-    zielordner = _belegordner(ordner, datum)
-    zielordner.mkdir(parents=True, exist_ok=True)
-    belege_wurzel = DB_PATH.parent / "belege"
-
     manifest_ziel = _manifest_pfad(ordner, datum)
-    if manifest_ziel.is_file():
-        try:
-            alt = json.loads(manifest_ziel.read_text(encoding="utf-8"))
-            alt_belege = {str(e["beleg_id"]): e for e in alt["belege"]}
-            alt_fehlend = {str(e["beleg_id"]): e for e in alt["fehlend"]}
-            unveraendert = True
-            for row in rows:
-                beleg_id, dateiname, quellpfad = row[0], row[1], row[2]
-                quelle = Path(quellpfad) if quellpfad else None
-                if quelle is None or not quelle.is_file():
-                    unveraendert &= str(beleg_id) in alt_fehlend and alt_fehlend[str(beleg_id)]["pfad"] == str(quellpfad)
-                    continue
-                info = _datei_info(quelle)
-                eintrag = alt_belege.get(str(beleg_id))
-                ziel = _beleg_ziel(zielordner, _beleg_sicherungsdatei(quelle, beleg_id, dateiname, belege_wurzel))
-                unveraendert &= bool(
-                    eintrag
-                    and ziel is not None
-                    and eintrag["datei"] == _beleg_sicherungsdatei(quelle, beleg_id, dateiname, belege_wurzel)
-                    and eintrag["sha256"] == info["sha256"]
-                    and eintrag["bytes"] == info["bytes"]
-                    and ziel.is_file()
-                    and ziel.stat().st_size == info["bytes"]
-                )
-            if unveraendert and len(alt_belege) + len(alt_fehlend) == len(rows):
-                return {"belege": alt["belege"], "fehlend": alt["fehlend"], "manifest": str(manifest_ziel)}
-        except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
-            pass
     for row in rows:
         beleg_id, dateiname, quellpfad = row[0], row[1], row[2]
         quelle = Path(quellpfad) if quellpfad else None
         if quelle is None or not quelle.is_file():
             fehlend.append({"beleg_id": beleg_id, "pfad": str(quellpfad)})
             continue
-        name = _beleg_sicherungsdatei(quelle, beleg_id, dateiname, belege_wurzel)
-        ziel = zielordner / name
-        ziel.parent.mkdir(parents=True, exist_ok=True)
         info = _datei_info(quelle)
+        ziel = _store_pfad(ordner, info["sha256"], dateiname)
+        ziel.parent.mkdir(parents=True, exist_ok=True)
         if not ziel.is_file() or _datei_info(ziel) != info:
             shutil.copyfile(quelle, ziel)
-        belege.append({"beleg_id": beleg_id, "datei": name, **info})
+        belege.append({"beleg_id": beleg_id, "dateiname": Path(dateiname).name, **info})
 
     db = DB_PATH.parent / "backup" / f"finanz-{datum}.db"
     manifest = {
+        "version": 2,
         "erstellt": dt.datetime.now().astimezone().isoformat(),
         "db": {"datei": db.name, **_datei_info(db)} if db.is_file() else None,
         "belege": belege,
         "fehlend": fehlend,
     }
+    if manifest_ziel.is_file():
+        try:
+            vorhanden = json.loads(manifest_ziel.read_text(encoding="utf-8"))
+            if (
+                vorhanden.get("version", 1) >= 2
+                and vorhanden.get("db") == manifest["db"]
+                and vorhanden.get("belege") == manifest["belege"]
+                and vorhanden.get("fehlend") == manifest["fehlend"]
+            ):
+                return {"belege": vorhanden["belege"], "fehlend": vorhanden["fehlend"], "manifest": str(manifest_ziel)}
+        except (OSError, TypeError, ValueError, json.JSONDecodeError):
+            pass
     temp_manifest = _temp_pfad(manifest_ziel)
     try:
         temp_manifest.write_text(
@@ -182,10 +168,7 @@ def sichere_belege(datum: str) -> dict:
 
 
 def _vollstaendiger_satz(ordner: Path, datum: str) -> bool:
-    db = ordner / f"finanz-{datum}.db"
-    manifest = _manifest_pfad(ordner, datum)
-    belege = _belegordner(ordner, datum)
-    return db.is_file() and _ist_gueltige_sqlite_datei(db) and manifest.is_file() and belege.is_dir()
+    return pruefe_sicherung_in_ordner(ordner, datum)["manifest_ok"]
 
 
 def pruefe_sicherung(datum: str) -> dict:
@@ -205,14 +188,18 @@ def pruefe_sicherung(datum: str) -> dict:
             and db_info["sha256"] == _sha256(db)
         )
         zielordner = _belegordner(ordner, datum)
+        neu = manifest.get("version", 1) >= 2
         for eintrag in manifest["belege"]:
-            ziel = _beleg_ziel(zielordner, eintrag["datei"])
+            ziel = (
+                _store_pfad(ordner, eintrag["sha256"], eintrag["dateiname"])
+                if neu else _beleg_ziel(zielordner, eintrag["datei"])
+            )
             if ziel is not None and ziel.is_file() and eintrag["bytes"] == ziel.stat().st_size and eintrag["sha256"] == _sha256(ziel):
                 ergebnis["belege_ok"] += 1
             else:
                 ergebnis["belege_fehlend"] += 1
         ergebnis["belege_fehlend"] += len(manifest["fehlend"])
-        ergebnis["manifest_ok"] = ergebnis["db_ok"] and ergebnis["belege_fehlend"] == len(manifest["fehlend"])
+        ergebnis["manifest_ok"] = ergebnis["db_ok"] and ergebnis["belege_fehlend"] == 0
     except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
         return ergebnis
     return ergebnis
@@ -307,60 +294,73 @@ def _rotiere_nachzug(ordner: Path) -> None:
             log.warning("Alte Nachzugssicherung nicht loeschbar: %s", alt)
 
 
-def sichere_datenbank(vor_nachzug_version: int | None = None) -> str | None:
+def sichere_datenbank(vor_nachzug_version: int | None = None):
     """Legt die heutige Tageskopie an (falls noch nicht vorhanden).
 
-    Rueckgabe: Pfad der Kopie oder None (uebersprungen/fehlgeschlagen).
-    Fehler werden geloggt, aber nie zum Serverabbruch - eine fehlgeschlagene
-    Sicherung darf die Buchhaltung nicht blockieren.
+    Rueckgabe: Ergebnisobjekt mit getrennten Statuswerten fuer DB, Belege und
+    Zweitziel. Fehler werden geloggt, aber nie zum Serverabbruch.
 
-    Ist FINANZ_BACKUP_ZIEL2 gesetzt, wird danach zusaetzlich eine Kopie der
-    validierten Erstkopie in dieses Verzeichnis geschrieben. Ein Fehlschlag
-    dabei (z. B. NAS gerade nicht erreichbar) wird nur geloggt und aendert
-    nichts am Rueckgabewert der Erstkopie.
+    Ist FINANZ_BACKUP_ZIEL2 gesetzt, werden fehlende Store-Dateien und das
+    Manifest ausserhalb des lokalen Sicherungs-Locks uebertragen.
 
     Mit vor_nachzug_version wird stattdessen immer eine eigene frische
     Datenbankkopie erstellt; davon bleiben die letzten zehn erhalten.
     Dieser Modus erstellt weder Tagesmanifest noch Beleg- oder Zweitkopie.
     """
-    with sicherungs_lock:
-        if not DB_PERSISTENT:
-            return None
-        if not DB_PATH.exists():
-            return None
-        if vor_nachzug_version is not None:
-            return _sichere_vor_nachzug(vor_nachzug_version)
-        datum = dt.date.today().isoformat()
-        dateiname = f"finanz-{datum}.db"
-        ziel_ordner = DB_PATH.parent / "backup"
-        ziel = ziel_ordner / dateiname
-        erst_erfolgreich = ziel.exists() and _ist_gueltige_sqlite_datei(ziel)
-        if not erst_erfolgreich:
-            temp_ziel = _temp_pfad(ziel)
-            try:
-                ziel_ordner.mkdir(parents=True, exist_ok=True)
-                quelle = get_connection()
-                try:
-                    kopie = sqlite3.connect(temp_ziel)
-                    try:
-                        quelle.backup(kopie)
-                    finally:
-                        kopie.close()
-                finally:
-                    quelle.close()
-                _abschliessen(temp_ziel, ziel, ziel_ordner, "Erstziel")
-                erst_erfolgreich = True
-            except Exception:
-                temp_ziel.unlink(missing_ok=True)
-                log.exception("DB-Sicherung fehlgeschlagen (Betrieb laeuft weiter)")
+    global _letztes_ergebnis
+    if vor_nachzug_version is not None:
+        with sicherungs_lock:
+            if not DB_PERSISTENT or not DB_PATH.exists():
                 return None
+            return _sichere_vor_nachzug(vor_nachzug_version)
+    ergebnis = {"datenbank": "ok", "belege": "ok", "zweitziel": "nicht_konfiguriert"}
+    if not DB_PERSISTENT or not DB_PATH.exists():
+        ergebnis["datenbank"] = {"fehler": "keine persistente Datenbank konfiguriert"}
+        _letztes_ergebnis = ergebnis
+        return ergebnis
+    datum = dt.date.today().isoformat()
+    ziel_ordner = DB_PATH.parent / "backup"
+    ziel = ziel_ordner / f"finanz-{datum}.db"
+    with sicherungs_lock:
         try:
-            _sichere_belege(datum)
-        except Exception:
-            log.exception("Beleg-Sicherung fehlgeschlagen (DB-Sicherung bleibt gueltig)")
-        if BACKUP_ZIEL2 is not None:
+            erst_erfolgreich = ziel.exists() and _ist_gueltige_sqlite_datei(ziel)
+            if not erst_erfolgreich:
+                temp_ziel = _temp_pfad(ziel)
+                try:
+                    ziel_ordner.mkdir(parents=True, exist_ok=True)
+                    quelle = get_connection()
+                    try:
+                        kopie = sqlite3.connect(temp_ziel)
+                        try:
+                            quelle.backup(kopie)
+                        finally:
+                            kopie.close()
+                    finally:
+                        quelle.close()
+                    _abschliessen(temp_ziel, ziel, ziel_ordner, "Erstziel")
+                finally:
+                    temp_ziel.unlink(missing_ok=True)
+        except Exception as exc:
+            log.exception("Lokale Sicherung fehlgeschlagen (Betrieb laeuft weiter)")
+            ergebnis["datenbank"] = {"fehler": str(exc)}
+        else:
+            try:
+                beleg_ergebnis = _sichere_belege(datum)
+                if beleg_ergebnis["fehlend"]:
+                    ergebnis["belege"] = {"fehler": f"{len(beleg_ergebnis['fehlend'])} Beleg(e) fehlen"}
+            except Exception as exc:
+                log.exception("Beleg-Sicherung fehlgeschlagen (Betrieb laeuft weiter)")
+                ergebnis["belege"] = {"fehler": str(exc)}
+    if ergebnis["datenbank"] == "ok" and BACKUP_ZIEL2 is not None:
+        try:
             _sichere_auf_zweitziel(ziel, datum)
-        return str(ziel)
+        except Exception as exc:
+            log.warning("Sicherung auf Zweitziel fehlgeschlagen", exc_info=True)
+            ergebnis["zweitziel"] = {"fehler": str(exc)}
+        else:
+            ergebnis["zweitziel"] = "ok"
+    _letztes_ergebnis = ergebnis
+    return ergebnis
 
 
 def _sichere_auf_zweitziel(erstkopie, datum: str) -> None:
@@ -371,27 +371,59 @@ def _sichere_auf_zweitziel(erstkopie, datum: str) -> None:
     """
     dateiname = erstkopie.name
     ziel2 = BACKUP_ZIEL2 / dateiname
-    temp_ziel2 = _temp_pfad(ziel2)
-    try:
-        BACKUP_ZIEL2.mkdir(parents=True, exist_ok=True)
-        if not ziel2.exists() or not _ist_gueltige_sqlite_datei(ziel2):
-            shutil.copyfile(erstkopie, temp_ziel2)
-            _abschliessen(temp_ziel2, ziel2, BACKUP_ZIEL2, "Zweitziel")
-        quellordner = erstkopie.parent
-        ziel_belege = _belegordner(BACKUP_ZIEL2, datum)
-        shutil.copytree(_belegordner(quellordner, datum), ziel_belege, dirs_exist_ok=True)
-        shutil.copyfile(_manifest_pfad(quellordner, datum), _manifest_pfad(BACKUP_ZIEL2, datum))
-        _rotiere(BACKUP_ZIEL2)
-    except Exception:
+    BACKUP_ZIEL2.mkdir(parents=True, exist_ok=True)
+    quellordner = erstkopie.parent
+    manifest = json.loads(_manifest_pfad(quellordner, datum).read_text(encoding="utf-8"))
+    if not ziel2.is_file() or _sha256(ziel2) != _sha256(erstkopie):
+        temp_ziel2 = _temp_pfad(ziel2)
         try:
+            shutil.copyfile(erstkopie, temp_ziel2)
+            if _sha256(temp_ziel2) != _sha256(erstkopie):
+                raise IOError("Pruefsumme der Zweitkopie stimmt nicht")
+            temp_ziel2.replace(ziel2)
+        finally:
             temp_ziel2.unlink(missing_ok=True)
-        except OSError:
-            pass
-        log.warning(
-            "DB-Sicherung auf Zweitziel fehlgeschlagen, Erstkopie bleibt gueltig (%s)",
-            BACKUP_ZIEL2,
-            exc_info=True,
-        )
+    for eintrag in manifest.get("belege", []):
+        if manifest.get("version", 1) < 2:
+            continue
+        quelle = _store_pfad(quellordner, eintrag["sha256"], eintrag["dateiname"])
+        ziel = _store_pfad(BACKUP_ZIEL2, eintrag["sha256"], eintrag["dateiname"])
+        ziel.parent.mkdir(parents=True, exist_ok=True)
+        if not ziel.is_file() or _datei_info(ziel) != {"sha256": eintrag["sha256"], "bytes": eintrag["bytes"]}:
+            shutil.copyfile(quelle, ziel)
+        if _datei_info(ziel) != {"sha256": eintrag["sha256"], "bytes": eintrag["bytes"]}:
+            raise IOError(f"Pruefsumme der Belegkopie stimmt nicht: {ziel}")
+    manifest_ziel = _manifest_pfad(BACKUP_ZIEL2, datum)
+    manifest_ziel.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    if not _pruefe_zweitziel(datum):
+        raise IOError("Pruefung der Zweitzielsicherung fehlgeschlagen")
+    _rotiere(BACKUP_ZIEL2)
+
+
+def _pruefe_zweitziel(datum: str) -> bool:
+    return pruefe_sicherung_in_ordner(BACKUP_ZIEL2, datum)["manifest_ok"]
+
+
+def pruefe_sicherung_in_ordner(ordner: Path, datum: str) -> dict:
+    db = ordner / f"finanz-{datum}.db"
+    manifest_pfad = _manifest_pfad(ordner, datum)
+    if not db.is_file() or not manifest_pfad.is_file() or not _ist_gueltige_sqlite_datei(db):
+        return {"manifest_ok": False}
+    try:
+        manifest = json.loads(manifest_pfad.read_text(encoding="utf-8"))
+        if manifest["db"]["sha256"] != _sha256(db):
+            return {"manifest_ok": False}
+        if manifest.get("fehlend"):
+            return {"manifest_ok": False}
+        for eintrag in manifest.get("belege", []):
+            ziel = (_store_pfad(ordner, eintrag["sha256"], eintrag["dateiname"])
+                    if manifest.get("version", 1) >= 2
+                    else _beleg_ziel(_belegordner(ordner, datum), eintrag["datei"]))
+            if ziel is None or not ziel.is_file() or _datei_info(ziel) != {"sha256": eintrag["sha256"], "bytes": eintrag["bytes"]}:
+                return {"manifest_ok": False}
+        return {"manifest_ok": True}
+    except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+        return {"manifest_ok": False}
 
 
 def _rotiere(ordner) -> None:
@@ -403,8 +435,32 @@ def _rotiere(ordner) -> None:
             datum = alt.stem.removeprefix("finanz-")
             shutil.rmtree(_belegordner(ordner, datum), ignore_errors=True)
             _manifest_pfad(ordner, datum).unlink(missing_ok=True)
+            _bereinige_store(ordner)
         except OSError:
             log.warning("Alte DB-Sicherung nicht loeschbar: %s", alt)
+
+
+def _bereinige_store(ordner: Path) -> None:
+    referenzen = set()
+    for manifest_pfad in ordner.glob("manifest-????-??-??.json"):
+        try:
+            manifest = json.loads(manifest_pfad.read_text(encoding="utf-8"))
+            if manifest.get("version", 1) >= 2:
+                referenzen.update(
+                    (eintrag["sha256"], eintrag["dateiname"])
+                    for eintrag in manifest.get("belege", [])
+                )
+        except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+            continue
+    store = ordner / "belege-store"
+    if not store.is_dir():
+        return
+    for pfad in store.rglob("*"):
+        if pfad.is_file() and (pfad.stem, pfad.name[len(pfad.stem):]) not in referenzen:
+            try:
+                pfad.unlink()
+            except OSError:
+                log.warning("Alte Store-Datei nicht loeschbar: %s", pfad)
 
 
 async def backup_schleife() -> None:

@@ -2,9 +2,11 @@ import asyncio
 import datetime as dt
 import os
 import pathlib
+import shutil
 import sqlite3
 import tempfile
 import unittest
+import uuid
 from unittest.mock import patch
 
 from app import backup, db, migrate
@@ -12,9 +14,9 @@ from app import backup, db, migrate
 
 class NachzugSicherungTest(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(prefix="finanz-a1-")
-        self.addCleanup(self.temp.cleanup)
-        self.root = pathlib.Path(self.temp.name)
+        self.root = pathlib.Path.cwd() / f".test-nachzug-{uuid.uuid4().hex}"
+        self.root.mkdir()
+        self.addCleanup(shutil.rmtree, self.root, True)
         self.db_path = self.root / "test.db"
         self.ordner = self.root / "backup"
         self.migrationen = self.root / "migrations"
@@ -55,7 +57,8 @@ class NachzugSicherungTest(unittest.TestCase):
         )
 
     def test_nachzug_sichert_aktuellen_stand_trotz_tageskopie(self):
-        tageskopie = pathlib.Path(backup.sichere_datenbank())
+        self.assertEqual("ok", backup.sichere_datenbank()["datenbank"])
+        tageskopie = self.ordner / f"finanz-{dt.date.today().isoformat()}.db"
         self._schreibe("INSERT INTO marker VALUES('abends')")
         self._migration(1)
         self._migration(2)
@@ -181,7 +184,8 @@ class NachzugSicherungTest(unittest.TestCase):
         self.assertEqual(set(pfade[1:]), set(self.ordner.glob("*.db")))
 
     def test_cli_sichert_frisch_und_bricht_bei_sicherungsfehler_ab(self):
-        tageskopie = pathlib.Path(backup.sichere_datenbank())
+        self.assertEqual("ok", backup.sichere_datenbank()["datenbank"])
+        tageskopie = self.ordner / f"finanz-{dt.date.today().isoformat()}.db"
         self._schreibe("INSERT INTO marker VALUES('abends')")
         self._migration(1)
         with patch("sys.argv", ["app.migrate", "apply"]):

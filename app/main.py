@@ -158,7 +158,10 @@ def betrieb_status():
         "belege_fehlend": 0,
         "manifest_ok": False,
     }
-    if backup.BACKUP_ZIEL2 is None:
+    letztes_ergebnis = backup._letztes_ergebnis
+    if letztes_ergebnis is not None:
+        zweitziel = letztes_ergebnis["zweitziel"]
+    elif backup.BACKUP_ZIEL2 is None:
         zweitziel = "nicht konfiguriert"
     elif letzte and backup._vollstaendiger_satz(backup.BACKUP_ZIEL2, letzte):
         zweitziel = "ok"
@@ -172,6 +175,7 @@ def betrieb_status():
             "belege_ok": pruefung["belege_ok"],
             "belege_fehlend": pruefung["belege_fehlend"],
             "zweitziel": zweitziel,
+            "ergebnis": letztes_ergebnis,
         },
         "schreibgeschuetzt": app.state.schreibgeschuetzt,
     }

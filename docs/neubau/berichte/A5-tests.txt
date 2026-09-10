@@ -1,0 +1,53 @@
+Befehl (vorgegebener Interpreter, Wegwerf-DB unter .tmp-test):
+C:\Users\lblet\dev\finanz-dashboard-sparten\.venv\Scripts\python.exe -m unittest tests.test_backup -v
+
+test_altes_manifest_bleibt_pruefbar (tests.test_backup.BackupTest.test_altes_manifest_bleibt_pruefbar) ... ok
+test_belege_manifest_und_pruefsummen_werden_gesichert (tests.test_backup.BackupTest.test_belege_manifest_und_pruefsummen_werden_gesichert) ... ok
+test_belegsicherung_ohne_db_kopie_schreibt_db_null (tests.test_backup.BackupTest.test_belegsicherung_ohne_db_kopie_schreibt_db_null) ... ok
+test_beschaedigte_tagesdatei_wird_durch_gueltige_sicherung_ersetzt (tests.test_backup.BackupTest.test_beschaedigte_tagesdatei_wird_durch_gueltige_sicherung_ersetzt) ... ok
+test_betriebsstatus_enthaelt_nur_oeffentliche_sicherungsfelder (tests.test_backup.BackupTest.test_betriebsstatus_enthaelt_nur_oeffentliche_sicherungsfelder) ... ok
+test_fehlender_beleg_steht_im_manifest_und_db_sicherung_bleibt_erfolgreich (tests.test_backup.BackupTest.test_fehlender_beleg_steht_im_manifest_und_db_sicherung_bleibt_erfolgreich) ... ok
+test_fehlgeschlagene_sicherung_hinterlaesst_keine_tagesdatei (tests.test_backup.BackupTest.test_fehlgeschlagene_sicherung_hinterlaesst_keine_tagesdatei) ... ok
+test_folgetag_kopiert_unveraenderten_beleg_nicht_erneut (tests.test_backup.BackupTest.test_folgetag_kopiert_unveraenderten_beleg_nicht_erneut) ... ok
+test_geaenderter_beleg_landet_als_neuer_hash (tests.test_backup.BackupTest.test_geaenderter_beleg_landet_als_neuer_hash) ... ok
+test_geloeschte_belegkopie_wird_beim_zweiten_lauf_erneuert (tests.test_backup.BackupTest.test_geloeschte_belegkopie_wird_beim_zweiten_lauf_erneuert) ... ok
+test_identische_originalnamen_in_verschiedenen_sparten_bleiben_getrennt (tests.test_backup.BackupTest.test_identische_originalnamen_in_verschiedenen_sparten_bleiben_getrennt) ... ok
+test_ohne_zweitziel_bleibt_alles_wie_bisher (tests.test_backup.BackupTest.test_ohne_zweitziel_bleibt_alles_wie_bisher) ... ok
+test_pruefe_sicherung_erkennt_manipulierte_belegkopie (tests.test_backup.BackupTest.test_pruefe_sicherung_erkennt_manipulierte_belegkopie) ... ok
+test_rotation_behaelt_referenzierte_store_datei (tests.test_backup.BackupTest.test_rotation_behaelt_referenzierte_store_datei) ... ok
+test_rotation_entfernt_db_belegordner_und_manifest_gemeinsam (tests.test_backup.BackupTest.test_rotation_entfernt_db_belegordner_und_manifest_gemeinsam) ... ok
+test_unerreichbares_zweitziel_laesst_erstkopie_gueltig (tests.test_backup.BackupTest.test_unerreichbares_zweitziel_laesst_erstkopie_gueltig) ... ok
+test_zweiter_lauf_am_selben_tag_ist_idempotent (tests.test_backup.BackupTest.test_zweiter_lauf_am_selben_tag_ist_idempotent) ... ok
+test_zweitziel_erhaelt_eine_gueltige_zweitkopie (tests.test_backup.BackupTest.test_zweitziel_erhaelt_eine_gueltige_zweitkopie) ... ok
+test_zweitziel_fehler_liefert_fehlerstatus (tests.test_backup.BackupTest.test_zweitziel_fehler_liefert_fehlerstatus) ... ok
+test_zweitziel_pruefsummenabweichung_wird_erkannt (tests.test_backup.BackupTest.test_zweitziel_pruefsummenabweichung_wird_erkannt) ... ok
+
+----------------------------------------------------------------------
+Ran 20 tests in 3.345s
+
+OK
+
+Befehl (vorgegebener Interpreter, Nachzug-Regressionen):
+C:\Users\lblet\dev\finanz-dashboard-sparten\.venv\Scripts\python.exe -m unittest tests.test_backup_nachzug -v
+
+test_cli_sichert_frisch_und_bricht_bei_sicherungsfehler_ab ... ok
+test_nachzug_sichert_aktuellen_stand_trotz_tageskopie ... ok
+test_rotation_behaelt_zehn_nachzuege_unabhaengig_von_tageskopien ... ok
+test_rotation_ordnet_gleiche_zeitstempel_nach_laufender_nummer ... ok
+test_schreibfehler_stoppt_pflichtnachzug ... ok
+test_sicherungsfehler_startet_app_schreibgeschuetzt ... ok
+test_ungueltige_kopie_stoppt_nachzug_und_entfernt_tempdateien ... ok
+test_wegwerf_datenbank_ueberspringt_sicherung ... ok
+test_zwei_nachzuege_in_derselben_minute_ueberschreiben_nichts ... ok
+test_zwoelf_frische_sicherungen_behalten_die_letzten_zehn ... ok
+
+----------------------------------------------------------------------
+Ran 10 tests in 7.195s
+
+OK
+
+Vollständiger Discover-Versuch:
+C:\Users\lblet\dev\finanz-dashboard-sparten\.venv\Scripts\python.exe -m unittest discover -s tests
+Ausgabe bis zum Abbruch nach 30 Sekunden:
+EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+Status: Prozess wegen nicht terminierender Auth-/Anwendungssuite beendet; Sandbox meldete in den betroffenen Suites wiederholt Fehler. Die isolierten A5/A6- und A1-Nachzugläufe oben sind vollständig grün.

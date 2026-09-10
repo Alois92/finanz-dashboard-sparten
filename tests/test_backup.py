@@ -6,6 +6,7 @@ import shutil
 import sqlite3
 import tempfile
 import unittest
+import uuid
 from unittest.mock import patch
 
 from app import backup
@@ -13,8 +14,9 @@ from app import backup
 
 class BackupTest(unittest.TestCase):
     def setUp(self):
-        self.tempdir = tempfile.TemporaryDirectory()
-        self.root = pathlib.Path(self.tempdir.name)
+        self.root = pathlib.Path.cwd() / f".test-backup-{uuid.uuid4().hex}"
+        self.root.mkdir()
+        self.addCleanup(shutil.rmtree, self.root, True)
         self.source = self.root / "quelle.db"
         con = sqlite3.connect(self.source)
         con.execute("CREATE TABLE marker(wert TEXT NOT NULL)")
@@ -27,7 +29,7 @@ class BackupTest(unittest.TestCase):
         )
 
     def tearDown(self):
-        self.tempdir.cleanup()
+        pass
 
     def _source_connection(self):
         return sqlite3.connect(self.source)
@@ -57,32 +59,115 @@ class BackupTest(unittest.TestCase):
         ):
             return backup.sichere_datenbank()
 
+    def _sichere_belege(self, datum):
+        with (
+            patch.object(backup, "DB_PATH", self.source),
+            patch.object(backup, "get_connection", self._source_connection),
+        ):
+            return backup.sichere_belege(datum)
+
     def test_belege_manifest_und_pruefsummen_werden_gesichert(self):
         belege = self._lege_belege_an(("rechnung-a.pdf", b"A"), ("rechnung-b.pdf", b"BB"))
 
-        self.assertEqual(self._sichere(), str(self.target))
-        zielordner = self.target.parent / f"belege-{dt.date.today().isoformat()}"
+        self.assertEqual(self._sichere()["datenbank"], "ok")
+        zielordner = self.target.parent
         manifest = json.loads(
             (self.target.parent / f"manifest-{dt.date.today().isoformat()}.json").read_text()
         )
         self.assertEqual(
-            {eintrag["datei"] for eintrag in manifest["belege"]},
-            {"1/1_rechnung-a.pdf", "2/2_rechnung-b.pdf"},
+            {eintrag["dateiname"] for eintrag in manifest["belege"]},
+            {"rechnung-a.pdf", "rechnung-b.pdf"},
         )
         for beleg_id, name in ((1, "rechnung-a.pdf"), (2, "rechnung-b.pdf")):
-            self.assertEqual(
-                hashlib.sha256((belege / str(beleg_id) / f"{beleg_id}_{name}").read_bytes()).hexdigest(),
-                hashlib.sha256((zielordner / str(beleg_id) / f"{beleg_id}_{name}").read_bytes()).hexdigest(),
-            )
+            hashwert = hashlib.sha256((belege / str(beleg_id) / f"{beleg_id}_{name}").read_bytes()).hexdigest()
+            self.assertEqual((zielordner / "belege-store" / hashwert[:2] / f"{hashwert}.pdf").read_bytes(), (belege / str(beleg_id) / f"{beleg_id}_{name}").read_bytes())
         with patch.object(backup, "DB_PATH", self.source):
             pruefung = backup.pruefe_sicherung(dt.date.today().isoformat())
         self.assertEqual({"db_ok": True, "belege_ok": 2, "belege_fehlend": 0, "manifest_ok": True}, pruefung)
+
+    def test_folgetag_kopiert_unveraenderten_beleg_nicht_erneut(self):
+        self._lege_belege_an(("rechnung.pdf", b"A"))
+        with patch.object(backup.shutil, "copyfile", wraps=shutil.copyfile) as kopieren:
+            self._sichere_belege("2026-09-10")
+            kopieren.reset_mock()
+            self._sichere_belege("2026-09-11")
+        self.assertEqual([], kopieren.call_args_list)
+
+        manifest = json.loads(
+            (self.target.parent / "manifest-2026-09-11.json").read_text()
+        )
+        hashwert = hashlib.sha256(b"A").hexdigest()
+        self.assertEqual(hashwert, manifest["belege"][0]["sha256"])
+        self.assertEqual("rechnung.pdf", manifest["belege"][0]["dateiname"])
+        self.assertTrue((self.target.parent / "belege-store" / hashwert[:2] / f"{hashwert}.pdf").is_file())
+
+    def test_geaenderter_beleg_landet_als_neuer_hash(self):
+        belege = self._lege_belege_an(("rechnung.pdf", b"A"))
+        self._sichere_belege("2026-09-10")
+        (belege / "1" / "1_rechnung.pdf").write_bytes(b"B")
+
+        self._sichere_belege("2026-09-11")
+
+        alt = hashlib.sha256(b"A").hexdigest()
+        neu = hashlib.sha256(b"B").hexdigest()
+        store = self.target.parent / "belege-store"
+        self.assertTrue((store / alt[:2] / f"{alt}.pdf").is_file())
+        self.assertTrue((store / neu[:2] / f"{neu}.pdf").is_file())
+
+    def test_zweitziel_fehler_liefert_fehlerstatus(self):
+        self._lege_belege_an(("rechnung.pdf", b"A"))
+        with (
+            patch.object(backup, "_sichere_auf_zweitziel", side_effect=OSError("NAS aus")),
+            patch.object(backup, "BACKUP_ZIEL2", self.root / "nas"),
+            patch.object(backup, "DB_PATH", self.source),
+            patch.object(backup, "DB_PERSISTENT", True),
+            patch.object(backup, "get_connection", self._source_connection),
+        ):
+            ergebnis = backup.sichere_datenbank()
+        self.assertEqual("ok", ergebnis["datenbank"])
+        self.assertEqual("ok", ergebnis["belege"])
+        self.assertIn("fehler", ergebnis["zweitziel"])
+
+    def test_zweitziel_pruefsummenabweichung_wird_erkannt(self):
+        self._lege_belege_an(("rechnung.pdf", b"A"))
+        ziel2 = self.root / "nas"
+        self._sichere_mit_zweitziel(ziel2)
+        hashwert = hashlib.sha256(b"A").hexdigest()
+        (ziel2 / "belege-store" / hashwert[:2] / f"{hashwert}.pdf").write_bytes(b"manipuliert")
+        with patch.object(backup, "BACKUP_ZIEL2", ziel2):
+            ergebnis = backup._pruefe_zweitziel(dt.date.today().isoformat())
+        self.assertFalse(ergebnis)
+
+    def test_rotation_behaelt_referenzierte_store_datei(self):
+        belege = self._lege_belege_an(("rechnung.pdf", b"A"))
+        self._sichere_belege("2026-08-01")
+        self._sichere_belege("2026-09-10")
+        backup._rotiere(self.target.parent)
+        hashwert = hashlib.sha256(b"A").hexdigest()
+        self.assertTrue((self.target.parent / "belege-store" / hashwert[:2] / f"{hashwert}.pdf").exists())
+
+    def test_altes_manifest_bleibt_pruefbar(self):
+        self._lege_belege_an(("rechnung.pdf", b"A"))
+        self._sichere()
+        datum = dt.date.today().isoformat()
+        store = self.target.parent / f"belege-{datum}" / "1"
+        manifest = self.target.parent / f"manifest-{datum}.json"
+        old_manifest = json.loads(manifest.read_text())
+        old_dir = self.target.parent / f"belege-{datum}" / "1"
+        old_dir.mkdir(parents=True)
+        (old_dir / "1_rechnung.pdf").write_bytes(b"A")
+        old_manifest["belege"][0]["datei"] = "1/1_rechnung.pdf"
+        old_manifest["belege"][0].pop("dateiname", None)
+        old_manifest.pop("version", None)
+        manifest.write_text(json.dumps(old_manifest))
+        with patch.object(backup, "DB_PATH", self.source):
+            self.assertTrue(backup.pruefe_sicherung(datum)["manifest_ok"])
 
     def test_fehlender_beleg_steht_im_manifest_und_db_sicherung_bleibt_erfolgreich(self):
         belege = self._lege_belege_an(("fehlt.pdf", b"X"))
         (belege / "1" / "1_fehlt.pdf").unlink()
 
-        self.assertEqual(self._sichere(), str(self.target))
+        self.assertEqual(self._sichere()["datenbank"], "ok")
         manifest = json.loads(
             (self.target.parent / f"manifest-{dt.date.today().isoformat()}.json").read_text()
         )
@@ -92,7 +177,8 @@ class BackupTest(unittest.TestCase):
         self._lege_belege_an(("rechnung.pdf", b"A"))
         self._sichere()
         manifest = self.target.parent / f"manifest-{dt.date.today().isoformat()}.json"
-        belegkopie = self.target.parent / f"belege-{dt.date.today().isoformat()}" / "1" / "1_rechnung.pdf"
+        hashwert = hashlib.sha256(b"A").hexdigest()
+        belegkopie = self.target.parent / "belege-store" / hashwert[:2] / f"{hashwert}.pdf"
         vorher = (manifest.read_bytes(), belegkopie.stat().st_mtime_ns)
 
         self._sichere()
@@ -120,7 +206,8 @@ class BackupTest(unittest.TestCase):
     def test_pruefe_sicherung_erkennt_manipulierte_belegkopie(self):
         self._lege_belege_an(("rechnung.pdf", b"A"))
         self._sichere()
-        (self.target.parent / f"belege-{dt.date.today().isoformat()}" / "1" / "1_rechnung.pdf").write_bytes(b"manipuliert")
+        hashwert = hashlib.sha256(b"A").hexdigest()
+        (self.target.parent / "belege-store" / hashwert[:2] / f"{hashwert}.pdf").write_bytes(b"manipuliert")
 
         with patch.object(backup, "DB_PATH", self.source):
             pruefung = backup.pruefe_sicherung(dt.date.today().isoformat())
@@ -151,7 +238,8 @@ class BackupTest(unittest.TestCase):
                     "db_ok": True,
                     "belege_ok": 1,
                     "belege_fehlend": 0,
-                    "zweitziel": "nicht konfiguriert",
+                    "zweitziel": "nicht_konfiguriert",
+                    "ergebnis": {"datenbank": "ok", "belege": "ok", "zweitziel": "nicht_konfiguriert"},
                 },
                 "schreibgeschuetzt": False,
             },
@@ -171,10 +259,8 @@ class BackupTest(unittest.TestCase):
         con.close()
 
         self._sichere()
-        zielordner = self.target.parent / f"belege-{dt.date.today().isoformat()}"
-        self.assertEqual(sorted(p.relative_to(zielordner).as_posix() for p in zielordner.rglob("*") if p.is_file()), ["10/1_rechnung.pdf", "20/2_rechnung.pdf"])
-        self.assertEqual((zielordner / "10/1_rechnung.pdf").read_bytes(), b"eins")
-        self.assertEqual((zielordner / "20/2_rechnung.pdf").read_bytes(), b"zwei")
+        zielordner = self.target.parent / "belege-store"
+        self.assertEqual(2, len([p for p in zielordner.rglob("*") if p.is_file()]))
         with patch.object(backup, "DB_PATH", self.source):
             pruefung = backup.pruefe_sicherung(dt.date.today().isoformat())
         self.assertEqual(pruefung, {"db_ok": True, "belege_ok": 2, "belege_fehlend": 0, "manifest_ok": True})
@@ -182,7 +268,8 @@ class BackupTest(unittest.TestCase):
     def test_geloeschte_belegkopie_wird_beim_zweiten_lauf_erneuert(self):
         self._lege_belege_an(("rechnung.pdf", b"A"))
         self._sichere()
-        ziel = self.target.parent / f"belege-{dt.date.today().isoformat()}" / "1" / "1_rechnung.pdf"
+        hashwert = hashlib.sha256(b"A").hexdigest()
+        ziel = self.target.parent / "belege-store" / hashwert[:2] / f"{hashwert}.pdf"
         ziel.unlink()
 
         self._sichere()
@@ -203,7 +290,7 @@ class BackupTest(unittest.TestCase):
 
         manifest = json.loads((self.source.parent / "backup" / f"manifest-{datum}.json").read_text())
         self.assertIsNone(manifest["db"])
-        self.assertEqual(result["belege"][0]["datei"], "1/1_rechnung.pdf")
+        self.assertEqual(result["belege"][0]["dateiname"], "rechnung.pdf")
 
     def test_beschaedigte_tagesdatei_wird_durch_gueltige_sicherung_ersetzt(self):
         self.target.parent.mkdir()
@@ -216,7 +303,7 @@ class BackupTest(unittest.TestCase):
         ):
             result = backup.sichere_datenbank()
 
-        self.assertEqual(result, str(self.target))
+        self.assertEqual(result["datenbank"], "ok")
         con = sqlite3.connect(self.target)
         try:
             self.assertEqual(con.execute("PRAGMA integrity_check").fetchone()[0], "ok")
@@ -240,7 +327,7 @@ class BackupTest(unittest.TestCase):
         ):
             result = backup.sichere_datenbank()
 
-        self.assertIsNone(result)
+        self.assertIn("fehler", result["datenbank"])
         self.assertFalse(self.target.exists())
 
     def _sichere_mit_zweitziel(self, ziel2):
@@ -256,7 +343,7 @@ class BackupTest(unittest.TestCase):
         ziel2 = self.root / "nas"
         result = self._sichere_mit_zweitziel(ziel2)
 
-        self.assertEqual(result, str(self.target))
+        self.assertEqual(result["datenbank"], "ok")
         zweitkopie = ziel2 / self.target.name
         self.assertTrue(zweitkopie.exists())
         self.assertTrue(backup._ist_gueltige_sqlite_datei(zweitkopie))
@@ -272,17 +359,16 @@ class BackupTest(unittest.TestCase):
         result = self._sichere_mit_zweitziel(
             pathlib.Path(r"\\kein-host-xyz-existiert\share\backup"))
 
-        self.assertEqual(result, str(self.target))
+        self.assertEqual(result["datenbank"], "ok")
         self.assertTrue(backup._ist_gueltige_sqlite_datei(self.target))
 
     def test_ohne_zweitziel_bleibt_alles_wie_bisher(self):
         result = self._sichere_mit_zweitziel(None)
 
-        self.assertEqual(result, str(self.target))
+        self.assertEqual(result["datenbank"], "ok")
         self.assertEqual(
             sorted(p.name for p in self.target.parent.iterdir()),
             [
-                f"belege-{dt.date.today().isoformat()}",
                 self.target.name,
                 f"manifest-{dt.date.today().isoformat()}.json",
             ],
