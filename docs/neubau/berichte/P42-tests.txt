@@ -1,0 +1,106 @@
+=== Isolierter Lauf: tests/test_p42_bankimport.py ===
+Befehl: FINANZ_DB=<Wegwerf-Datei> python -m unittest discover -s tests -p test_p42_bankimport.py -v
+
+test_bankumsaetze_liste_hat_vorschlag_nur_fuer_offene (test_p42_bankimport.P42BankimportApiTest.test_bankumsaetze_liste_hat_vorschlag_nur_fuer_offene) ... ok
+test_konten_und_kategorien_liefern_die_vom_modul_gelesenen_felder (test_p42_bankimport.P42BankimportApiTest.test_konten_und_kategorien_liefern_die_vom_modul_gelesenen_felder) ... ok
+test_sammeluebernahme_von_regelvorschlaegen (test_p42_bankimport.P42BankimportApiTest.test_sammeluebernahme_von_regelvorschlaegen) ... ok
+test_upload_george_fixture_liefert_pruefbericht_felder (test_p42_bankimport.P42BankimportApiTest.test_upload_george_fixture_liefert_pruefbericht_felder) ... ok
+test_verbuchen_und_ignorieren (test_p42_bankimport.P42BankimportApiTest.test_verbuchen_und_ignorieren) ... ok
+test_zuordnen_und_loesen_ueber_n4_endpunkte (test_p42_bankimport.P42BankimportApiTest.test_zuordnen_und_loesen_ueber_n4_endpunkte) ... ok
+test_node_check_js_dateien (test_p42_bankimport.P42SeiteAusgeliefertTest.test_node_check_js_dateien) ... ok
+test_seite_und_modul_werden_ausgeliefert (test_p42_bankimport.P42SeiteAusgeliefertTest.test_seite_und_modul_werden_ausgeliefert) ... ok
+
+----------------------------------------------------------------------
+Ran 8 tests in 15.085s
+
+OK
+
+=== Gesamtsuite: discover -s tests ===
+Befehl: FINANZ_DB=<Wegwerf-Datei> python -m unittest discover -s tests
+
+  File "C:\Users\lblet\dev\wt-p42\app\backup.py", line 229, in _sichere_vor_nachzug
+    ziel_ordner.mkdir(parents=True, exist_ok=True)
+  File "C:\Users\lblet\AppData\Local\Programs\Python\Python312\Lib\pathlib.py", line 1311, in mkdir
+    os.mkdir(self, mode)
+FileExistsError: [WinError 183] Eine Datei kann nicht erstellt werden, wenn sie bereits vorhanden ist: 'C:\\Users\\lblet\\dev\\wt-p42\\.test-nachzug-bd3b9fa1bec346eeaa82635fd259b270\\backup'
+.DB-Sicherung vor Schema-Nachzug fehlgeschlagen
+Traceback (most recent call last):
+  File "C:\Users\lblet\dev\wt-p42\app\backup.py", line 229, in _sichere_vor_nachzug
+    ziel_ordner.mkdir(parents=True, exist_ok=True)
+  File "C:\Users\lblet\AppData\Local\Programs\Python\Python312\Lib\pathlib.py", line 1311, in mkdir
+    os.mkdir(self, mode)
+FileExistsError: [WinError 183] Eine Datei kann nicht erstellt werden, wenn sie bereits vorhanden ist: 'C:\\Users\\lblet\\dev\\wt-p42\\.test-nachzug-d8b2a17f49ba46ca9990746232dc3b8d\\backup'
+.DB-Sicherung vor Schema-Nachzug fehlgeschlagen
+Traceback (most recent call last):
+  File "C:\Users\lblet\dev\wt-p42\app\backup.py", line 260, in _sichere_vor_nachzug
+    raise sqlite3.DatabaseError("Sicherung vor Nachzug ist nicht intakt")
+sqlite3.DatabaseError: Sicherung vor Nachzug ist nicht intakt
+....Bild-Verkleinerung fehlgeschlagen - sende Original
+Traceback (most recent call last):
+  File "C:\Users\lblet\dev\wt-p42\app\auswertung.py", line 108, in _lade_bild_base64
+    bild = Image.open(io.BytesIO(roh))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lblet\dev\finanz-dashboard-sparten\.venv\Lib\site-packages\PIL\Image.py", line 3532, in open
+    raise UnidentifiedImageError(msg)
+PIL.UnidentifiedImageError: cannot identify image file <_io.BytesIO object at 0x000001B560E45300>
+..Bild-Verkleinerung fehlgeschlagen - sende Original
+Traceback (most recent call last):
+  File "C:\Users\lblet\dev\wt-p42\app\auswertung.py", line 108, in _lade_bild_base64
+    bild = Image.open(io.BytesIO(roh))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lblet\dev\finanz-dashboard-sparten\.venv\Lib\site-packages\PIL\Image.py", line 3532, in open
+    raise UnidentifiedImageError(msg)
+PIL.UnidentifiedImageError: cannot identify image file <_io.BytesIO object at 0x000001B560FE9EE0>
+.Bild-Verkleinerung fehlgeschlagen - sende Original
+Traceback (most recent call last):
+  File "C:\Users\lblet\dev\wt-p42\app\auswertung.py", line 108, in _lade_bild_base64
+    bild = Image.open(io.BytesIO(roh))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lblet\dev\finanz-dashboard-sparten\.venv\Lib\site-packages\PIL\Image.py", line 3532, in open
+    raise UnidentifiedImageError(msg)
+PIL.UnidentifiedImageError: cannot identify image file <_io.BytesIO object at 0x000001B560FEA110>
+.Bild-Verkleinerung fehlgeschlagen - sende Original
+Traceback (most recent call last):
+  File "C:\Users\lblet\dev\wt-p42\app\auswertung.py", line 108, in _lade_bild_base64
+    bild = Image.open(io.BytesIO(roh))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lblet\dev\finanz-dashboard-sparten\.venv\Lib\site-packages\PIL\Image.py", line 3532, in open
+    raise UnidentifiedImageError(msg)
+PIL.UnidentifiedImageError: cannot identify image file <_io.BytesIO object at 0x000001B560FE9E90>
+.Bild-Verkleinerung fehlgeschlagen - sende Original
+Traceback (most recent call last):
+  File "C:\Users\lblet\dev\wt-p42\app\auswertung.py", line 108, in _lade_bild_base64
+    bild = Image.open(io.BytesIO(roh))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lblet\dev\finanz-dashboard-sparten\.venv\Lib\site-packages\PIL\Image.py", line 3532, in open
+    raise UnidentifiedImageError(msg)
+PIL.UnidentifiedImageError: cannot identify image file <_io.BytesIO object at 0x000001B560FEA5C0>
+..Bild-Verkleinerung fehlgeschlagen - sende Original
+Traceback (most recent call last):
+  File "C:\Users\lblet\dev\wt-p42\app\auswertung.py", line 108, in _lade_bild_base64
+    bild = Image.open(io.BytesIO(roh))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lblet\dev\finanz-dashboard-sparten\.venv\Lib\site-packages\PIL\Image.py", line 3532, in open
+    raise UnidentifiedImageError(msg)
+PIL.UnidentifiedImageError: cannot identify image file <_io.BytesIO object at 0x000001B560FEA7F0>
+.Bild-Verkleinerung fehlgeschlagen - sende Original
+Traceback (most recent call last):
+  File "C:\Users\lblet\dev\wt-p42\app\auswertung.py", line 108, in _lade_bild_base64
+    bild = Image.open(io.BytesIO(roh))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lblet\dev\finanz-dashboard-sparten\.venv\Lib\site-packages\PIL\Image.py", line 3532, in open
+    raise UnidentifiedImageError(msg)
+PIL.UnidentifiedImageError: cannot identify image file <_io.BytesIO object at 0x000001B560FEA9D0>
+....................................................................................................................................................................................Keine bestehende Auth-Datei unter C:\Users\lblet\AppData\Local\Temp\tmp2hy2jw4e\auth.json gefunden. Ohne bestehendes Passwort kann kein Recovery-Code erzeugt werden.
+.........
+----------------------------------------------------------------------
+Ran 306 tests in 522.026s
+
+OK (skipped=1)
+Angewendet: [1]
+
+real	8m45.281s
+user	0m0.078s
+sys	0m0.124s
+
+[exited with code 0]
