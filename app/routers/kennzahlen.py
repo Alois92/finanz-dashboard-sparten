@@ -65,9 +65,9 @@ def list_kennzahlen(sparte_id: int | None = None, jahr: int | None = None,
     if jahr is None:
         raise HTTPException(400, "jahr ist erforderlich")
     rows = con.execute(
-        "SELECT id, sparte_id, name, sortierung, aktiv FROM kennzahl k "
+        "SELECT k.id, k.sparte_id, k.name, k.sortierung, k.aktiv FROM kennzahl k "
         "JOIN sparte s ON s.id=k.sparte_id WHERE k.aktiv=1 AND s.bereich_id=? "
-        "AND (? IS NULL OR sparte_id=?) ORDER BY sortierung, id",
+        "AND (? IS NULL OR k.sparte_id=?) ORDER BY k.sortierung, k.id",
         (bereich.id, sparte_id, sparte_id),
     ).fetchall()
     return [_detail(con, row, jahr, bereich.id) for row in rows]
