@@ -331,7 +331,7 @@ class AuslagenMigrationTest(unittest.TestCase):
                 con.executemany('INSERT INTO schema_version(version, name) VALUES(?, ?)',
                                 [(v, name) for v, name, _ in migrate.liste_migrationen() if v <= 4])
                 con.commit()
-                self.assertEqual([5, 6, 7, 8, 9, 10, 11, 12, 13, 14], migrate.anwenden(con, None))
+                self.assertEqual([5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], migrate.anwenden(con, None))
                 snapshot = '\n'.join(con.iterdump())
                 self.assertEqual([], migrate.anwenden(con, None))
                 self.assertEqual(snapshot, '\n'.join(con.iterdump()))

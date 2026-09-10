@@ -1,0 +1,43 @@
+Interpreter: C:\Users\lblet\dev\finanz-dashboard-sparten\.venv\Scripts\python.exe
+Befehl: C:\Users\lblet\dev\finanz-dashboard-sparten\.venv\Scripts\python.exe -m unittest discover -s tests
+Ergebnis: Exit 1; Lauf nach wiederholtem 30-Sekunden-Polling mit Ctrl+C beendet, da der Prozess in der Windows-Sandbox hängen blieb.
+Ausgabe (vollständig bis zum Abbruch):
+EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+E..
+^C
+
+Befehl: C:\Users\lblet\dev\finanz-dashboard-sparten\.venv\Scripts\python.exe -m unittest tests.test_kredit -v
+Ergebnis: Exit 1
+Ausgabe:
+test_bereich_und_referenzen_werden_geprueft ... ERROR
+test_elf_raten_melden_abweichung_und_vorjahreszins_schaetzt ... ERROR
+test_jahreszins_wird_auf_raten_und_auswertung_verteilt ... ERROR
+test_loesen_leert_nur_die_kredit_zuordnung ... ERROR
+test_neue_rate_hat_kredit_id_und_keinen_notiz_marker ... ERROR
+test_notiz_bleibt_frei_editierbar_ohne_kredit_zuordnung_zu_verlieren ... ERROR
+test_zuordnen_lehnt_mehrzeilige_buchung_ohne_datenverlust_ab ... ERROR
+test_zuordnen_teilt_eine_einzelne_ratenzeile_in_zins_und_tilgung ... ERROR
+test_verteile_zins_erhaelt_jeden_cent ... ok
+test_migration_007_zweimal_und_view ... ok
+test_migration_015_zieht_alte_marker_nach_und_protokolliert_fehlende_kredite ... ERROR
+
+Fehlerursache aller 9 betroffenen Kreditfälle:
+sqlite3.OperationalError: unable to open database file
+PermissionError: [WinError 5] Zugriff verweigert beim Aufräumen der tempfile-Verzeichnisse unter %TEMP%.
+
+Ran 11 tests in 0.067s
+FAILED (errors=17)
+
+Befehl: C:\Users\lblet\dev\finanz-dashboard-sparten\.venv\Scripts\python.exe -m unittest tests.test_kredit.KreditLogikTest tests.test_kredit.KreditMigrationTest.test_migration_007_zweimal_und_view -v
+Ergebnis: Exit 0
+test_verteile_zins_erhaelt_jeden_cent ... ok
+test_migration_007_zweimal_und_view ... ok
+----------------------------------------------------------------------
+Ran 2 tests in 0.036s
+OK
+
+Zusatzprobe ohne tempfile:
+apply1 [15]
+apply2 []
+rows [(1, 'Kreditrate:1'), (None, 'Kreditrate:999999')]
+log [('kreditrate_ungeklaert', 'buchung:2')]

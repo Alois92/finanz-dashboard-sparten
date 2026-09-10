@@ -78,10 +78,6 @@ def _pruefe_kredit_referenzen(con, daten: dict, bereich: Bereich) -> None:
             raise HTTPException(422, "Konto gehoert nicht zur Sparte des Kredits")
 
 
-def _rate_marker(kredit_id: int) -> str:
-    return f"Kreditrate:{kredit_id}"
-
-
 def _jahresstatus(con, kredit_id: int, jahr: int):
     row = con.execute(
         "SELECT status, zins_cent FROM kredit_jahr WHERE kredit_id=? AND jahr=?",
@@ -91,13 +87,13 @@ def _jahresstatus(con, kredit_id: int, jahr: int):
 
 
 def _raten(con, kredit_id: int, jahr: int | None = None):
-    sql = """SELECT b.id, b.datum, b.betrag_cent,
+    sql = """SELECT b.id, b.kredit_id, b.datum, b.betrag_cent,
                      COALESCE((SELECT z.betrag_cent FROM buchungszeile z
                                WHERE z.buchung_id=b.id AND z.neutral=0 LIMIT 1), 0) zins_cent,
                      COALESCE((SELECT z.betrag_cent FROM buchungszeile z
                                WHERE z.buchung_id=b.id AND z.neutral=1 LIMIT 1), 0) tilgung_cent
-              FROM buchung b WHERE b.notiz=?"""
-    params: list = [_rate_marker(kredit_id)]
+              FROM buchung b WHERE b.kredit_id=?"""
+    params: list = [kredit_id]
     if jahr is not None:
         sql += " AND strftime('%Y', b.datum)=?"
         params.append(str(jahr))
@@ -224,8 +220,8 @@ def _rate_schaetzung(con, kredit, jahr: int) -> tuple[int, str]:
     ).fetchone()
     if row:
         anzahl = con.execute(
-            "SELECT count(*) FROM buchung WHERE notiz=? AND strftime('%Y',datum)=?",
-            (_rate_marker(kredit["id"]), str(row["jahr"])),
+            "SELECT count(*) FROM buchung WHERE kredit_id=? AND strftime('%Y',datum)=?",
+            (kredit["id"], str(row["jahr"])),
         ).fetchone()[0]
         return (row["zins_cent"] // anzahl if anzahl else 0), "geschaetzt"
     if kredit["zinssatz"] is not None:
@@ -256,8 +252,8 @@ def create_rate(kredit_id: int, data: RateIn, con=Depends(db_dep), bereich: Bere
     jahr_status, jahreszins = _jahresstatus(con, kredit_id, data.datum.year)
     if jahr_status == "bestaetigt":
         bisher = con.execute(
-            "SELECT count(*) FROM buchung WHERE notiz=? AND strftime('%Y',datum)=?",
-            (_rate_marker(kredit_id), str(data.datum.year)),
+            "SELECT count(*) FROM buchung WHERE kredit_id=? AND strftime('%Y',datum)=?",
+            (kredit_id, str(data.datum.year)),
         ).fetchone()[0]
         zins = verteile_zins(jahreszins, bisher + 1)[-1]
         status = "bestaetigt"
@@ -267,9 +263,9 @@ def create_rate(kredit_id: int, data: RateIn, con=Depends(db_dep), bereich: Bere
     with con:
         bid = con.execute(
             "INSERT INTO buchung(sparte_id,datum,typ,betrag_cent,bankkonto_id,zahlungsart,"
-            "buchungsstatus,text,notiz,bankumsatz_id) VALUES(?,?, 'ausgabe', ?, ?, 'bank', 'zugeordnet', ?, ?, ?)",
+            "buchungsstatus,text,notiz,bankumsatz_id,kredit_id) VALUES(?,?, 'ausgabe', ?, ?, 'bank', 'zugeordnet', ?, NULL, ?, ?)",
             (kredit["sparte_id"], data.datum.isoformat(), amount, kredit["konto_id"],
-             kredit["name"], _rate_marker(kredit_id), data.bankumsatz_id),
+             kredit["name"], data.bankumsatz_id, kredit_id),
         ).lastrowid
         con.execute(
             "INSERT INTO buchungszeile(buchung_id,kategorie_id,betrag_cent,neutral) VALUES(?,?,?,0)",
@@ -295,7 +291,7 @@ def create_rate(kredit_id: int, data: RateIn, con=Depends(db_dep), bereich: Bere
                     "UPDATE buchungszeile SET betrag_cent=? WHERE buchung_id=? AND neutral=1",
                     (rate["betrag_cent"] - rate_zins, rate["id"]),
                 )
-    return {"id": bid, "datum": data.datum.isoformat(), "betrag_cent": amount,
+    return {"id": bid, "kredit_id": kredit_id, "datum": data.datum.isoformat(), "betrag_cent": amount,
             "zins_cent": zins, "tilgung_cent": tilgung, "status": status,
             "hinweis": None if zins else "Zinsanteil unbekannt, ganze Rate vorlaeufig als Tilgung"}
 
@@ -345,5 +341,21 @@ def assign_rates(kredit_id: int, data: ZuordnenIn,
                 "INSERT INTO buchungszeile(buchung_id,kategorie_id,betrag_cent,neutral) VALUES(?,?,?,1)",
                 (bid, kredit["kategorie_rate_id"], total),
             )
-            con.execute("UPDATE buchung SET notiz=? WHERE id=?", (_rate_marker(kredit_id), bid))
+            con.execute("UPDATE buchung SET kredit_id=? WHERE id=?", (kredit_id, bid))
+    return {"raten": len(ids), "buchung_ids": ids}
+
+
+@router.post("/kredite/{kredit_id}/raten/loesen")
+def release_rates(kredit_id: int, data: ZuordnenIn,
+                  con=Depends(db_dep), bereich: BereichDep = Bereich(1)):
+    _kredit(con, kredit_id, bereich)
+    ids = list(dict.fromkeys(data.buchung_ids))
+    for bid in ids:
+        pruefe_buchung(con, bid, bereich)
+        row = con.execute("SELECT kredit_id FROM buchung WHERE id=?", (bid,)).fetchone()
+        if row["kredit_id"] != kredit_id:
+            raise HTTPException(422, "Buchung ist diesem Kredit nicht zugeordnet")
+    with con:
+        for bid in ids:
+            con.execute("UPDATE buchung SET kredit_id=NULL WHERE id=?", (bid,))
     return {"raten": len(ids), "buchung_ids": ids}

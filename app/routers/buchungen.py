@@ -149,7 +149,7 @@ def _lade_buchungen(con, ids, bereich):
     marks = ','.join('?' for _ in ids)
     buchungen = [dict(r) for r in con.execute(
         "SELECT b.id,b.sparte_id,s.name AS sparte_name,b.datum,b.typ,b.version,"
-        "b.betrag_cent,b.zahlungsart,b.belegstatus,b.buchungsstatus,b.text,b.notiz,"
+        "b.betrag_cent,b.zahlungsart,b.belegstatus,b.buchungsstatus,b.text,b.notiz,b.kredit_id,"
         "b.transfer_gruppe_id,b.kontakt_id,k.name AS kontakt_name "
         "FROM buchung b JOIN sparte s ON s.id=b.sparte_id "
         "LEFT JOIN kontakt k ON k.id=b.kontakt_id "
@@ -467,7 +467,7 @@ def _delete_buchung(buchung_id: int, con: sqlite3.Connection, bereich: Bereich):
 def _buchung_detail(con: sqlite3.Connection, buchung_id: int) -> dict:
     row = con.execute(
         "SELECT b.id, b.sparte_id, s.name AS sparte_name, b.datum, b.typ, "
-        "b.version, b.betrag_cent, b.zahlungsart, b.belegstatus, b.buchungsstatus, b.text, b.notiz "
+        "b.version, b.betrag_cent, b.zahlungsart, b.belegstatus, b.buchungsstatus, b.text, b.notiz, b.kredit_id "
         "FROM buchung b JOIN sparte s ON s.id = b.sparte_id WHERE b.id = ?",
         (buchung_id,),
     ).fetchone()

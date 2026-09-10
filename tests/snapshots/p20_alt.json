@@ -113,7 +113,8 @@
       "neutral_cent": 0,
       "belege": [],
       "zahlungsstatus": "Zahlung unbekannt",
-      "bezahlt_von_sparte_id": null
+      "bezahlt_von_sparte_id": null,
+      "kredit_id": null
     },
     {
       "id": 3,
@@ -145,7 +146,8 @@
       "neutral_cent": 0,
       "belege": [],
       "zahlungsstatus": "Zahlung unbekannt",
-      "bezahlt_von_sparte_id": null
+      "bezahlt_von_sparte_id": null,
+      "kredit_id": null
     }
   ],
   "/api/dashboard?bereich_id=2": {

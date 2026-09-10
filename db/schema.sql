@@ -477,6 +477,7 @@ CREATE INDEX idx_kassazaehlung_konto_datum ON kassazaehlung (konto_id, datum);
 -- P12: Auslagen, Ausgleich und wiederholbare Geldaktionen.
 ALTER TABLE buchung ADD COLUMN version INTEGER NOT NULL DEFAULT 1;
 ALTER TABLE buchung ADD COLUMN client_request_id TEXT;
+ALTER TABLE buchung ADD COLUMN kredit_id INTEGER REFERENCES kredit(id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_buchung_client_request
     ON buchung (client_request_id) WHERE client_request_id IS NOT NULL;
 
@@ -566,3 +567,6 @@ CREATE TABLE IF NOT EXISTS hinweis_aus (
     erstellt_am TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE(bereich_id, schluessel)
 );
+
+-- Migration 015: Index zuletzt anlegen, damit die Reihenfolge dem Nachzug entspricht
+CREATE INDEX idx_buchung_kredit ON buchung (kredit_id);
