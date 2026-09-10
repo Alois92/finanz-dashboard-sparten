@@ -86,6 +86,47 @@ class StaticNeuTest(unittest.TestCase):
         self.assertEqual(200, status, data)
         self.assertEqual(sorted(set([2024, 2026]), reverse=True), data["jahre"])
 
+    # P30b: Gerüst-Lücken geschlossen (docs/neubau/SCHULDEN.md) - state.filter,
+    # #year-select/#sparte-select/#filter-kategorie mit zentralem Re-Render, wizard()
+    # in ui.js. Diese Tests prüfen nur die Existenz der neuen Exporte/Bindungen im
+    # ausgelieferten JavaScript, wie es die bestehenden Tests dieser Datei schon tun -
+    # kein Browser/Node-Interpreter nötig.
+    def test_app_js_hat_zentrales_filterobjekt(self):
+        status, appjs = self.request("GET", "/neu/app.js")
+        self.assertEqual(200, status)
+        text = appjs.decode("utf-8")
+        self.assertIn("state.filter", text)
+        self.assertIn("neu-jahr", text)
+        self.assertIn("neu-kategorie", text)
+
+    def test_app_js_verdrahtet_year_und_sparte_select_mit_setfilter(self):
+        _, appjs = self.request("GET", "/neu/app.js")
+        text = appjs.decode("utf-8")
+        self.assertIn("#year-select", text)
+        self.assertIn("setFilter", text)
+        self.assertIn("function setFilter", text)
+
+    def test_app_js_befuellt_filter_kategorie(self):
+        _, appjs = self.request("GET", "/neu/app.js")
+        text = appjs.decode("utf-8")
+        self.assertIn("drawKategorieFilter", text)
+        self.assertIn("/kategorien", text)
+
+    def test_ui_js_hat_wizard_export(self):
+        status, uijs = self.request("GET", "/neu/ui.js")
+        self.assertEqual(200, status)
+        text = uijs.decode("utf-8")
+        self.assertIn("export function wizard", text)
+        self.assertIn("Zurück", text)
+        self.assertIn("Abschließen", text)
+
+    def test_konten_js_nutzt_wizard_statt_lokalem_zwei_schritt_dialog(self):
+        status, kontenjs = self.request("GET", "/neu/pages/konten.js")
+        self.assertEqual(200, status)
+        text = kontenjs.decode("utf-8")
+        self.assertIn("wizard(", text)
+        self.assertIn("import ", text)
+
 
 if __name__ == "__main__":
     unittest.main()

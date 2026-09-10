@@ -19,12 +19,11 @@ function ensureCss() {
   cssLoaded = true;
 }
 
-// P30 verdrahtet #year-select, #filter-richtung, #filter-zahlungsart und
-// #filter-kategorie nicht (kein onchange, kein state.filter) — siehe Bericht
-// "Wunsch an das Gerüst". Lokaler Ersatz: einmalig binden (dataset-Flag, die
-// Elemente werden von app.js wiederverwendet, nicht neu erzeugt) und bei
-// Änderung einen echten hashchange auslösen, damit app.js Sidebar, Kopfzeile
-// und Seite konsistent neu zeichnet (wie bei echter Navigation).
+// P30b: #year-select, #sparte-select und #filter-kategorie werden jetzt zentral in
+// app.js verdrahtet (state.filter, setFilter() rendert die aktive Seite neu) - der
+// frühere lokale Ersatz dafür (hashchange manuell auslösen) ist entfallen, sonst würde
+// diese Seite doppelt neu zeichnen. #filter-richtung und #filter-zahlungsart bleiben
+// lokal, weil sie nicht Teil des zentralen Filterobjekts sind (nur Jahr/Sparte/Kategorie).
 function bindOnce(el, handler) {
   if (!el || el.dataset.p31Bound) return;
   el.dataset.p31Bound = '1';
@@ -33,12 +32,9 @@ function bindOnce(el, handler) {
 
 function refresh() { window.dispatchEvent(new Event('hashchange')); }
 
-function bindFilterControls(state) {
-  bindOnce(document.querySelector('#sparte-select'), refresh);
-  bindOnce(document.querySelector('#year-select'), e => { state.year = e.target.value; refresh(); });
+function bindFilterControls() {
   bindOnce(document.querySelector('#filter-richtung'), refresh);
   bindOnce(document.querySelector('#filter-zahlungsart'), refresh);
-  bindOnce(document.querySelector('#filter-kategorie'), refresh);
 }
 
 function currentYear(state) {
@@ -76,8 +72,13 @@ function filterAktivText(state) {
 }
 
 function resetFilters(state) {
+  // state.filter (zentral, P30b) und die Alias-Felder gemeinsam zurücksetzen, sonst
+  // überschreibt app.js beim nächsten Render #sparte-select/#filter-kategorie wieder
+  // mit dem noch alten state.filter.*.
   state.sparteId = '';
+  if (state.filter) { state.filter.sparteId = ''; state.filter.kategorieId = ''; }
   localStorage.setItem('neu-sparte', '');
+  localStorage.setItem('neu-kategorie', '');
   for (const id of ['sparte-select', 'filter-richtung', 'filter-zahlungsart', 'filter-kategorie']) {
     const el = document.querySelector('#' + id);
     if (el) el.value = '';
@@ -154,6 +155,7 @@ function sparteName(state, id) {
 
 function goSparte(state, sparteId) {
   state.sparteId = String(sparteId);
+  if (state.filter) state.filter.sparteId = state.sparteId;
   localStorage.setItem('neu-sparte', state.sparteId);
   location.hash = '#/sparte';
 }
@@ -268,7 +270,7 @@ function renderVerlauf(root, state, data) {
 
 export function render(root, state) {
   ensureCss();
-  bindFilterControls(state);
+  bindFilterControls();
 
   root.innerHTML = `
     <div class="grid g3" id="kpis"></div>

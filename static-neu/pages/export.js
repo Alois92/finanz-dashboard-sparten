@@ -61,21 +61,13 @@ export async function render(root, state) {
   };
   root.innerHTML = '<section class="card"><p class="muted">Export wird geladen …</p></section>';
   await ladeProfil(ctx);
-  bindeGlobaleFilter(ctx);
 }
 
-// Sparte (Sidebar/Kopf-Select) und Jahr (#year-select) sind Teile des zentralen
-// Zustands, werden aber laut Gerüst (app.js) nicht global mit einem Seiten-Rerender
-// verdrahtet – jede Seite muss selbst reagieren. Siehe "Wunsch an das Gerüst".
-function bindeGlobaleFilter(ctx) {
-  const jahrSel = document.querySelector('#year-select');
-  if (jahrSel) jahrSel.addEventListener('change', () => render(ctx.root, ctx.state));
-  const sparteSel = document.querySelector('#sparte-select');
-  if (sparteSel) sparteSel.addEventListener('change', () => render(ctx.root, ctx.state));
-  document.querySelectorAll('#sidebar [data-sparte]').forEach(btn => {
-    btn.addEventListener('click', () => render(ctx.root, ctx.state));
-  });
-}
+// P30b: Sparte (Sidebar/Kopf-Select) und Jahr (#year-select) sind Teile des zentralen
+// state.filter aus app.js; ein Wechsel löst dort bereits ein Re-Render der aktiven
+// Seite aus (setFilter() ruft render() auf, das diese Seite neu importiert/aufruft).
+// Der frühere lokale Ersatz dafür (eigene change-Listener, die render() erneut
+// aufgerufen haben) ist entfallen, sonst würde diese Seite doppelt neu aufgebaut.
 
 async function ladeProfil(ctx) {
   try {
