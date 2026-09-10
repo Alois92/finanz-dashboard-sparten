@@ -353,7 +353,8 @@ def _update_buchung(buchung_id: int, b: BuchungIn, con: sqlite3.Connection, bere
     version = con.execute('SELECT version FROM buchung WHERE id = ?', (buchung_id,)).fetchone()[0]
     if b.version != version:
         raise HTTPException(409, 'Buchung wurde zwischenzeitlich geändert')
-    alt = con.execute("SELECT transfer_gruppe_id, bankkonto_id, bankumsatz_id FROM buchung WHERE id = ?",
+    alt = con.execute("SELECT transfer_gruppe_id, bankkonto_id, bankumsatz_id, kontakt_id, person_id "
+                      "FROM buchung WHERE id = ?",
                       (buchung_id,)).fetchone()
     if not alt:
         raise HTTPException(404, "Buchung nicht gefunden")
@@ -361,7 +362,7 @@ def _update_buchung(buchung_id: int, b: BuchungIn, con: sqlite3.Connection, bere
         raise HTTPException(400, "Umbuchungen sind gekoppelt - bitte loeschen "
                                  "und neu anlegen statt bearbeiten")
     b = b.model_copy(update={
-        feld: alt[feld] for feld in ('bankkonto_id', 'bankumsatz_id')
+        feld: alt[feld] for feld in ('bankkonto_id', 'bankumsatz_id', 'kontakt_id', 'person_id')
         if feld not in b.model_fields_set
     })
     _pruefe_sparte_und_zeilen(con, b, bereich)
