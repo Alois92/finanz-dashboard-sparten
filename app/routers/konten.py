@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
 
 from ..db import db_dep
+from ..rechenbasis import cursor_encode, cursor_decode
 from ..bereiche import Bereich, BereichDep, pruefe_konto, pruefe_sparte
 from ..bewegungen import erzeuge_transfer, storniere_transfer, pruefe_transfer
 from ..konten import kontostand as berechne_kontostand
@@ -148,18 +149,13 @@ def list_bewegungen(konto_id: int, von: date | None = None, bis: date | None = N
             sql += f' AND datum {op} ?'
             params.append(wert.isoformat())
     if cursor:
-        try:
-            datum, kennung = cursor.split('_')
-            datum = date.fromisoformat(datum).isoformat()
-            kennung = int(kennung)
-        except ValueError:
-            raise HTTPException(422,'Ungültiger Cursor') from None
+        datum, kennung = cursor_decode(cursor)
         sql += ' AND (datum<? OR (datum=? AND id<?))'
         params.extend((datum,datum,kennung))
     rows = [dict(r) for r in con.execute(sql+' ORDER BY datum DESC,id DESC LIMIT ?',(*params,limit+1))]
     mehr = len(rows)>limit
     rows = rows[:limit]
-    return {'bewegungen':rows,'naechster_cursor':f"{rows[-1]['datum']}_{rows[-1]['id']}" if mehr else None}
+    return {'bewegungen':rows,'naechster_cursor':cursor_encode(rows[-1]['datum'], rows[-1]['id']) if mehr else None}
 
 
 @router.get('/konten/{konto_id}/stand')

@@ -1,0 +1,14 @@
+{
+  "buchungen": 5000,
+  "messung": "ASGI GET einschließlich JSON und Dependencies",
+  "erster_aufruf_ms": 96.295,
+  "weitere_aufrufe_ms": [
+    71.623,
+    75.572,
+    67.937,
+    62.595,
+    55.206
+  ],
+  "maximum_ms": 96.295,
+  "grenze_ms": 300
+}

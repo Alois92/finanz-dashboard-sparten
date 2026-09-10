@@ -99,7 +99,7 @@ class BereicheTest(unittest.TestCase):
                 "text": "Lernmarker", "zeilen": [{"kategorie_id": kid or self.kategorien[self.haupt], "betrag_cent": 150}]}
 
     def test_buchungen_suche_und_schreiben(self):
-        self.assertEqual([self.buchungen[self.haupt]], [r["id"] for r in self.request("GET", "/api/buchungen")[1]])
+        self.assertEqual([self.buchungen[self.haupt]], [r["id"] for r in self.request("GET", "/api/buchungen")[1]['buchungen']])
         self.assertEqual([], self.request("GET", "/api/buchungen/suche?q=Vereinsmarker")[1])
         self.assertEqual([self.buchungen[self.verein]], [r["id"] for r in self.request("GET", "/api/buchungen/suche?q=Vereinsmarker&bereich_id=2")[1]])
         self.assertEqual(404, self.request("POST", "/api/buchungen", self.payload(kid=self.kategorien[self.verein]))[0])

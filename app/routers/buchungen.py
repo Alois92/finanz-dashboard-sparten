@@ -1,18 +1,18 @@
 """Buchungen: erfassen (Kopf + Zeilen), auflisten, bearbeiten, loeschen.
 Dazu Umbuchungen zwischen Sparten (zwei gekoppelte Buchungen)."""
 import logging
-import re
 import sqlite3
 import uuid
 from typing import Literal
+from dataclasses import replace
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from .. import rechenbasis as rb
 from ..db import db_dep
 from ..bereiche import (Bereich, BereichDep, pruefe_sparte, pruefe_kategorie,
-                        pruefe_konto, pruefe_buchung, pruefe_beleg, pruefe_umsatz,
-                        pruefe_globalgruppe)
+                        pruefe_konto, pruefe_buchung, pruefe_beleg, pruefe_umsatz)
 from ..regeln import normalisiere_regeltext
 from ..schemas import BuchungIn
 from ..auslagen import (ergaenze_auslage, pruefe_zahler, synchronisiere_auslage,
@@ -143,128 +143,18 @@ def _lerne_regel(con: sqlite3.Connection, text: str, sparte_id: int,
         log.exception("Automatisches Lernen der Regel fehlgeschlagen (Buchung bleibt gespeichert)")
 
 
-@router.get("/buchungen")
-def list_buchungen(sparte_id: int | None = None,
-                   von: str | None = None,
-                   bis: str | None = None,
-                   typ: str | None = None,
-                   monat: str | None = None,
-                   kategorie_id: int | None = None,
-                   globalgruppe_id: int | None = None,
-                   con: sqlite3.Connection = Depends(db_dep), bereich: BereichDep = Bereich(1)):
-    if sparte_id is not None:
-        pruefe_sparte(con, sparte_id, bereich)
-    if kategorie_id is not None:
-        pruefe_kategorie(con, kategorie_id, bereich)
-    if globalgruppe_id is not None:
-        pruefe_globalgruppe(con, globalgruppe_id, bereich)
-    if monat is not None and not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", monat):
-        raise HTTPException(400, "Monat muss das Format JJJJ-MM haben")
-    sql = ("SELECT b.id, b.sparte_id, s.name AS sparte_name, b.datum, b.typ, "
-           "b.version, b.betrag_cent, b.zahlungsart, b.belegstatus, b.buchungsstatus, "
-           "b.text, b.notiz, b.transfer_gruppe_id "
-           "FROM buchung b JOIN sparte s ON s.id = b.sparte_id WHERE s.bereich_id = ?")
-    params: list = [bereich.id]
-    if sparte_id is not None:
-        sql += " AND b.sparte_id = ?"; params.append(sparte_id)
-    if von:
-        sql += " AND b.datum >= ?"; params.append(von)
-    if bis:
-        sql += " AND b.datum <= ?"; params.append(bis)
-    if monat:
-        sql += " AND strftime('%Y-%m', b.datum) = ?"; params.append(monat)
-    if kategorie_id is not None and globalgruppe_id is not None:
-        sql += (" AND EXISTS (SELECT 1 FROM buchungszeile fz "
-                "JOIN kategorie_globalgruppe fkg ON fkg.kategorie_id = fz.kategorie_id "
-                "WHERE fz.buchung_id = b.id AND fz.kategorie_id = ? "
-                "AND fkg.globalgruppe_id = ?)")
-        params.extend((kategorie_id, globalgruppe_id))
-    elif kategorie_id is not None:
-        sql += (" AND EXISTS (SELECT 1 FROM buchungszeile fz "
-                "WHERE fz.buchung_id = b.id AND fz.kategorie_id = ?)")
-        params.append(kategorie_id)
-    elif globalgruppe_id is not None:
-        sql += (" AND EXISTS (SELECT 1 FROM buchungszeile gz "
-                "JOIN kategorie_globalgruppe kg ON kg.kategorie_id = gz.kategorie_id "
-                "WHERE gz.buchung_id = b.id AND kg.globalgruppe_id = ?)")
-        params.append(globalgruppe_id)
-    if typ:
-        sql += " AND b.typ = ?"; params.append(typ)
-    sql += " ORDER BY b.datum DESC, b.id DESC"
-    buchungen = [dict(r) for r in con.execute(sql, params).fetchall()]
-
-    gruppen_kategorien = None
-    if globalgruppe_id is not None:
-        gruppen_kategorien = {row["kategorie_id"] for row in con.execute(
-            "SELECT kategorie_id FROM kategorie_globalgruppe "
-            "WHERE globalgruppe_id = ?", (globalgruppe_id,)
-        ).fetchall()}
-
-    if buchungen:
-        ids = [b["id"] for b in buchungen]
-        marks = ",".join("?" * len(ids))
-        zeilen = con.execute(
-        f"SELECT z.buchung_id, z.id, z.kategorie_id, k.name AS kategorie_name, "
-        f"z.betrag_cent, z.notiz, z.neutral "
-            f"FROM buchungszeile z JOIN kategorie k ON k.id = z.kategorie_id "
-            f"WHERE z.buchung_id IN ({marks}) ORDER BY z.id",
-            ids,
-        ).fetchall()
-        by_buchung: dict[int, list] = {}
-        for z in zeilen:
-            by_buchung.setdefault(z["buchung_id"], []).append(dict(z))
-        belege = con.execute(
-            f"SELECT bb.buchung_id, bl.id, bl.dateiname "
-            f"FROM buchung_beleg bb JOIN beleg bl ON bl.id = bb.beleg_id "
-            f"WHERE bb.buchung_id IN ({marks}) AND bl.bereich_id = ? ORDER BY bl.id",
-            [*ids, bereich.id],
-        ).fetchall()
-        belege_by: dict[int, list] = {}
-        for bl in belege:
-            belege_by.setdefault(bl["buchung_id"], []).append(
-                {"id": bl["id"], "dateiname": bl["dateiname"]})
-        for b in buchungen:
-            b["zeilen"] = by_buchung.get(b["id"], [])
-            b["neutral_cent"] = sum(z["betrag_cent"] for z in b["zeilen"] if z.get("neutral", 0))
-            if kategorie_id is not None or globalgruppe_id is not None:
-                passende_zeilen = [z for z in b["zeilen"]
-                                   if (kategorie_id is None or z["kategorie_id"] == kategorie_id)
-                                   and (gruppen_kategorien is None
-                                        or z["kategorie_id"] in gruppen_kategorien)]
-                b["filter_betrag_cent"] = sum(
-                    z["betrag_cent"] for z in passende_zeilen)
-            b["belege"] = belege_by.get(b["id"], [])
-            b['zahlungsstatus'] = _zahlungsstatus(con, b['id'])
-            ergaenze_auslage(con, b)
-    return buchungen
-
-
-@router.get("/buchungen/suche")
-def suche_buchungen(q: str, con: sqlite3.Connection = Depends(db_dep), bereich: BereichDep = Bereich(1)):
-    """Durchsucht Buchungstext, Notiz und Kontaktname Unicode-case-insensitiv."""
-    con.create_function(
-        "casefold", 1, lambda value: str(value or "").casefold(), deterministic=True
-    )
-    escaped = q.strip().casefold().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-    pattern = f"%{escaped}%"
-    rows = con.execute(
-        "SELECT b.id, b.sparte_id, s.name AS sparte_name, b.datum, b.typ, "
-        "b.version, b.betrag_cent, b.zahlungsart, b.belegstatus, b.buchungsstatus, "
-        "b.text, b.notiz, b.transfer_gruppe_id, b.kontakt_id, "
-        "k.name AS kontakt_name "
-        "FROM buchung b "
-        "JOIN sparte s ON s.id = b.sparte_id "
-        "LEFT JOIN kontakt k ON k.id = b.kontakt_id "
-        "WHERE s.bereich_id = ? AND (casefold(COALESCE(b.text, '')) LIKE ? ESCAPE '\\' "
-        "OR casefold(COALESCE(b.notiz, '')) LIKE ? ESCAPE '\\' "
-        "OR casefold(COALESCE(k.name, '')) LIKE ? ESCAPE '\\' "
-        ") ORDER BY b.datum DESC, b.id DESC LIMIT 200",
-        (bereich.id, pattern, pattern, pattern),
-    ).fetchall()
-    buchungen = [dict(row) for row in rows]
-    if not buchungen:
-        return buchungen
-
+def _lade_buchungen(con, ids, bereich):
+    if not ids:
+        return []
+    marks = ','.join('?' for _ in ids)
+    buchungen = [dict(r) for r in con.execute(
+        "SELECT b.id,b.sparte_id,s.name AS sparte_name,b.datum,b.typ,b.version,"
+        "b.betrag_cent,b.zahlungsart,b.belegstatus,b.buchungsstatus,b.text,b.notiz,"
+        "b.transfer_gruppe_id,b.kontakt_id,k.name AS kontakt_name "
+        "FROM buchung b JOIN sparte s ON s.id=b.sparte_id "
+        "LEFT JOIN kontakt k ON k.id=b.kontakt_id "
+        f"WHERE b.id IN ({marks}) AND s.bereich_id=? ORDER BY b.datum DESC,b.id DESC",
+        [*ids, bereich.id])]
     ids = [b["id"] for b in buchungen]
     marks = ",".join("?" * len(ids))
     zeilen = con.execute(
@@ -295,6 +185,66 @@ def suche_buchungen(q: str, con: sqlite3.Connection = Depends(db_dep), bereich: 
         buchung['zahlungsstatus'] = _zahlungsstatus(con, buchung['id'])
         ergaenze_auslage(con, buchung)
     return buchungen
+
+
+def _buchungsseite(con, f, q='', limit=100, cursor=None, typ=None):
+    rb.pruefe_filter(con, f)
+    where, params = rb.where_zeilen(con, f)
+    # Treffer enthalten auch Umbuchungen und neutrale Zeilen; finanzielle
+    # Summen werden ausschließlich aus der gefilterten Einnahmen/Ausgaben-View gebildet.
+    selection = ' WHERE b.id IN (SELECT v.buchung_id FROM v_zeile v' + where + ')'
+    if typ:
+        selection += ' AND b.typ=?'; params.append(typ)
+    if q:
+        con.create_function('casefold', 1, lambda value: str(value or '').casefold(), deterministic=True)
+        escaped = q.strip().casefold().replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
+        pattern = '%' + escaped + '%'
+        selection += (" AND (casefold(b.text) LIKE ? ESCAPE '\\' OR casefold(b.notiz) LIKE ? ESCAPE '\\' "
+                      "OR casefold(k.name) LIKE ? ESCAPE '\\')")
+        params.extend((pattern, pattern, pattern))
+    source = ' FROM buchung b LEFT JOIN kontakt k ON k.id=b.kontakt_id'
+    count = con.execute('SELECT COUNT(*)' + source + selection, params).fetchone()[0]
+    w, p = rb.where_zeilen(con, f)
+    totals = dict(con.execute('SELECT ' + rb.SUMMEN_SQL + ' FROM v_einnahmen_ausgaben v' + w +
+                             ' AND v.buchung_id IN (SELECT b.id' + source + selection + ')', [*p, *params]).fetchone())
+    totals['anzahl'] = count
+    page_where, page_params = selection, list(params)
+    if cursor:
+        datum, bid = rb.cursor_decode(cursor)
+        page_where += ' AND (b.datum<? OR (b.datum=? AND b.id<?))'
+        page_params.extend((datum, datum, bid))
+    page = con.execute('SELECT b.id,b.datum' + source + page_where +
+                       ' ORDER BY b.datum DESC,b.id DESC LIMIT ?', [*page_params, limit + 1]).fetchall()
+    more = len(page) > limit
+    page = page[:limit]
+    rows = _lade_buchungen(con, [r['id'] for r in page], Bereich(f.bereich_id))
+    if f.kategorie_id is not None or f.globalgruppe_id is not None:
+        amounts = {r['buchung_id']: r['cent'] for r in con.execute(
+            'SELECT v.buchung_id,SUM(v.betrag_cent) AS cent FROM v_einnahmen_ausgaben v' + w +
+            ' GROUP BY v.buchung_id', p)}
+        for row in rows:
+            row['filter_betrag_cent'] = amounts.get(row['id'], 0)
+    return {'buchungen': rows, 'summen': totals,
+            'naechster_cursor': rb.cursor_encode(page[-1]['datum'], page[-1]['id']) if more else None}
+
+
+@router.get('/buchungen')
+def list_buchungen(f: rb.Filter = Depends(rb.filter_dep), q: str = '',
+                    limit: int = Query(100, ge=1, le=1000), cursor: str | None = None,
+                    typ: Literal['einnahme', 'ausgabe', 'umbuchung'] | None = None,
+                    con: sqlite3.Connection = Depends(db_dep)):
+    return _buchungsseite(con, rb.auswertungsfilter(f), q, limit, cursor, typ)
+
+
+@router.get('/buchungen/suche')
+def suche_buchungen(q: str, con: sqlite3.Connection = Depends(db_dep),
+                    bereich: BereichDep = Bereich(1), f: rb.Filter = Depends(rb.filter_dep),
+                    stichtag: str | None = None):
+    """Kompatible Listenform (maximal 200), berechnet über dieselbe Buchungsliste."""
+    if not isinstance(f, rb.Filter):
+        f = rb.Filter(bereich_id=bereich.id)
+    f = replace(f, stichtag=stichtag)
+    return _buchungsseite(con, f, q=q, limit=200)['buchungen']
 
 
 @router.post("/umbuchungen", status_code=201)
