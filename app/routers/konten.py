@@ -261,12 +261,6 @@ def buchen_zaehlung(konto_id: int, zaehlung_id: int, body: ZaehlungBuchenIn,
     ).fetchone()
     if not kategorie or kategorie['sparte_id'] != kassa['sparte_id'] or kategorie['richtung'] not in ('beides', 'ausgabe' if zaehlung['differenz_cent'] < 0 else 'einnahme'):
         raise HTTPException(422, 'Kategorie passt nicht zur Kassadifferenz')
-    con.execute(
-        "INSERT INTO kategorie(sparte_id,name,richtung) "
-        "SELECT ?, 'Kassadifferenz', 'beides' WHERE NOT EXISTS "
-        "(SELECT 1 FROM kategorie WHERE sparte_id=? AND lower(name)='kassadifferenz')",
-        (kassa['sparte_id'], kassa['sparte_id']),
-    )
     typ = 'einnahme' if zaehlung['differenz_cent'] > 0 else 'ausgabe'
     betrag = abs(zaehlung['differenz_cent'])
     cur = con.execute(

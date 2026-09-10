@@ -105,12 +105,20 @@ class SaldoankerApiTest(unittest.TestCase):
             result["gerechnet_cent"], result["differenz_cent"], result["status"]
         ))
         kid = self.kategorien[sparte_id]
+        self.assertEqual(0, self.con.execute(
+            "SELECT COUNT(*) FROM kategorie WHERE sparte_id=? AND lower(name)='kassadifferenz'",
+            (sparte_id,),
+        ).fetchone()[0])
         status, gebucht = self.request(
             "POST", f"/api/konten/{konto_id}/zaehlung/{result['id']}/buchen",
             {"kategorie_id": kid, "text": "Kassadifferenz"},
         )
         self.assertEqual(201, status, gebucht)
         self.assertEqual("geklaert", gebucht["status"])
+        self.assertEqual(0, self.con.execute(
+            "SELECT COUNT(*) FROM kategorie WHERE sparte_id=? AND lower(name)='kassadifferenz'",
+            (sparte_id,),
+        ).fetchone()[0])
         self.assertEqual(-2000, self.con.execute(
             "SELECT betrag_signed_cent FROM bewegung WHERE konto_id=? ORDER BY id DESC LIMIT 1",
             (konto_id,)
@@ -145,7 +153,7 @@ class SaldoankerMigrationTest(unittest.TestCase):
                         [(0, 'basis'), (1, 'schema_version'), (2, 'import_batch_erkennung'),
                          (3, 'bereiche'), (4, 'konten_bewegungen'), (5, 'placeholder')])
         con.commit()
-        self.assertEqual([6, 7, 8, 9], migrate.anwenden(con, None))
+        self.assertEqual([6, 7, 8, 9, 10], migrate.anwenden(con, None))
         snapshot = "\n".join(con.iterdump())
         self.assertEqual([], migrate.anwenden(con, None))
         self.assertEqual(snapshot, "\n".join(con.iterdump()))

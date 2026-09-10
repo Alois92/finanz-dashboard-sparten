@@ -195,7 +195,7 @@ class KreditMigrationTest(unittest.TestCase):
                  (3, "bereiche"), (4, "konten_bewegungen")],
             )
             con.commit()
-            self.assertEqual([5, 6, 7, 8, 9], migrate.anwenden(con, None))
+            self.assertEqual([5, 6, 7, 8, 9, 10], migrate.anwenden(con, None))
             snapshot = "\n".join(con.iterdump())
             self.assertEqual([], migrate.anwenden(con, None))
             self.assertEqual(snapshot, "\n".join(con.iterdump()))

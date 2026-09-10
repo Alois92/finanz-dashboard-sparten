@@ -47,6 +47,27 @@ class P15KernTest(unittest.TestCase):
             "SELECT 1 FROM sqlite_master WHERE type='table' AND name='kennzahl'"
         ).fetchone())
 
+    def test_migration_010_kennzeichnet_unzugeordnete_bestandsregeln_als_manuell(self):
+        from app import migrate
+
+        self.con.execute(
+            "INSERT INTO regel(name, bedingung_text, ziel_sparte_id, ziel_kategorie_id, "
+            "ziel_typ, bereich_id, quelle, auto_verbuchen, gelernt_aus_buchung_id) "
+            "VALUES(?,?,?,?,?,?,?,?,NULL)",
+            ("Alte Stichwortregel", "lieferant", self.sparte, self.kategorie,
+             "ausgabe", 1, "gelernt", 1),
+        )
+        self.con.execute("DELETE FROM schema_version WHERE version=10")
+        self.con.commit()
+
+        self.assertEqual([10], migrate.anwenden(self.con, None))
+        regel = self.con.execute(
+            "SELECT quelle, auto_verbuchen FROM regel WHERE name=?",
+            ("Alte Stichwortregel",),
+        ).fetchone()
+        self.assertEqual(("manuell", 0), tuple(regel))
+        self.assertEqual([], migrate.anwenden(self.con, None))
+
     def test_bestandsregeln_bleiben_vorschlaege_und_csv_import_verbucht_nichts(self):
         from app import migrate
         from app.routers.import_bank import import_csv
