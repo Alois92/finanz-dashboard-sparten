@@ -82,20 +82,10 @@ export function render(root, state) {
     return f;
   }
 
-  async function ladeKategorienFuerFilter() {
-    if (!filterKategorie) return;
-    const behalten = filterKategorie.value;
-    const params = {nur_aktive: 'true'};
-    if (state.sparteId) params.sparte_id = state.sparteId;
-    try {
-      const kats = await api('/kategorien', {params, bereichId: state.bereichId});
-      filterKategorie.innerHTML = '<option value="">alle</option>' +
-        kats.map(k => `<option value="${k.id}">${esc(k.name)}</option>`).join('');
-      if (kats.some(k => String(k.id) === behalten)) filterKategorie.value = behalten;
-    } catch (error) {
-      toast(error.detail || error.message);
-    }
-  }
+  // P30b: #filter-kategorie wird zentral in app.js befüllt (abhängig von state.sparteId)
+  // und ein Wechsel löst dort bereits ein volles Re-Render dieser Seite aus - der frühere
+  // lokale Ersatz (eigenes Laden + eigener change-Listener) ist entfallen, sonst würde
+  // die Seite die Optionen doppelt laden und der zentrale Filterwechsel griffe nicht.
 
   function zeichneTabelle() {
     const rows = local.rows;
@@ -183,12 +173,15 @@ export function render(root, state) {
     if (filterRichtung) filterRichtung.value = '';
     if (filterZahlungsart) filterZahlungsart.value = '';
     if (filterKategorie) filterKategorie.value = '';
+    // Kategorie ist Teil des zentralen state.filter (P30b) - sonst stellt app.js beim
+    // nächsten Re-Render die alte Auswahl wieder her.
+    if (state.filter) state.filter.kategorieId = '';
+    localStorage.setItem('neu-kategorie', '');
     ladeSeite(true);
   };
   elMore.onclick = () => ladeSeite(false);
   if (filterRichtung) filterRichtung.onchange = () => ladeSeite(true);
   if (filterZahlungsart) filterZahlungsart.onchange = () => ladeSeite(true);
-  if (filterKategorie) filterKategorie.onchange = () => ladeSeite(true);
 
   // ---------- Bearbeiten-Dialog ----------
 
@@ -358,6 +351,5 @@ export function render(root, state) {
     }
   }
 
-  ladeKategorienFuerFilter();
   ladeSeite(true);
 }

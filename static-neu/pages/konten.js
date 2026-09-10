@@ -1,6 +1,6 @@
 import {api} from '../api.js';
 import {esc, fmtEur, fmtDate, parseBetrag} from '../format.js';
-import {toast, drill} from '../ui.js';
+import {toast, drill, wizard} from '../ui.js';
 
 const HEUTE = new Date().toISOString().slice(0, 10);
 const ART_LABEL = {bank: 'Bank', karte: 'Karte', kassa: 'Kassa', depot: 'Depot', wallet: 'Wallet'};
@@ -240,91 +240,78 @@ function openAnkerDialog(konto, reload){
   };
 }
 
+// P30b: nutzt den ins Gerüst gezogenen wizard() aus ui.js statt eines lokal gebauten
+// Zwei-Schritt-Formulars. Schritt 1 zählt die Kassa und bucht bei Differenz 0 sofort ab
+// (ctx.finishNow, kein Schritt 2); bei Differenz kommt Schritt 2 zur Kategoriewahl.
+// lockBack:true auf Schritt 1, weil ein erneutes "Weiter" sonst eine zweite Zählung anlegen
+// würde (wie zuvor: kein Zurück zum ausgefüllten Formular).
 function openZaehlungDialog(konto, state, reload){
-  drill('Kassa gezählt, Differenz buchen', `
-    <p class="muted">${esc(konto.name)}</p>
-    <form id="zaehlung-form">
-      <label class="field">Datum<input type="date" name="datum" value="${HEUTE}" max="${HEUTE}" required></label>
-      <label class="field">Gezählter Betrag in €<input name="gezaehlt" inputmode="decimal" required placeholder="0,00"></label>
-      <p class="field-error" id="zaehlung-error" hidden></p>
-      <button class="btn primary" type="submit">Zählen</button>
-    </form>
-    <div id="zaehlung-schritt2" hidden></div>
-  `);
-  const form = document.querySelector('#zaehlung-form');
-  form.onsubmit = async e => {
-    e.preventDefault();
-    const fd = new FormData(form);
-    const gezaehlt = centFromInput(fd.get('gezaehlt'));
-    if(gezaehlt == null){
-      const box = document.querySelector('#zaehlung-error');
-      box.textContent = 'Betrag ist ungültig.';
-      box.hidden = false;
-      return;
-    }
-    const body = {datum: fd.get('datum'), gezaehlt_cent: gezaehlt};
-    try{
-      const res = await api(`/konten/${konto.id}/zaehlung`, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
-      if(res.differenz_cent === 0){
-        toast('Kassa gezählt: keine Differenz.');
-        closeDrill();
-        reload();
-        return;
-      }
-      form.querySelectorAll('input,select,button').forEach(f => f.disabled = true);
-      await zaehlungSchritt2(konto, state, res, reload);
-    }catch(error){
-      const box = document.querySelector('#zaehlung-error');
-      box.textContent = error.detail || error.message;
-      box.hidden = false;
-    }
-  };
-}
-
-async function zaehlungSchritt2(konto, state, zaehlung, reload){
-  const box = document.querySelector('#zaehlung-schritt2');
-  box.hidden = false;
-  const richtung = zaehlung.differenz_cent > 0 ? 'einnahme' : 'ausgabe';
-  let kategorien = [];
-  try{
-    kategorien = await api('/kategorien', {params: {sparte_id: konto.sparte_id, nur_aktive: true}});
-  }catch{ kategorien = [] }
-  const passend = kategorien.filter(k => k.richtung === richtung || k.richtung === 'beides');
-  const vorauswahl = passend.find(k => k.name === 'Kassadifferenz') || passend[0];
-  box.innerHTML = `
-    <p>Differenz: <b>${fmtEur(zaehlung.differenz_cent)}</b> (gerechnet ${fmtEur(zaehlung.gerechnet_cent)}, gezählt ${fmtEur(zaehlung.gezaehlt_cent)})</p>
-    <form id="zaehlung-buchen-form">
-      <label class="field">Kategorie<select name="kategorie_id">
-        ${passend.map(k => `<option value="${k.id}" ${vorauswahl && k.id === vorauswahl.id ? 'selected' : ''}>${esc(k.name)}</option>`).join('') || '<option value="">– keine passende Kategorie –</option>'}
-      </select></label>
-      <p class="field-error" id="zaehlung-buchen-error" hidden></p>
-      <button class="btn primary" type="submit">Differenz buchen</button>
-    </form>
-  `;
-  const form = document.querySelector('#zaehlung-buchen-form');
-  form.onsubmit = async e => {
-    e.preventDefault();
-    const kategorieId = new FormData(form).get('kategorie_id');
-    if(!kategorieId){
-      const errBox = document.querySelector('#zaehlung-buchen-error');
-      errBox.textContent = 'Keine Kategorie ausgewählt.';
-      errBox.hidden = false;
-      return;
-    }
-    try{
-      await api(`/konten/${konto.id}/zaehlung/${zaehlung.id}/buchen`, {
-        method: 'POST', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({kategorie_id: Number(kategorieId)}),
-      });
-      toast('Kassadifferenz gebucht.');
-      closeDrill();
+  wizard({
+    title: 'Kassa gezählt, Differenz buchen',
+    steps: [
+      {
+        lockBack: true,
+        render: () => `
+          <p class="muted">${esc(konto.name)}</p>
+          <label class="field">Datum<input type="date" id="wz-datum" value="${HEUTE}" max="${HEUTE}" required></label>
+          <label class="field">Gezählter Betrag in €<input id="wz-gezaehlt" inputmode="decimal" required placeholder="0,00"></label>
+        `,
+        validate: async ctx => {
+          const datum = document.querySelector('#wz-datum').value;
+          const gezaehlt = centFromInput(document.querySelector('#wz-gezaehlt').value);
+          if(gezaehlt == null) throw new Error('Betrag ist ungültig.');
+          let res;
+          try{
+            res = await api(`/konten/${konto.id}/zaehlung`, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({datum, gezaehlt_cent: gezaehlt})});
+          }catch(error){
+            throw new Error(error.detail || error.message);
+          }
+          ctx.data.zaehlung = res;
+          if(res.differenz_cent === 0){
+            ctx.finishNow = true;
+            ctx.data.keineDifferenz = true;
+            return;
+          }
+          const richtung = res.differenz_cent > 0 ? 'einnahme' : 'ausgabe';
+          let kategorien = [];
+          try{
+            kategorien = await api('/kategorien', {params: {sparte_id: konto.sparte_id, nur_aktive: true}});
+          }catch{ kategorien = [] }
+          ctx.data.kategorien = kategorien.filter(k => k.richtung === richtung || k.richtung === 'beides');
+        },
+      },
+      {
+        render: ctx => {
+          const z = ctx.data.zaehlung;
+          const passend = ctx.data.kategorien || [];
+          const vorauswahl = passend.find(k => k.name === 'Kassadifferenz') || passend[0];
+          return `
+            <p>Differenz: <b>${fmtEur(z.differenz_cent)}</b> (gerechnet ${fmtEur(z.gerechnet_cent)}, gezählt ${fmtEur(z.gezaehlt_cent)})</p>
+            <label class="field">Kategorie<select id="wz-kategorie">
+              ${passend.map(k => `<option value="${k.id}" ${vorauswahl && k.id === vorauswahl.id ? 'selected' : ''}>${esc(k.name)}</option>`).join('') || '<option value="">– keine passende Kategorie –</option>'}
+            </select></label>
+          `;
+        },
+        validate: async ctx => {
+          const kategorieId = document.querySelector('#wz-kategorie').value;
+          if(!kategorieId) throw new Error('Keine Kategorie ausgewählt.');
+          try{
+            await api(`/konten/${konto.id}/zaehlung/${ctx.data.zaehlung.id}/buchen`, {
+              method: 'POST', headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({kategorie_id: Number(kategorieId)}),
+            });
+          }catch(error){
+            throw new Error(error.detail || error.message);
+          }
+          ctx.data.gebucht = true;
+        },
+      },
+    ],
+    onFinish: ctx => {
+      toast(ctx.data.keineDifferenz ? 'Kassa gezählt: keine Differenz.' : 'Kassadifferenz gebucht.');
       reload();
-    }catch(error){
-      const errBox = document.querySelector('#zaehlung-buchen-error');
-      errBox.textContent = error.detail || error.message;
-      errBox.hidden = false;
-    }
-  };
+    },
+  });
 }
 
 /* ---------- Offene Auslagen ---------- */
