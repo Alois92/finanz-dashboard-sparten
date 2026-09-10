@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow"><title>Hohenegg Finanzstudio</title>
+  <script>try{const t=localStorage.getItem('neu-theme');if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <div id="test-banner" class="test-banner" hidden>TEST-INSTANZ</div>
+  <div class="app">
+    <aside class="side" id="sidebar"></aside>
+    <main><div class="wrap">
+      <header class="top"><div class="top-title"><p class="scope" id="scope"></p><h1 id="page-title">Übersicht</h1></div><div class="top-tools">
+        <select class="scope-sel" id="sparte-select" aria-label="Sparte"></select><select class="scope-sel" id="year-select" aria-label="Jahr"></select><button class="btn" id="more-filters" aria-expanded="false">Mehr Filter</button>
+      </div></header>
+      <section class="filters" id="filters" aria-label="Weitere Filter"><label class="field">Richtung<select id="filter-richtung"><option value="">alle</option><option value="einnahme">Einnahmen</option><option value="ausgabe">Ausgaben</option></select></label><label class="field">Zahlungsart<select id="filter-zahlungsart"><option value="">alle</option><option value="bar">bar</option><option value="bank">Bank</option><option value="karte">Karte</option></select></label><label class="field">Kategorie<select id="filter-kategorie"><option value="">alle</option></select></label></section>
+      <div id="page" class="page" tabindex="-1"></div>
+    </div></main>
+  </div>
+  <nav class="mobile-nav" id="mobile-nav" aria-label="Mobile Navigation"><button data-route="uebersicht">⌂<span>Start</span></button><button data-route="buchungen">≣<span>Buchungen</span></button><button class="plus" data-route="erfassen">＋</button><button data-route="belege">▣<span>Belege</span></button><button data-route="bankimport">⇄<span>Import</span></button></nav>
+  <dialog id="drill" aria-labelledby="drill-title"><button class="dialog-close" id="drill-close" aria-label="Schließen">×</button><h2 id="drill-title">Details</h2><div id="drill-content"></div></dialog>
+  <div id="sheet" class="sheet" hidden></div><div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="./app.js"></script>
+</body></html>

@@ -94,5 +94,5 @@ def create_kategorie(k: KategorieIn, con: sqlite3.Connection = Depends(db_dep), 
 @router.get("/bereiche")
 def list_bereiche(con: sqlite3.Connection = Depends(db_dep), bereich: BereichDep = Bereich(1)):
     return [dict(row) for row in con.execute(
-        "SELECT id, name, kuerzel, typ FROM bereich WHERE aktiv=1 ORDER BY sortierung, id"
+        "SELECT id, name, kuerzel, typ, aktiv, sortierung FROM bereich WHERE aktiv=1 ORDER BY sortierung, id"
     )]

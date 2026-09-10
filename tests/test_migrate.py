@@ -281,6 +281,7 @@ class MigrationTest(unittest.TestCase):
                 "anstehend": [],
                 "schreibgeschuetzt": False,
                 "fehler": None,
+                "instanz": "prod",
             },
             response.json(),
         )

@@ -22,6 +22,7 @@ from .routers import (belege, beleg_auswertung, buchungen, dashboard, export,
                       stammdaten, konten, auslagen, kredite, kennzahlen, betrieb)
 
 STUDIO_DIR = pathlib.Path(__file__).resolve().parent.parent / "static-studio"
+NEU_DIR = pathlib.Path(__file__).resolve().parent.parent / "static-neu"
 
 
 @asynccontextmanager
@@ -137,6 +138,7 @@ def schema_status():
         "anstehend": stand["anstehend"],
         "schreibgeschuetzt": app.state.schreibgeschuetzt,
         "fehler": app.state.migrationsfehler,
+        "instanz": os.environ.get("FINANZ_INSTANZ", "prod"),
     }
 
 
@@ -175,7 +177,9 @@ def betrieb_status():
     }
 
 
-# Studio ist die einzige Oberflaeche: unter / UND weiterhin unter /studio
+# Neues Frontend zuerst mounten; die Auth-Middleware schuetzt /neu wie /studio.
+# Studio ist weiterhin unter / UND /studio erreichbar.
 # (alte Lesezeichen bleiben gueltig). /api hat Vorrang, da zuerst registriert.
+app.mount("/neu", StaticFiles(directory=NEU_DIR, html=True), name="neu")
 app.mount("/studio", StaticFiles(directory=STUDIO_DIR, html=True), name="studio")
 app.mount("/", StaticFiles(directory=STUDIO_DIR, html=True), name="root")
