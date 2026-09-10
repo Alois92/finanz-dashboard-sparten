@@ -1,5 +1,6 @@
 """P14: Kredite, centgenaue Zinsen und neutrale Tilgung."""
 import sqlite3
+from contextlib import closing
 import os
 import pathlib
 import tempfile
@@ -14,7 +15,9 @@ from app.db import SCHEMA
 from app.bereiche import Bereich
 from app.routers.kredite import (JahreszinsIn, KreditIn, RateIn, ZuordnenIn,
                                   assign_rates, confirm_year, create_kredit,
-                                  create_rate, list_rates)
+                                  create_rate, list_rates, release_rates)
+from app.routers.buchungen import _update_buchung
+from app.schemas import BuchungIn
 
 
 class KreditLogikTest(unittest.TestCase):
@@ -182,7 +185,56 @@ class KreditApiTest(unittest.TestCase):
             "SELECT SUM(betrag_cent) FROM buchungszeile WHERE buchung_id=?",
             (buchung_id,),
         ).fetchone()[0])
+        self.assertEqual(kredit_id, self.con.execute(
+            "SELECT kredit_id FROM buchung WHERE id=?", (buchung_id,)
+        ).fetchone()[0])
 
+    def test_neue_rate_hat_kredit_id_und_keinen_notiz_marker(self):
+        kredit_id = self.kredit()
+        result = create_rate(kredit_id, RateIn(datum="2025-01-15"), self.con, Bereich(1))
+
+        self.assertEqual(kredit_id, result["kredit_id"])
+        row = self.con.execute(
+            "SELECT kredit_id, notiz FROM buchung WHERE id=?", (result["id"],)
+        ).fetchone()
+        self.assertEqual((kredit_id, None), tuple(row))
+
+    def test_notiz_bleibt_frei_editierbar_ohne_kredit_zuordnung_zu_verlieren(self):
+        kredit_id = self.kredit()
+        created = create_rate(kredit_id, RateIn(datum="2025-01-15"), self.con, Bereich(1))
+        buchung_id = created["id"]
+        row = self.con.execute(
+            "SELECT version FROM buchung WHERE id=?", (buchung_id,)
+        ).fetchone()
+        b = BuchungIn(
+            sparte_id=self.haupt, datum="2025-01-15", typ="ausgabe", zahlungsart="bank",
+            text="Wohnkredit", notiz="Meine eigene Notiz", version=row[0],
+            zeilen=[{"id": z["id"], "kategorie_id": z["kategorie_id"],
+                     "betrag_cent": z["betrag_cent"], "notiz": z["notiz"]}
+                    for z in self.con.execute(
+                        "SELECT id,kategorie_id,betrag_cent,notiz FROM buchungszeile "
+                        "WHERE buchung_id=? ORDER BY id", (buchung_id,))]
+        )
+
+        result = _update_buchung(buchung_id, b, self.con, Bereich(1))
+
+        self.assertEqual("Meine eigene Notiz", result["notiz"])
+        self.assertEqual(kredit_id, result["kredit_id"])
+
+    def test_loesen_leert_nur_die_kredit_zuordnung(self):
+        kredit_id = self.kredit()
+        created = create_rate(kredit_id, RateIn(datum="2025-01-15"), self.con, Bereich(1))
+
+        result = release_rates(kredit_id, ZuordnenIn(buchung_ids=[created["id"]]),
+                               self.con, Bereich(1))
+
+        self.assertEqual([created["id"]], result["buchung_ids"])
+        self.assertIsNone(self.con.execute(
+            "SELECT kredit_id FROM buchung WHERE id=?", (created["id"],)
+        ).fetchone()[0])
+        self.assertIsNone(self.con.execute(
+            "SELECT notiz FROM buchung WHERE id=?", (created["id"],)
+        ).fetchone()[0])
 
 class KreditMigrationTest(unittest.TestCase):
     def test_migration_007_zweimal_und_view(self):
@@ -195,10 +247,59 @@ class KreditMigrationTest(unittest.TestCase):
                  (3, "bereiche"), (4, "konten_bewegungen")],
             )
             con.commit()
-            self.assertEqual([5, 6, 7, 8, 9, 10, 11, 12, 13, 14], migrate.anwenden(con, None))
+            self.assertEqual([5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], migrate.anwenden(con, None))
             snapshot = "\n".join(con.iterdump())
             self.assertEqual([], migrate.anwenden(con, None))
             self.assertEqual(snapshot, "\n".join(con.iterdump()))
             self.assertEqual(1, con.execute(
                 "SELECT 1 FROM sqlite_master WHERE type='view' AND name='v_einnahmen_ausgaben'"
             ).fetchone()[0])
+
+    def test_migration_015_zieht_alte_marker_nach_und_protokolliert_fehlende_kredite(self):
+        schema = SCHEMA.read_text(encoding="utf-8").replace(
+            "ALTER TABLE buchung ADD COLUMN kredit_id INTEGER REFERENCES kredit(id);\n", ""
+        ).replace("CREATE INDEX idx_buchung_kredit ON buchung (kredit_id);\n", "")
+        assert "ADD COLUMN kredit_id" not in schema and "idx_buchung_kredit" not in schema
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "alt.db"
+            with closing(sqlite3.connect(path)) as con:
+                con.execute("PRAGMA foreign_keys = ON")
+                con.executescript(schema)
+                con.executescript(db.SEED.read_text(encoding="utf-8"))
+                con.execute("DELETE FROM schema_version")
+                con.executemany(
+                    "INSERT INTO schema_version(version,name) VALUES(?,?)",
+                    [(version, name) for version, name, _ in migrate.liste_migrationen()
+                     if version <= 14],
+                )
+                zins_id = con.execute(
+                    "INSERT INTO kategorie(sparte_id,name,richtung) VALUES(1,'Altzins','ausgabe')"
+                ).lastrowid
+                rate_id = con.execute(
+                    "INSERT INTO kategorie(sparte_id,name,richtung) VALUES(1,'Altrate','ausgabe')"
+                ).lastrowid
+                kredit_id = con.execute(
+                    "INSERT INTO kredit(sparte_id,name,monatsrate_cent,beginn,kategorie_zins_id,kategorie_rate_id) "
+                    "VALUES(1,'Alt',100,'2025-01-01',?,?)", (zins_id, rate_id)
+                ).lastrowid
+                for marker in (f"Kreditrate:{kredit_id}", "Kreditrate:999999"):
+                    con.execute(
+                        "INSERT INTO buchung(sparte_id,datum,typ,betrag_cent,zahlungsart,notiz) "
+                        "VALUES(1,'2025-01-15','ausgabe',100,'bank',?)", (marker,)
+                    )
+                con.commit()
+
+                self.assertEqual([15], migrate.anwenden(con, None))
+                self.assertEqual([], migrate.anwenden(con, None))
+                migrated = con.execute(
+                    "SELECT kredit_id,notiz FROM buchung ORDER BY id"
+                ).fetchall()
+                self.assertEqual([(kredit_id, f"Kreditrate:{kredit_id}"),
+                                  (None, "Kreditrate:999999")],
+                                 [tuple(row) for row in migrated])
+                self.assertEqual(("kreditrate_ungeklaert", "buchung:2"), tuple(con.execute(
+                    "SELECT art,objektkennung FROM migrationsprotokoll WHERE version=15"
+                ).fetchone()))
+                self.assertIsNotNone(con.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type='index' AND name='idx_buchung_kredit'"
+                ).fetchone())
