@@ -1,6 +1,7 @@
 import {api} from '../api.js';
 import {esc, fmtEur, fmtDate, parseBetrag} from '../format.js';
 import {toast, drill} from '../ui.js';
+import {pruefeErreichbarkeit, ladeBelegUndAuswerten, erreichbarkeitsHinweis} from './belege.js';
 
 // P40 Erfassen-Fluss. Laedt sein eigenes CSS beim ersten Render nach
 // Nachtrag-Regel (Konfliktregel 3): nur eigene Datei, kein Eingriff in
@@ -141,8 +142,9 @@ export async function render(root, state){
           <div class="card">
             <div class="card-head"><h2>Rechnung fotografieren</h2></div>
             <div class="ef-photo-placeholder">
+              <input type="file" id="ef-photo-input" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp,.pdf,.heic" capture="environment" hidden>
               <button type="button" class="btn" id="ef-photo-btn">Beleg fotografieren</button>
-              <p class="muted">Foto wird lokal ausgewertet, ohne Cloud. Kommt mit der Foto-Übernahme.</p>
+              <p class="muted">Foto wird lokal ausgewertet, ohne Cloud. Ergebnis erscheint unter „Belege".</p>
             </div>
           </div>
           <div class="card">
@@ -367,8 +369,27 @@ export async function render(root, state){
     vonField.hidden = !auslageToggle.checked;
   });
 
-  el('#ef-photo-btn').addEventListener('click', () => {
-    toast('Kommt mit der Foto-Übernahme.');
+  const photoInput = el('#ef-photo-input');
+  el('#ef-photo-btn').addEventListener('click', async () => {
+    const status = await pruefeErreichbarkeit();
+    if(!status || !status.erreichbar || !status.modell_vorhanden){
+      toast(erreichbarkeitsHinweis());
+      return;
+    }
+    photoInput.click();
+  });
+  photoInput.addEventListener('change', async () => {
+    const datei = photoInput.files[0];
+    photoInput.value = '';
+    if(!datei) return;
+    try{
+      await ladeBelegUndAuswerten(datei, gewaehlteSparte());
+      // Die Auswertung laeuft im Hintergrund und dauert Minuten (P43) - die
+      // Erfassung wird dadurch nicht blockiert, "die App darf zu sein".
+      toast('Beleg wird lokal ausgewertet, das dauert ein paar Minuten. Ergebnis erscheint unter „Belege".');
+    }catch(error){
+      toast(error.detail || error.message || 'Hochladen fehlgeschlagen.');
+    }
   });
 
   el('#ef-newcat').addEventListener('click', () => {

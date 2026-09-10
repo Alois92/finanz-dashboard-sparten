@@ -63,41 +63,78 @@ def _pruefe_sparte_und_zeilen(con: sqlite3.Connection, b: BuchungIn, bereich: Be
             raise HTTPException(400, "Kategorie gehoert nicht zur gewaehlten Sparte")
 
 
+def erstelle_buchung(con: sqlite3.Connection, bereich: Bereich, *, sparte_id: int, datum: str,
+                     typ: str, zahlungsart: str, bezahlt_von_sparte_id: int | None,
+                     positionen: list, client_request_id: str | None,
+                     text: str | None = None, notiz: str | None = None,
+                     kontakt_id: int | None = None, person_id: int | None = None,
+                     bankkonto_id: int | None = None, bankumsatz_id: int | None = None,
+                     nach_anlage=None):
+    """Gemeinsame Erstell-Logik fuer POST /api/buchungen und
+    POST /api/beleg-auswertungen/{id}/uebernehmen (P43): Kopf- und Zeilenzeilen
+    anlegen, Auslage synchronisieren, Bewegungen erzeugen, Client-Wiederholung
+    beachten. `positionen` ist eine Liste von `ZeileIn` (oder gleichwertigen
+    Objekten mit kategorie_id/betrag_cent/notiz, id ist bei Neuanlage immer None).
+
+    Rueckgabe (antwort, buchung_id): `buchung_id` ist None, wenn `client_request_id`
+    bereits einen frueheren Datensatz getroffen hat - dann ist `antwort` bereits die
+    fertige (JSONResponse-)Antwort dieses frueheren Aufrufs.
+
+    `nach_anlage(con, buchung_id)` laeuft, falls angegeben, noch innerhalb derselben
+    Transaktion (z. B. Beleg verknuepfen und Auswertung abschliessen in P43), damit
+    Buchung und Folgeschritte nur gemeinsam gespeichert werden."""
+    b = BuchungIn(sparte_id=sparte_id, datum=datum, typ=typ, zahlungsart=zahlungsart,
+                 kontakt_id=kontakt_id, person_id=person_id, bankkonto_id=bankkonto_id,
+                 bankumsatz_id=bankumsatz_id, text=text, notiz=notiz,
+                 zeilen=positionen, bezahlt_von_sparte_id=bezahlt_von_sparte_id,
+                 client_request_id=client_request_id)
+    with con:
+        con.execute('BEGIN IMMEDIATE')
+        antwort = wiederhole(con, 'buchung', b, bereich)
+        if antwort is not None:
+            return antwort, None
+        _pruefe_sparte_und_zeilen(con, b, bereich)
+        if any(z.id is not None for z in b.zeilen):
+            raise HTTPException(422, 'Neue Buchungen dürfen keine bestehenden Zeilen referenzieren')
+        cur = con.execute(
+            "INSERT INTO buchung(sparte_id, datum, typ, zahlungsart, kontakt_id, "
+            "person_id, bankkonto_id, text, notiz, bankumsatz_id, client_request_id) "
+            "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (b.sparte_id, b.datum, b.typ, b.zahlungsart, b.kontakt_id,
+             b.person_id, b.bankkonto_id, b.text, b.notiz, b.bankumsatz_id,
+             b.client_request_id),
+        )
+        buchung_id = cur.lastrowid
+        for z in b.zeilen:
+            con.execute(
+                "INSERT INTO buchungszeile(buchung_id, kategorie_id, betrag_cent, notiz) "
+                "VALUES(?, ?, ?, ?)",
+                (buchung_id, z.kategorie_id, z.betrag_cent, z.notiz),
+            )
+        synchronisiere_auslage(con, buchung_id, b, bereich)
+        synchronisiere_buchung(con, buchung_id, bereich)
+        if nach_anlage is not None:
+            nach_anlage(con, buchung_id)
+        antwort = _buchung_detail(con, buchung_id)
+        speichere_antwort(con, 'buchung', b, bereich, antwort)
+    return antwort, buchung_id
+
+
 @router.post("/buchungen", status_code=201)
 def create_buchung(b: BuchungIn, con: sqlite3.Connection = Depends(db_dep),
                    bereich: BereichDep = Bereich(1)):
     try:
-        with con:
-            con.execute('BEGIN IMMEDIATE')
-            antwort = wiederhole(con, 'buchung', b, bereich)
-            if antwort is not None:
-                return antwort
-            _pruefe_sparte_und_zeilen(con, b, bereich)
-            if any(z.id is not None for z in b.zeilen):
-                raise HTTPException(422, 'Neue Buchungen dürfen keine bestehenden Zeilen referenzieren')
-            cur = con.execute(
-                "INSERT INTO buchung(sparte_id, datum, typ, zahlungsart, kontakt_id, "
-                "person_id, bankkonto_id, text, notiz, bankumsatz_id, client_request_id) "
-                "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (b.sparte_id, b.datum, b.typ, b.zahlungsart, b.kontakt_id,
-                 b.person_id, b.bankkonto_id, b.text, b.notiz, b.bankumsatz_id,
-                 b.client_request_id),
-            )
-            buchung_id = cur.lastrowid
-            for z in b.zeilen:
-                con.execute(
-                    "INSERT INTO buchungszeile(buchung_id, kategorie_id, betrag_cent, notiz) "
-                    "VALUES(?, ?, ?, ?)",
-                    (buchung_id, z.kategorie_id, z.betrag_cent, z.notiz),
-                )
-            synchronisiere_auslage(con, buchung_id, b, bereich)
-            synchronisiere_buchung(con, buchung_id, bereich)
-            antwort = _buchung_detail(con, buchung_id)
-            speichere_antwort(con, 'buchung', b, bereich, antwort)
+        antwort, buchung_id = erstelle_buchung(
+            con, bereich, sparte_id=b.sparte_id, datum=b.datum, typ=b.typ,
+            zahlungsart=b.zahlungsart, bezahlt_von_sparte_id=b.bezahlt_von_sparte_id,
+            positionen=b.zeilen, client_request_id=b.client_request_id,
+            text=b.text, notiz=b.notiz, kontakt_id=b.kontakt_id, person_id=b.person_id,
+            bankkonto_id=b.bankkonto_id, bankumsatz_id=b.bankumsatz_id,
+        )
     except sqlite3.IntegrityError as exc:
         raise HTTPException(400, f"Datenbankfehler: {exc}") from exc
 
-    if b.typ != "umbuchung" and b.text and len(b.zeilen) == 1:
+    if buchung_id is not None and b.typ != "umbuchung" and b.text and len(b.zeilen) == 1:
         _lerne_regel(con, b.text, b.sparte_id, b.zeilen[0].kategorie_id, b.typ, bereich.id, buchung_id)
     return antwort
 
