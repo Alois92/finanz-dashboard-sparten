@@ -242,22 +242,26 @@ def auswertung_uebernehmen(
     # client_request_id=None: die Wiederholungspruefung fuer diese Aktion ist
     # bereits oben (derselbe 'buchung'-Topf) erledigt - erstelle_buchung soll
     # hier keinen zweiten, unabhaengigen Wiederholungs-Eintrag anlegen.
+    def beleg_verknuepfen_und_abschliessen(con_, buchung_id_):
+        # Laeuft innerhalb der Transaktion von erstelle_buchung: Buchung, Beleg-Verknuepfung
+        # und Statuswechsel werden nur gemeinsam gespeichert (sonst koennte eine Buchung ohne
+        # Beleg entstehen und die Auswertung bliebe 'fertig' - zweites Uebernehmen = Doppelbuchung).
+        con_.execute(
+            "INSERT OR IGNORE INTO buchung_beleg(buchung_id, beleg_id) VALUES(?, ?)",
+            (buchung_id_, auftrag["beleg_id"]),
+        )
+        _aktualisiere_belegstatus(con_, buchung_id_)
+        con_.execute(
+            "UPDATE beleg_auswertung SET status = 'verbucht', aktualisiert = datetime('now') WHERE id = ?",
+            (auswertung_id,),
+        )
+
     buchung_antwort, buchung_id = erstelle_buchung(
         con, bereich, sparte_id=body.sparte_id, datum=datum, typ=typ,
         zahlungsart=body.zahlungsart, bezahlt_von_sparte_id=body.bezahlt_von_sparte_id,
         positionen=zeilen, client_request_id=None,
+        nach_anlage=beleg_verknuepfen_und_abschliessen,
     )
-
-    con.execute(
-        "INSERT OR IGNORE INTO buchung_beleg(buchung_id, beleg_id) VALUES(?, ?)",
-        (buchung_id, auftrag["beleg_id"]),
-    )
-    _aktualisiere_belegstatus(con, buchung_id)
-    con.execute(
-        "UPDATE beleg_auswertung SET status = 'verbucht', aktualisiert = datetime('now') WHERE id = ?",
-        (auswertung_id,),
-    )
-    con.commit()
 
     ergebnis_antwort = {"buchung_id": buchung_id, "version": buchung_antwort["version"]}
     speichere_antwort(con, 'buchung', body, bereich, ergebnis_antwort)

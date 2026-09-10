@@ -68,7 +68,8 @@ def erstelle_buchung(con: sqlite3.Connection, bereich: Bereich, *, sparte_id: in
                      positionen: list, client_request_id: str | None,
                      text: str | None = None, notiz: str | None = None,
                      kontakt_id: int | None = None, person_id: int | None = None,
-                     bankkonto_id: int | None = None, bankumsatz_id: int | None = None):
+                     bankkonto_id: int | None = None, bankumsatz_id: int | None = None,
+                     nach_anlage=None):
     """Gemeinsame Erstell-Logik fuer POST /api/buchungen und
     POST /api/beleg-auswertungen/{id}/uebernehmen (P43): Kopf- und Zeilenzeilen
     anlegen, Auslage synchronisieren, Bewegungen erzeugen, Client-Wiederholung
@@ -77,7 +78,11 @@ def erstelle_buchung(con: sqlite3.Connection, bereich: Bereich, *, sparte_id: in
 
     Rueckgabe (antwort, buchung_id): `buchung_id` ist None, wenn `client_request_id`
     bereits einen frueheren Datensatz getroffen hat - dann ist `antwort` bereits die
-    fertige (JSONResponse-)Antwort dieses frueheren Aufrufs."""
+    fertige (JSONResponse-)Antwort dieses frueheren Aufrufs.
+
+    `nach_anlage(con, buchung_id)` laeuft, falls angegeben, noch innerhalb derselben
+    Transaktion (z. B. Beleg verknuepfen und Auswertung abschliessen in P43), damit
+    Buchung und Folgeschritte nur gemeinsam gespeichert werden."""
     b = BuchungIn(sparte_id=sparte_id, datum=datum, typ=typ, zahlungsart=zahlungsart,
                  kontakt_id=kontakt_id, person_id=person_id, bankkonto_id=bankkonto_id,
                  bankumsatz_id=bankumsatz_id, text=text, notiz=notiz,
@@ -108,6 +113,8 @@ def erstelle_buchung(con: sqlite3.Connection, bereich: Bereich, *, sparte_id: in
             )
         synchronisiere_auslage(con, buchung_id, b, bereich)
         synchronisiere_buchung(con, buchung_id, bereich)
+        if nach_anlage is not None:
+            nach_anlage(con, buchung_id)
         antwort = _buchung_detail(con, buchung_id)
         speichere_antwort(con, 'buchung', b, bereich, antwort)
     return antwort, buchung_id
