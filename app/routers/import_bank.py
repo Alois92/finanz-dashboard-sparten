@@ -29,7 +29,7 @@ from ..bereiche import (
     Bereich, BereichDep, pruefe_sparte, pruefe_kategorie, pruefe_konto,
     pruefe_umsatz, pruefe_regel,
 )
-from ..regeln import aktive_regeln, normalisiere_regeltext
+from ..regeln import aktive_regeln, finde_regel, normalisiere_regeltext
 
 router = APIRouter(tags=["import"])
 
@@ -165,7 +165,40 @@ class UmsatzStatusIn(BaseModel):
 
 
 class RegelPatchIn(BaseModel):
-    aktiv: Literal[0, 1]
+    name: Optional[str] = None
+    bedingung_text: Optional[str] = None
+    ziel_kategorie_id: Optional[int] = None
+    ziel_sparte_id: Optional[int] = None
+    ziel_typ: Optional[Literal["einnahme", "ausgabe", "umbuchung"]] = None
+    quelle: Optional[Literal["stichwort", "manuell", "gelernt"]] = None
+    auto_verbuchen: Optional[Literal[0, 1]] = None
+    eingabe_sparte_id: Optional[int] = None
+    bankkonto_id: Optional[int] = None
+    bedingung_betrag_von_cent: Optional[int] = None
+    bedingung_betrag_bis_cent: Optional[int] = None
+    prioritaet: Optional[int] = None
+    aktiv: Optional[Literal[0, 1]] = None
+
+
+class RegelIn(BaseModel):
+    name: str
+    bedingung_text: str
+    ziel_kategorie_id: int
+    ziel_sparte_id: Optional[int] = None
+    ziel_typ: Optional[Literal["einnahme", "ausgabe", "umbuchung"]] = None
+    quelle: Literal["stichwort", "manuell"]
+    auto_verbuchen: Literal[0, 1] = 0
+    eingabe_sparte_id: Optional[int] = None
+    bankkonto_id: Optional[int] = None
+    bedingung_betrag_von_cent: Optional[int] = None
+    bedingung_betrag_bis_cent: Optional[int] = None
+    prioritaet: int = 100
+
+
+class RegelVorschauIn(BaseModel):
+    bedingung_text: str
+    ziel_kategorie_id: int
+    bankkonto_id: Optional[int] = None
 
 
 class VorschlaegeUebernehmenIn(BaseModel):
@@ -271,6 +304,7 @@ def import_csv(
         (bankkonto_id, datei.filename, len(zeilen) - 1, "csv", hashlib.sha256(rohbytes).hexdigest(), 2, min(p["datum"] for p in posten), max(p["datum"] for p in posten), len(ungueltig)),
     )
     batch_id, neu, dubletten = batch.lastrowid, 0, 0
+    neue_umsatz_ids = []
     for p in posten:
         neuer_hash = fingerabdruck(bankkonto_id, p["datum"], p["betrag_cent"], p["text"], p["gegenpartei"], p["iban_gegenpartei"], p["vorkommen"])
         alter_hash = hashlib.sha256(f"{bankkonto_id}|{p['datum']}|{p['betrag_cent']}|{p['text']}".encode("utf-8")).hexdigest()
@@ -282,8 +316,29 @@ def import_csv(
             (bankkonto_id, batch_id, p["datum"], p["valuta"], p["betrag_cent"], p["saldo_cent"], p["text"], p["gegenpartei"], p["iban_gegenpartei"], neuer_hash),
         )
         neu += cur.rowcount
+        neue_umsatz_ids.append(cur.lastrowid)
     con.execute("UPDATE import_batch SET anzahl_neu = ?, anzahl_dubletten = ? WHERE id = ?", (neu, dubletten, batch_id))
     con.commit()
+    # Nur explizit freigegebene gelernte Regeln duerfen beim Import automatisch
+    # verbuchen; Stichwort-/manuelle Regeln bleiben reine Vorschlaege.
+    for umsatz_id in neue_umsatz_ids:
+        umsatz = con.execute("SELECT * FROM bankumsatz WHERE id=?", (umsatz_id,)).fetchone()
+        vorschlag = _vorschlag_fuer_umsatz(con, dict(umsatz), aktive_regeln(con, bereich.id))
+        if vorschlag and vorschlag.get("quelle") == "gelernt" and vorschlag.get("auto_verbuchen") == 1:
+            try:
+                verbuche_umsatz(
+                    umsatz_id,
+                    UmsatzVerbuchenIn(
+                        sparte_id=vorschlag["sparte_id"],
+                        kategorie_id=vorschlag["kategorie_id"],
+                        typ=vorschlag["typ"],
+                    ),
+                    con,
+                    bereich,
+                    regel_lernen=False,
+                )
+            except HTTPException:
+                con.rollback()
     erkannt = {**erkannt_basis, "zeilen_gesamt": len(zeilen) - 1, "zeilen_ungueltig": ungueltig}
     return {"batch_id": batch_id, "neu": neu, "dubletten": dubletten, "gesamt": len(posten), "saldo_ok": saldo_ok, "saldo_hinweis": saldo_hinweis, "erkannt": erkannt}
 
@@ -339,14 +394,56 @@ def _regel_haystack(umsatz) -> str:
 
 
 @router.get("/regeln")
-def list_regeln(con: sqlite3.Connection = Depends(db_dep),
-                       bereich: BereichDep = Bereich(1)):
+def list_regeln(con: sqlite3.Connection = Depends(db_dep), bereich: BereichDep = Bereich(1),
+                bereich_id: Optional[int] = None, quelle: Optional[str] = None,
+                sparte_id: Optional[int] = None):
+    if bereich_id is not None and bereich_id != bereich.id:
+        raise HTTPException(400, "bereich_id passt nicht zum aufgeloesten Bereich")
+    if sparte_id is not None:
+        pruefe_sparte(con, sparte_id, bereich)
     rows = con.execute(
-        "SELECT id, name, aktiv, prioritaet, bedingung_text, ziel_sparte_id, "
-        "ziel_kategorie_id, ziel_typ FROM regel WHERE bereich_id = ? ORDER BY prioritaet, id",
-        (bereich.id,),
+        "SELECT id, name, aktiv, prioritaet, bedingung_text, bedingung_betrag_von_cent, "
+        "bedingung_betrag_bis_cent, bankkonto_id, ziel_sparte_id, ziel_kategorie_id, "
+        "ziel_typ, quelle, auto_verbuchen, eingabe_sparte_id, gelernt_aus_buchung_id, "
+        "erstellt_am FROM regel WHERE bereich_id = ? "
+        "AND (? IS NULL OR quelle = ?) "
+        "AND (? IS NULL OR ziel_sparte_id = ? OR ziel_sparte_id IS NULL) "
+        "ORDER BY prioritaet, id",
+        (bereich.id, quelle, quelle, sparte_id, sparte_id),
     ).fetchall()
     return [dict(row) for row in rows]
+
+
+def _regel_ausgabe(con, regel_id, bereich):
+    return next(row for row in list_regeln(con=con, bereich=bereich) if row["id"] == regel_id)
+
+
+@router.post("/regeln", status_code=201)
+def create_regel(body: RegelIn, con: sqlite3.Connection = Depends(db_dep), bereich: BereichDep = Bereich(1)):
+    pruefe_kategorie(con, body.ziel_kategorie_id, bereich)
+    ziel = con.execute("SELECT sparte_id, aktiv FROM kategorie WHERE id=?", (body.ziel_kategorie_id,)).fetchone()
+    if not ziel or not ziel["aktiv"]:
+        raise HTTPException(400, "Zielkategorie ist stillgelegt oder nicht vorhanden")
+    if body.ziel_sparte_id is not None:
+        pruefe_sparte(con, body.ziel_sparte_id, bereich)
+        if body.ziel_sparte_id != ziel["sparte_id"]:
+            raise HTTPException(400, "Zielsparte passt nicht zur Zielkategorie")
+    for ident, pruefer in ((body.eingabe_sparte_id, pruefe_sparte), (body.bankkonto_id, pruefe_konto)):
+        if ident is not None:
+            pruefer(con, ident, bereich)
+    if body.auto_verbuchen and body.quelle != "gelernt":
+        raise HTTPException(400, "Nur gelernte Regeln duerfen automatisch verbuchen")
+    cur = con.execute(
+        "INSERT INTO regel(name, bedingung_text, ziel_sparte_id, ziel_kategorie_id, ziel_typ, "
+        "quelle, auto_verbuchen, eingabe_sparte_id, bankkonto_id, bedingung_betrag_von_cent, "
+        "bedingung_betrag_bis_cent, prioritaet, bereich_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        (body.name.strip(), body.bedingung_text.strip(), body.ziel_sparte_id or ziel["sparte_id"],
+         body.ziel_kategorie_id, body.ziel_typ, body.quelle, body.auto_verbuchen,
+         body.eingabe_sparte_id, body.bankkonto_id, body.bedingung_betrag_von_cent,
+         body.bedingung_betrag_bis_cent, body.prioritaet, bereich.id),
+    )
+    con.commit()
+    return _regel_ausgabe(con, cur.lastrowid, bereich)
 
 
 @router.patch("/regeln/{regel_id}")
@@ -357,9 +454,38 @@ def patch_regel(
     bereich: BereichDep = Bereich(1),
 ):
     pruefe_regel(con, regel_id, bereich)
-    con.execute("UPDATE regel SET aktiv = ? WHERE id = ?", (body.aktiv, regel_id))
+    daten = body.model_dump(exclude_unset=True)
+    if "ziel_kategorie_id" in daten:
+        pruefe_kategorie(con, daten["ziel_kategorie_id"], bereich)
+    for name, pruefer in (("ziel_sparte_id", pruefe_sparte), ("eingabe_sparte_id", pruefe_sparte), ("bankkonto_id", pruefe_konto)):
+        if name in daten and daten[name] is not None:
+            pruefer(con, daten[name], bereich)
+    if daten.get("auto_verbuchen") and daten.get("quelle", con.execute("SELECT quelle FROM regel WHERE id=?", (regel_id,)).fetchone()[0]) != "gelernt":
+        raise HTTPException(400, "Nur gelernte Regeln duerfen automatisch verbuchen")
+    if not daten:
+        raise HTTPException(400, "Keine Aenderung angegeben")
+    felder = ", ".join(f"{name} = ?" for name in daten)
+    con.execute(f"UPDATE regel SET {felder} WHERE id = ?", (*daten.values(), regel_id))
     con.commit()
-    return next(row for row in list_regeln(con, bereich) if row["id"] == regel_id)
+    return _regel_ausgabe(con, regel_id, bereich)
+
+
+@router.post("/regeln/vorschau")
+def preview_regel(body: RegelVorschauIn, con: sqlite3.Connection = Depends(db_dep), bereich: BereichDep = Bereich(1)):
+    pruefe_kategorie(con, body.ziel_kategorie_id, bereich)
+    if body.bankkonto_id is not None:
+        pruefe_konto(con, body.bankkonto_id, bereich)
+    bedingung = normalisiere_regeltext(body.bedingung_text)
+    sql = "SELECT id AS bankumsatz_id, datum, text, betrag_cent FROM bankumsatz WHERE importstatus='offen' AND bankkonto_id IN (SELECT id FROM bankkonto WHERE bereich_id=?)"
+    params = [bereich.id]
+    if body.bankkonto_id is not None:
+        sql += " AND bankkonto_id = ?"; params.append(body.bankkonto_id)
+    rows = []
+    for row in con.execute(sql + " ORDER BY datum, id", params).fetchall():
+        if bedingung and bedingung not in _regel_haystack(row):
+            continue
+        rows.append(dict(row))
+    return {"treffer": rows, "anzahl": len(rows)}
 
 
 @router.delete("/regeln/{regel_id}", status_code=204)
@@ -409,34 +535,34 @@ def list_bankumsaetze(
     if offene:
         regeln = aktive_regeln(con, bereich.id)
         for u in offene:
-            u["vorschlag"] = _vorschlag_fuer_umsatz(con, u, regeln)
+            vorschlag = _vorschlag_fuer_umsatz(con, u, regeln)
+            if vorschlag:
+                u["vorschlag"] = {k: vorschlag[k] for k in (
+                    "sparte_id", "kategorie_id", "typ", "regel_id", "regel_name"
+                )}
+            else:
+                u["vorschlag"] = None
     return rows
 
 
 def _vorschlag_fuer_umsatz(con, u: dict, regeln) -> Optional[dict]:
-    """Ersten passenden aktiven Regelvorschlag liefern."""
-    haystack = _regel_haystack(u)
-    for r in regeln:
-        if r["bankkonto_id"] is not None and r["bankkonto_id"] != u["bankkonto_id"]:
-            continue
-        if not r["bedingung_text"] or normalisiere_regeltext(r["bedingung_text"]) not in haystack:
-            continue
-        betrag = abs(u["betrag_cent"])
-        if r["bedingung_betrag_von_cent"] is not None and betrag < r["bedingung_betrag_von_cent"]:
-            continue
-        if r["bedingung_betrag_bis_cent"] is not None and betrag > r["bedingung_betrag_bis_cent"]:
-            continue
-        sparte_id = r["ziel_sparte_id"] or r["kat_sparte_id"]
-        if not sparte_id or not r["ziel_kategorie_id"]:
-            continue
-        return {
-            "sparte_id": sparte_id,
-            "kategorie_id": r["ziel_kategorie_id"],
-            "typ": r["ziel_typ"] or ("ausgabe" if u["betrag_cent"] < 0 else "einnahme"),
-            "regel_id": r["id"],
-            "regel_name": r["name"],
-        }
-    return None
+    """Passenden Vorschlag liefern; Konflikte werden nicht verbucht."""
+    regel = finde_regel(regeln, _regel_haystack(u), konto_id=u["bankkonto_id"],
+                        betrag_cent=u["betrag_cent"], bereich_id=regeln[0]["bereich_id"] if regeln else 1)
+    if not regel or regel.get("konflikt") or not regel["ziel_kategorie_id"]:
+        return None
+    sparte_id = regel["ziel_sparte_id"] or regel["kat_sparte_id"]
+    if not sparte_id:
+        return None
+    return {
+        "sparte_id": sparte_id,
+        "kategorie_id": regel["ziel_kategorie_id"],
+        "typ": regel["ziel_typ"] or ("ausgabe" if u["betrag_cent"] < 0 else "einnahme"),
+        "regel_id": regel["regel_id"],
+        "regel_name": regel["name"],
+        "quelle": regel["quelle"],
+        "auto_verbuchen": regel["auto_verbuchen"],
+    }
 
 
 @router.post("/bankumsaetze/vorschlaege-uebernehmen")
@@ -474,6 +600,7 @@ def uebernehme_vorschlaege(
                 ),
                 con,
                 bereich,
+                regel_lernen=False,
             )
             verbucht += 1
         except (HTTPException, sqlite3.Error):
@@ -489,7 +616,7 @@ def uebernehme_vorschlaege(
 @router.post("/bankumsaetze/{umsatz_id}/verbuchen", status_code=201)
 def verbuche_umsatz(umsatz_id: int, body: UmsatzVerbuchenIn,
                     con: sqlite3.Connection = Depends(db_dep),
-                       bereich: BereichDep = Bereich(1)):
+                       bereich: BereichDep = Bereich(1), regel_lernen: bool = True):
     pruefe_umsatz(con, umsatz_id, bereich)
     pruefe_sparte(con, body.sparte_id, bereich)
     pruefe_kategorie(con, body.kategorie_id, bereich)
@@ -538,22 +665,26 @@ def verbuche_umsatz(umsatz_id: int, body: UmsatzVerbuchenIn,
         )
         regel_angelegt = False
         muster = _regel_text(u)
-        if muster:
+        if muster and regel_lernen:
             vorhanden = con.execute(
                 "SELECT id FROM regel WHERE LOWER(bedingung_text) = ? AND bereich_id = ? ORDER BY id LIMIT 1",
                 (muster, bereich.id),
             ).fetchone()
             if vorhanden:
                 con.execute(
-                    "UPDATE regel SET name = ?, aktiv = 1, ziel_sparte_id = ?, "
-                    "ziel_kategorie_id = ?, ziel_typ = ? WHERE id = ?",
-                    (muster, body.sparte_id, body.kategorie_id, typ, vorhanden["id"]),
+                    "UPDATE regel SET name = ?, ziel_sparte_id = ?, ziel_kategorie_id = ?, "
+                    "ziel_typ = ?, quelle = 'gelernt', auto_verbuchen = 1, "
+                    "eingabe_sparte_id = ?, gelernt_aus_buchung_id = ? WHERE id = ?",
+                    (muster, body.sparte_id, body.kategorie_id, typ, body.sparte_id,
+                     buchung_id, vorhanden["id"]),
                 )
             else:
                 con.execute(
                     "INSERT INTO regel(name, bedingung_text, ziel_sparte_id, "
-                    "ziel_kategorie_id, ziel_typ, bereich_id) VALUES(?,?,?,?,?,?)",
-                    (muster, muster, body.sparte_id, body.kategorie_id, typ, bereich.id),
+                    "ziel_kategorie_id, ziel_typ, bereich_id, quelle, auto_verbuchen, "
+                    "eingabe_sparte_id, gelernt_aus_buchung_id) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                    (muster, muster, body.sparte_id, body.kategorie_id, typ, bereich.id,
+                     "gelernt", 1, body.sparte_id, buchung_id),
                 )
                 regel_angelegt = True
         con.commit()

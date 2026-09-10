@@ -39,8 +39,8 @@ def aktive_regeln(con: sqlite3.Connection, bereich_id: int):
         "WHERE r.aktiv = 1 AND r.bereich_id = ? "
         "AND (r.ziel_sparte_id IS NULL OR r.ziel_sparte_id IN "
         "(SELECT id FROM sparte WHERE bereich_id = ?)) "
-        "AND (r.ziel_kategorie_id IS NULL OR k.sparte_id IN "
-        "(SELECT id FROM sparte WHERE bereich_id = ?)) "
+        "AND (r.ziel_kategorie_id IS NULL OR (k.aktiv = 1 AND k.sparte_id IN "
+        "(SELECT id FROM sparte WHERE bereich_id = ?))) "
         "AND (r.bankkonto_id IS NULL OR r.bankkonto_id IN "
         "(SELECT id FROM bankkonto WHERE bereich_id = ?)) "
         "ORDER BY r.prioritaet, LENGTH(r.bedingung_text) DESC, r.id",
@@ -49,7 +49,9 @@ def aktive_regeln(con: sqlite3.Connection, bereich_id: int):
 
 
 def finde_regel(
-    con_oder_regeln: Union[sqlite3.Connection, list], text: Optional[str], bereich_id: int
+    con_oder_regeln: Union[sqlite3.Connection, list], text: Optional[str], *,
+    sparte_id: int | None = None, konto_id: int | None = None,
+    bereich_id: int = 1, betrag_cent: int | None = None,
 ) -> Optional[dict]:
     """Erste aktive Regel, die zum ``text`` passt (Reihenfolge wie
     ``aktive_regeln``). Eine Regel trifft, wenn EINE der beiden Richtungen
@@ -81,9 +83,22 @@ def finde_regel(
     if not haystack:
         return None
     eingabe_tokens = _signifikante_tokens(text)
+    kandidaten = []
     for r in regeln:
         if r["bereich_id"] != bereich_id:
             continue
+        if konto_id is not None and r["bankkonto_id"] is not None and r["bankkonto_id"] != konto_id:
+            continue
+        if r["eingabe_sparte_id"] is not None and r["eingabe_sparte_id"] != sparte_id:
+            continue
+        if sparte_id is not None and r["kat_sparte_id"] != sparte_id:
+            continue
+        if betrag_cent is not None:
+            betrag = abs(betrag_cent)
+            if r["bedingung_betrag_von_cent"] is not None and betrag < r["bedingung_betrag_von_cent"]:
+                continue
+            if r["bedingung_betrag_bis_cent"] is not None and betrag > r["bedingung_betrag_bis_cent"]:
+                continue
         bedingung = normalisiere_regeltext(r["bedingung_text"])
         if not bedingung:
             continue
@@ -93,12 +108,29 @@ def finde_regel(
             treffer = bool(bedingung_tokens) and eingabe_tokens <= bedingung_tokens
         if not treffer:
             continue
-        return {
+        kandidaten.append((r, len(bedingung), {
             "regel_id": r["id"],
             "name": r["name"],
             "ziel_sparte_id": r["ziel_sparte_id"],
             "ziel_kategorie_id": r["ziel_kategorie_id"],
             "ziel_typ": r["ziel_typ"],
             "kat_sparte_id": r["kat_sparte_id"],
-        }
-    return None
+            "quelle": r["quelle"],
+            "auto_verbuchen": r["auto_verbuchen"],
+        }))
+    if not kandidaten:
+        return None
+    beste_prioritaet = min(item[0]["prioritaet"] for item in kandidaten)
+    priorisierte = [item for item in kandidaten if item[0]["prioritaet"] == beste_prioritaet]
+    beste_laenge = max(item[1] for item in priorisierte)
+    beste = [item for item in priorisierte if item[1] == beste_laenge]
+    ziele = {item[2]["ziel_kategorie_id"] for item in beste}
+    if len(ziele) > 1:
+        result = dict(beste[0][2])
+        result["konflikt"] = True
+        result["konflikte"] = [item[2] for item in beste]
+        return result
+    result = dict(beste[0][2])
+    result["konflikt"] = False
+    result["konflikte"] = []
+    return result

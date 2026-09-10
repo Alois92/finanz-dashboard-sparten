@@ -191,8 +191,8 @@ def _parse_einzeltext(text: str, con: sqlite3.Connection, bereich_id: int) -> di
 
     # ---- Merkregeln: greifen nur, wenn der Namensabgleich keine Kategorie fand ----
     if kategorie_id is None:
-        regel = finde_regel(con, text, bereich_id)
-        if regel and regel["ziel_kategorie_id"]:
+        regel = finde_regel(con, text, bereich_id=bereich_id, sparte_id=sparte_id)
+        if regel and not regel.get("konflikt") and regel["ziel_kategorie_id"]:
             kategorie_id = regel["ziel_kategorie_id"]
             kat_row = next((k for k in kategorien if k["id"] == kategorie_id), None)
             kategorie_name = kat_row["name"] if kat_row else None

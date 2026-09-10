@@ -258,8 +258,32 @@ CREATE TABLE regel (
     ziel_kategorie_id      INTEGER REFERENCES kategorie(id),
     ziel_typ               TEXT    CHECK (ziel_typ IN ('einnahme','ausgabe','umbuchung')),
     ziel_tag_id            INTEGER REFERENCES tag(id),
-    bereich_id INTEGER NOT NULL DEFAULT 1 REFERENCES bereich(id)
+    bereich_id INTEGER NOT NULL DEFAULT 1 REFERENCES bereich(id),
+    quelle TEXT NOT NULL DEFAULT 'gelernt' CHECK (quelle IN ('gelernt','stichwort','manuell')),
+    auto_verbuchen INTEGER NOT NULL DEFAULT 0 CHECK (auto_verbuchen IN (0,1)),
+    eingabe_sparte_id INTEGER REFERENCES sparte(id),
+    gelernt_aus_buchung_id INTEGER REFERENCES buchung(id),
+    erstellt_am TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE TABLE kennzahl (
+    id INTEGER PRIMARY KEY,
+    sparte_id INTEGER NOT NULL REFERENCES sparte(id),
+    name TEXT NOT NULL,
+    sortierung INTEGER NOT NULL DEFAULT 0,
+    aktiv INTEGER NOT NULL DEFAULT 1 CHECK (aktiv IN (0,1))
+);
+
+CREATE TABLE kennzahl_term (
+    id INTEGER PRIMARY KEY,
+    kennzahl_id INTEGER NOT NULL REFERENCES kennzahl(id) ON DELETE CASCADE,
+    kategorie_id INTEGER NOT NULL REFERENCES kategorie(id),
+    messgroesse TEXT NOT NULL CHECK (messgroesse IN ('einnahmen','ausgaben','netto')),
+    vorzeichen INTEGER NOT NULL CHECK (vorzeichen IN (1,-1))
+);
+
+CREATE INDEX idx_kennzahl_sparte ON kennzahl(sparte_id);
+CREATE INDEX idx_kennzahl_term_kennzahl ON kennzahl_term(kennzahl_id);
 
 -- ---------------------------------------------------------------------------
 -- Beleg-Auswertung (ab Phase 4; lokale Foto-Auswertung via Ollama)

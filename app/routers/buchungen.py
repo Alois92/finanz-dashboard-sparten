@@ -69,14 +69,15 @@ def create_buchung(b: BuchungIn, con: sqlite3.Connection = Depends(db_dep), bere
         con.rollback()
         raise HTTPException(400, f"Datenbankfehler: {e}")
 
-    if b.typ != "umbuchung" and b.text and b.zeilen:
-        _lerne_regel(con, b.text, b.sparte_id, b.zeilen[0].kategorie_id, b.typ, bereich.id)
+    if b.typ != "umbuchung" and b.text and len(b.zeilen) == 1:
+        _lerne_regel(con, b.text, b.sparte_id, b.zeilen[0].kategorie_id, b.typ, bereich.id, buchung_id)
 
     return _buchung_detail(con, buchung_id)
 
 
 def _lerne_regel(con: sqlite3.Connection, text: str, sparte_id: int,
-                 kategorie_id: int, typ: str, bereich_id: int) -> None:
+                 kategorie_id: int, typ: str, bereich_id: int,
+                 gelernt_aus_buchung_id: int | None = None) -> None:
     """Legt/aktualisiert automatisch eine Merkregel aus einer erfassten Buchung.
 
     Faellt wie das manuelle Lernen beim Bankumsatz-Verbuchen (import_bank.py)
@@ -95,15 +96,19 @@ def _lerne_regel(con: sqlite3.Connection, text: str, sparte_id: int,
         ).fetchone()
         if vorhanden:
             con.execute(
-                "UPDATE regel SET name = ?, aktiv = 1, ziel_sparte_id = ?, "
-                "ziel_kategorie_id = ?, ziel_typ = ? WHERE id = ?",
-                (name, sparte_id, kategorie_id, typ, vorhanden["id"]),
+                "UPDATE regel SET name = ?, ziel_sparte_id = ?, ziel_kategorie_id = ?, "
+                "ziel_typ = ?, quelle = 'gelernt', auto_verbuchen = 1, "
+                "eingabe_sparte_id = ?, gelernt_aus_buchung_id = ? WHERE id = ?",
+                (name, sparte_id, kategorie_id, typ, sparte_id,
+                 gelernt_aus_buchung_id, vorhanden["id"]),
             )
         else:
             con.execute(
                 "INSERT INTO regel(name, bedingung_text, ziel_sparte_id, "
-                "ziel_kategorie_id, ziel_typ, bereich_id) VALUES(?,?,?,?,?,?)",
-                (name, bedingung, sparte_id, kategorie_id, typ, bereich_id),
+                "ziel_kategorie_id, ziel_typ, bereich_id, quelle, auto_verbuchen, "
+                "eingabe_sparte_id, gelernt_aus_buchung_id) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                (name, bedingung, sparte_id, kategorie_id, typ, bereich_id,
+                 "gelernt", 1, sparte_id, gelernt_aus_buchung_id),
             )
         con.commit()
     except Exception:
