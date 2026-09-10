@@ -52,6 +52,7 @@ Offene Punkte aus Abnahmen und aus dem unabhängigen Prüfbericht (Fable, 9. Sep
 ### Erledigt
 
 - **A2neu** — Migrationsprobe 001–015 auf der echten Produktionskopie vom 10.09. bestanden: Summen je Sparte unverändert, Integrität ok, zweiter Lauf leer (Abnahme A2neu-migrationsprobe.md). Zwei Befunde dem Nutzer genannt: Migration 003 entfernte eine fremde Sparte aus einer Auswertungsgruppe; vier Bank-/Kartenbuchungen ohne Umsatz stehen im Migrationsprotokoll.
+- **P30b** — Gerüst-Lücken geschlossen: `state.filter` mit `setFilter()`, Jahr/Sparte/Kategorie rendern zentral neu, `wizard()` in `ui.js`, Kassa-Zählung darauf umgestellt (gemergt 10.09., Abnahme P30b.md). P32/P33 freigegeben.
 - **B7** — `_update_buchung` erhält `kontakt_id`/`person_id` über `model_fields_set` wie `bankkonto_id`; drei Tests (gemergt 10.09., Abnahme B7.md).
 - **A5** — Belege inhaltsadressiert im Store, Zweitziel inkrementell mit Prüfsumme, Übertragung außerhalb des Locks (gemergt 10.09., Abnahme A5-A6.md).
 - **A6** — `sichere_datenbank()` liefert Ergebnisobjekt, Betriebsstatus zeigt es, nur voll erfolgreicher Lauf gilt als gesichert (gemergt 10.09.).
@@ -87,7 +88,6 @@ Gemergt: P31, P40, P41, P42, P50, P60 (Umsetzung durch Claude Sonnet, Codex war 
 |---|---|---|
 | **B7** | `_update_buchung` in `app/routers/buchungen.py` setzt `kontakt_id`/`person_id` bei PUT ohne diese Felder auf NULL (kein `model_fields_set`-Schutz wie bei `bankkonto_id`). Belegt durch P50-Team. Der Bearbeiten-Dialog lässt die Felder deshalb vorerst unangetastet. | **vor P50b** |
 | P50b | Historie je Buchung: Endpunkt `GET /api/buchungen/{id}/verlauf` und Protokollierung bei PUT (Migration). Aus P50 herausgelöst, weil der Frontend-Nachtrag Migrationen verbot. | M5 |
-| P30b | Gerüst-Lücken: `state.filter`, `#year-select` ohne `onchange`, `#sparte-select` ohne Re-Render, `#filter-kategorie` leer, kein Mehrschritt-Dialog in `ui.js`. Alle Seiten kompensieren lokal. | **vor P32/P33** |
 | P31b | Hinweistexte aus `rechenbasis.hinweise` enthalten rohe Cent („5099 Cent“). Entweder nur `wert` liefern und im Frontend formatieren oder serverseitig formatieren. | klein |
 | P40b | `POST /api/parse` liefert nur einen Kategorietreffer ohne Herkunft; Karte P40 wollte bis zu drei mit Regel-Herkunft. | M4 |
 | P42b | `GET /api/bankumsaetze` liefert für verbuchte Umsätze weder Buchungstyp noch Regel-Herkunft. | M4 |
