@@ -214,7 +214,8 @@ CREATE TABLE buchungszeile (
     ust_cent        INTEGER,
     ust_satz        REAL,
     steuer_relevant INTEGER NOT NULL DEFAULT 0 CHECK (steuer_relevant IN (0,1)),
-    steuer_notiz    TEXT
+    steuer_notiz    TEXT,
+    neutral         INTEGER NOT NULL DEFAULT 0 CHECK (neutral IN (0,1))
 );
 
 CREATE TABLE beleg (
@@ -316,13 +317,14 @@ SELECT
     CASE b.typ WHEN 'ausgabe' THEN -bz.betrag_cent ELSE bz.betrag_cent END AS betrag_signed_cent,
     bz.betrag_cent   AS betrag_cent,
     bz.kategorie_id  AS kategorie_id,
+    bz.neutral       AS neutral,
     CASE WHEN b.typ = 'umbuchung' THEN 1 ELSE 0 END AS ist_transfer
 FROM buchungszeile bz
 JOIN buchung b ON b.id = bz.buchung_id;
 
 -- Nur echte Einnahmen/Ausgaben (Transfers raus) - Basis fuer Dashboards.
 CREATE VIEW v_einnahmen_ausgaben AS
-SELECT * FROM v_zeile WHERE ist_transfer = 0;
+SELECT * FROM v_zeile WHERE ist_transfer = 0 AND neutral = 0;
 
 -- ---------------------------------------------------------------------------
 -- Trigger: geaendert_am pflegen; Kopfbetrag aus Zeilen aktuell halten
@@ -469,3 +471,29 @@ CREATE TABLE IF NOT EXISTS request_wiederholung (
     antwort_json TEXT NOT NULL,
     PRIMARY KEY (art, client_request_id)
 );
+-- P14: Kredite mit getrennten Zins- und neutralen Tilgungszeilen.
+CREATE TABLE kredit (
+    id                 INTEGER PRIMARY KEY,
+    sparte_id          INTEGER NOT NULL REFERENCES sparte(id),
+    konto_id           INTEGER REFERENCES bankkonto(id),
+    name               TEXT NOT NULL,
+    monatsrate_cent    INTEGER NOT NULL CHECK (monatsrate_cent > 0),
+    zinssatz           REAL,
+    beginn             TEXT NOT NULL,
+    kategorie_zins_id  INTEGER NOT NULL REFERENCES kategorie(id),
+    kategorie_rate_id  INTEGER NOT NULL REFERENCES kategorie(id),
+    aktiv              INTEGER NOT NULL DEFAULT 1 CHECK (aktiv IN (0,1))
+);
+
+CREATE TABLE kredit_jahr (
+    kredit_id        INTEGER NOT NULL REFERENCES kredit(id) ON DELETE CASCADE,
+    jahr             INTEGER NOT NULL,
+    zins_cent        INTEGER NOT NULL,
+    restschuld_cent  INTEGER,
+    status           TEXT NOT NULL CHECK (status IN ('geschaetzt','bestaetigt')),
+    beleg_id         INTEGER REFERENCES beleg(id),
+    aktualisiert_am  TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (kredit_id, jahr)
+);
+CREATE INDEX idx_kredit_sparte ON kredit (sparte_id);
+CREATE INDEX idx_kredit_jahr_jahr ON kredit_jahr (kredit_id, jahr);

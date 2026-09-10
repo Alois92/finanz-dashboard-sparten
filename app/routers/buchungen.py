@@ -199,8 +199,8 @@ def list_buchungen(sparte_id: int | None = None,
         ids = [b["id"] for b in buchungen]
         marks = ",".join("?" * len(ids))
         zeilen = con.execute(
-            f"SELECT z.buchung_id, z.id, z.kategorie_id, k.name AS kategorie_name, "
-            f"z.betrag_cent, z.notiz "
+        f"SELECT z.buchung_id, z.id, z.kategorie_id, k.name AS kategorie_name, "
+        f"z.betrag_cent, z.notiz, z.neutral "
             f"FROM buchungszeile z JOIN kategorie k ON k.id = z.kategorie_id "
             f"WHERE z.buchung_id IN ({marks}) ORDER BY z.id",
             ids,
@@ -220,6 +220,7 @@ def list_buchungen(sparte_id: int | None = None,
                 {"id": bl["id"], "dateiname": bl["dateiname"]})
         for b in buchungen:
             b["zeilen"] = by_buchung.get(b["id"], [])
+            b["neutral_cent"] = sum(z["betrag_cent"] for z in b["zeilen"] if z.get("neutral", 0))
             if kategorie_id is not None or globalgruppe_id is not None:
                 passende_zeilen = [z for z in b["zeilen"]
                                    if (kategorie_id is None or z["kategorie_id"] == kategorie_id)
@@ -263,7 +264,7 @@ def suche_buchungen(q: str, con: sqlite3.Connection = Depends(db_dep), bereich: 
     marks = ",".join("?" * len(ids))
     zeilen = con.execute(
         f"SELECT z.buchung_id, z.id, z.kategorie_id, k.name AS kategorie_name, "
-        f"z.betrag_cent, z.notiz "
+            f"z.betrag_cent, z.notiz, z.neutral "
         f"FROM buchungszeile z JOIN kategorie k ON k.id = z.kategorie_id "
         f"WHERE z.buchung_id IN ({marks}) ORDER BY z.id",
         ids,
@@ -284,6 +285,7 @@ def suche_buchungen(q: str, con: sqlite3.Connection = Depends(db_dep), bereich: 
         )
     for buchung in buchungen:
         buchung["zeilen"] = by_buchung.get(buchung["id"], [])
+        buchung["neutral_cent"] = sum(z["betrag_cent"] for z in buchung["zeilen"] if z.get("neutral", 0))
         buchung["belege"] = belege_by.get(buchung["id"], [])
         buchung['zahlungsstatus'] = _zahlungsstatus(con, buchung['id'])
         ergaenze_auslage(con, buchung)
@@ -519,12 +521,13 @@ def _buchung_detail(con: sqlite3.Connection, buchung_id: int) -> dict:
     ergaenze_auslage(con, result)
     result["zeilen"] = [
         dict(z) for z in con.execute(
-            "SELECT z.id, z.kategorie_id, k.name AS kategorie_name, z.betrag_cent, z.notiz "
+            "SELECT z.id, z.kategorie_id, k.name AS kategorie_name, z.betrag_cent, z.notiz, z.neutral "
             "FROM buchungszeile z JOIN kategorie k ON k.id = z.kategorie_id "
             "WHERE z.buchung_id = ? ORDER BY z.id",
             (buchung_id,),
         ).fetchall()
     ]
+    result["neutral_cent"] = sum(z["betrag_cent"] for z in result["zeilen"] if z.get("neutral", 0))
     return result
 
 

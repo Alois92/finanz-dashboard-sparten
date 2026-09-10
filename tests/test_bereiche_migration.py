@@ -50,7 +50,7 @@ class BereicheMigrationTest(unittest.TestCase):
             INSERT INTO kategorie_globalgruppe VALUES(2,1),(1,1);
         """)
         with self.assertLogs('finanz.migrate', level='INFO') as logs:
-            self.assertEqual([1,2,3,4,5,6], migrate.anwenden(self.con, None))
+            self.assertEqual([1,2,3,4,5,6,7], migrate.anwenden(self.con, None))
         for table in ('bankkonto','beleg','regel'):
             self.assertEqual([(1,2),(2,1)], self.con.execute(f'SELECT id,bereich_id FROM {table} WHERE id IN (1,2) ORDER BY id').fetchall())
         self.assertEqual([(10,1),(20,2)],self.con.execute("SELECT sparte_id,bereich_id FROM bankkonto WHERE art='kassa' ORDER BY sparte_id").fetchall())
@@ -76,7 +76,7 @@ class BereicheMigrationTest(unittest.TestCase):
         self.assertEqual([(2,)], self.con.execute("SELECT DISTINCT bereich_id FROM sparte WHERE typ='verein'").fetchall())
         self.assertEqual(0, self.con.execute('SELECT COUNT(*) FROM auswertungsgruppe_sparte x JOIN sparte s ON s.id=x.sparte_id JOIN auswertungsgruppe g ON g.id=x.auswertungsgruppe_id WHERE s.bereich_id<>g.bereich_id').fetchone()[0])
         self.assertIn((3,'bereiche'), migrate.status(self.con)['anstehend'])
-        self.assertEqual([1,2,3,4,5,6], migrate.anwenden(self.con, None))
+        self.assertEqual([1,2,3,4,5,6,7], migrate.anwenden(self.con, None))
         self.assertEqual([], migrate.anwenden(self.con, None))
         self.assertEqual([(2,)], self.con.execute("SELECT DISTINCT bereich_id FROM sparte WHERE typ='verein'").fetchall())
         self.assertEqual(0, self.con.execute('SELECT COUNT(*) FROM auswertungsgruppe_sparte x JOIN sparte s ON s.id=x.sparte_id JOIN auswertungsgruppe g ON g.id=x.auswertungsgruppe_id WHERE s.bereich_id<>g.bereich_id').fetchone()[0])
@@ -98,7 +98,7 @@ class BereicheMigrationTest(unittest.TestCase):
             return result
         expected = structure(self.con)
         self.old_schema()
-        self.assertEqual([1,2,3,4,5,6], migrate.anwenden(self.con, None))
+        self.assertEqual([1,2,3,4,5,6,7], migrate.anwenden(self.con, None))
         self.assertEqual(expected, structure(self.con))
 
     def test_sql_runner_rolls_back_fk_failure_and_restores_enforcement(self):

@@ -39,8 +39,8 @@ class KontenMigrationTest(unittest.TestCase):
                 with closing(sqlite3.connect(pathlib.Path(tmp)/'kopie.db')) as con:
                     original.backup(con)
                     con.row_factory = sqlite3.Row
-                    vorher = list(con.execute('SELECT * FROM v_einnahmen_ausgaben'))
-                    self.assertEqual([4, 5, 6], migrate.anwenden(con, None))
+                    vorher = [dict(r) for r in con.execute('SELECT * FROM v_einnahmen_ausgaben')]
+                    self.assertEqual([4, 5, 6, 7], migrate.anwenden(con, None))
                     self.assertEqual(2, con.execute("SELECT count(*) FROM bankkonto WHERE art='kassa'").fetchone()[0])
                     self.assertEqual(3, con.execute("SELECT count(*) FROM bewegung WHERE quelle='import'").fetchone()[0])
                     self.assertEqual(2, con.execute('SELECT count(*) FROM transfer').fetchone()[0])
@@ -54,7 +54,11 @@ class KontenMigrationTest(unittest.TestCase):
                     migrate._lade_python_migration(db.BASE/'db/migrations/004_konten_bewegungen.py').up(con)
                     con.commit()
                     self.assertEqual(snapshot, '\n'.join(con.iterdump()))
-                    self.assertEqual(vorher, list(con.execute('SELECT * FROM v_einnahmen_ausgaben')))
+                    nachher = [dict(r) for r in con.execute('SELECT * FROM v_einnahmen_ausgaben')]
+                    self.assertEqual(
+                        vorher,
+                        [{k: z[k] for k in vorher[0]} for z in nachher] if vorher else nachher,
+                    )
                     self.assertEqual([], list(con.execute('PRAGMA foreign_key_check')))
                     with closing(sqlite3.connect(':memory:')) as neu:
                         neu.executescript(db.SCHEMA.read_text(encoding='utf-8'))
