@@ -1,0 +1,31 @@
+.kto-group{margin-bottom:16px}
+.kto-group:last-child{margin-bottom:0}
+.kto-group-label{color:var(--muted);font-size:12px;margin-bottom:6px}
+.kto-row{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;padding:10px 0;border-bottom:1px solid var(--line)}
+.kto-group .kto-row:last-child{border-bottom:0}
+.kto-main{flex:1;min-width:160px}
+.kto-name{font-weight:600}
+.kto-sub{font-size:12px}
+.kto-stand{display:flex;align-items:center;gap:10px}
+.kto-val{font-weight:600;font-family:var(--font-display)}
+.kto-actions{display:flex;gap:8px;flex-wrap:wrap;width:100%}
+.kto-hint{flex-basis:100%;font-size:12px;color:var(--muted)}
+.badge{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;border:1px solid var(--line)}
+.badge-ok{color:var(--ein);border-color:var(--ein)}
+.badge-warn{color:var(--aus);border-color:var(--aus)}
+.badge-muted{color:var(--muted)}
+.ausl-row{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;padding:12px 0;border-bottom:1px solid var(--line)}
+.ausl-row:last-child{border-bottom:0}
+.ausl-main{flex:1;min-width:200px}
+.ausl-titel{font-weight:600}
+.ausl-sub{font-size:12px}
+.ausl-summe{font-weight:600;font-family:var(--font-display);font-size:18px}
+.ausl-actions{display:flex;gap:8px;flex-wrap:wrap}
+.field-error{color:var(--aus);font-size:12.5px}
+.warn-box{color:var(--aus);font-size:12.5px;border:1px solid var(--aus);border-radius:var(--r);padding:8px 10px}
+#ausgleich-form .field,#konto-form .field,#anker-form .field,#zaehlung-form .field{margin-bottom:10px}
+#ausgl-summe-feld{display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--muted)}
+@media(max-width:760px){
+  .kto-row,.ausl-row{flex-direction:column;align-items:flex-start}
+  .kto-stand{width:100%;justify-content:space-between}
+}
