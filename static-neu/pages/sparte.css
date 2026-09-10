@@ -1,0 +1,73 @@
+/* P32: Seite Sparte. Eigene Datei (Konfliktregel NACHTRAG Abschnitt 3), lädt Klassen nach,
+   die style.css nicht kennt und die uebersicht.css (P31) nicht garantiert geladen hat, wenn
+   diese Seite direkt angesteuert wird. Werte/Farben aus den gemeinsamen CSS-Variablen. */
+.card-head .hint{font-size:12.5px}
+
+.pill{display:inline-flex;align-items:center;border-radius:999px;padding:2px 8px;font-size:11.5px;font-weight:600}
+.pill.up{background:color-mix(in srgb, var(--ein) 20%, transparent);color:var(--ein)}
+.pill.down{background:color-mix(in srgb, var(--aus) 20%, transparent);color:var(--aus)}
+.pill.flat{background:var(--panel-3);color:var(--muted)}
+.pill.est{background:var(--panel-3);color:var(--muted);font-size:10px;padding:2px 6px;margin-left:6px}
+.kpi .delta{display:flex;gap:8px;align-items:center;font-size:12.5px;margin-top:2px}
+
+.g1-2{grid-template-columns:1fr 2fr}
+@media(max-width:760px){.g1-2{grid-template-columns:1fr}}
+
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px}
+.tile{text-align:left;background:var(--panel);border:1px solid var(--line);border-radius:var(--r-lg);padding:14px 16px;display:grid;gap:8px;color:inherit}
+.tile:hover{background:var(--panel-2);border-color:var(--line-strong)}
+.tile .tn{display:flex;align-items:center;gap:8px;font-weight:600}
+.tile .sdot{width:9px;height:9px;border-radius:50%;background:var(--dot);flex:none}
+
+.konten{display:grid;gap:8px}
+.konto{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:10px 12px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel-2)}
+.konto[role="button"]{cursor:pointer}
+.konto .kn{font-weight:600}
+.konto .ks{color:var(--muted);font-size:12px}
+.konto .kv{font-weight:600;text-align:right}
+
+.hint-row{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel-2);font-size:13px}
+.hint-row > div:first-child{flex:1;min-width:0}
+
+.hbars{display:grid;gap:10px}
+.hbar{display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:8px;cursor:pointer}
+.hbar .name{grid-column:1/4;font-size:13px}
+.hbar .track{grid-column:1/3;height:8px;border-radius:4px;background:var(--panel-2);overflow:hidden}
+.hbar .fill{display:block;height:100%}
+.hbar .v{font-size:12.5px;font-weight:600}
+.hbar .p{font-size:11.5px;color:var(--muted)}
+
+.chart-bars{display:flex;align-items:flex-end;gap:4px;height:120px;padding-top:10px}
+.chart-bars > div{flex:1;display:flex;gap:2px;align-items:flex-end;height:100%;cursor:pointer;border-radius:4px 4px 0 0}
+.chart-bars > div:hover{background:var(--panel-2)}
+.chart-bars i{flex:1;border-radius:2px 2px 0 0;min-height:1px}
+.chart-bars i.ein{background:var(--ein)}
+.chart-bars i.aus{background:var(--aus)}
+.legend{display:flex;gap:14px;margin-top:8px;font-size:11.5px;color:var(--muted)}
+.legend .ein::before,.legend .aus::before{content:"";display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:5px}
+.legend .ein::before{background:var(--ein)}
+.legend .aus::before{background:var(--aus)}
+
+/* Eigene Kennzahlen */
+.kz{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+@media(max-width:760px){.kz{grid-template-columns:1fr}}
+.kzc{background:var(--panel-2);border-radius:var(--r);padding:14px 16px;display:grid;gap:4px}
+.kzc .n{font-weight:500}
+.kzc .f{color:var(--muted);font-size:12px}
+.kzc .v{font-family:var(--font-display);font-size:26px;font-weight:600;letter-spacing:-.02em;margin-top:4px}
+.kzc.hinweis{border:1px dashed var(--line-strong);background:transparent;place-content:center;text-align:center}
+
+/* Kategorien im Jahresvergleich */
+.tscroll{overflow-x:auto}
+.tbl td.cell{cursor:pointer}
+.tbl td.cell:hover{background:var(--panel-2)}
+.tbl tr.sum td{font-weight:600;border-top:2px solid var(--line-strong)}
+.tbl tr.group td{color:var(--muted);font-size:12px;padding-top:14px;border-bottom:0}
+.tbl .est{color:var(--muted);font-size:11px;margin-left:3px;display:block}
+.tbl .cat{display:inline-flex;align-items:center;gap:8px}
+.tbl tr.inactive td{color:var(--muted)}
+.tbl.sticky th:first-child,.tbl.sticky td:first-child{position:sticky;left:0;background:var(--panel);z-index:1}
+.tbl.sticky tr.group td:first-child{background:var(--panel)}
+.yearpick{display:flex;gap:6px;flex-wrap:wrap}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;border:1px solid var(--line);background:var(--panel-2);font-size:12.5px;color:var(--ink-2);cursor:pointer}
+.chip.on{background:var(--panel-3);color:var(--ink);border-color:var(--line-strong)}
