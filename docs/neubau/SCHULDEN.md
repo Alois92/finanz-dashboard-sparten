@@ -41,7 +41,7 @@ Offene Punkte aus Abnahmen und aus dem unabhängigen Prüfbericht (Fable, 9. Sep
 
 | Nr. | Befund | Fällig |
 |---|---|---|
-| **A2neu** (Skript P61 fertig und gemergt; Lauf auf Prod-Kopie steht aus, Kopie liegt auf pve unter /tmp) | **Die Migrationsprobe auf einer Kopie der Produktionsdatenbank ist nur für 001–004 gefahren.** Für 005–009 (P12–P16) steht sie aus, entgegen der eigenen Prozessregel 1. Das ist die eigentliche Abnahme von M1. | **vor P20** |
+| — | Derzeit keine sperrende Schuld offen. A2neu am 10.09. abends erledigt, siehe unten. | — |
 
 ### Wichtig, nicht sperrend
 
@@ -51,6 +51,8 @@ Offene Punkte aus Abnahmen und aus dem unabhängigen Prüfbericht (Fable, 9. Sep
 
 ### Erledigt
 
+- **A2neu** — Migrationsprobe 001–015 auf der echten Produktionskopie vom 10.09. bestanden: Summen je Sparte unverändert, Integrität ok, zweiter Lauf leer (Abnahme A2neu-migrationsprobe.md). Zwei Befunde dem Nutzer genannt: Migration 003 entfernte eine fremde Sparte aus einer Auswertungsgruppe; vier Bank-/Kartenbuchungen ohne Umsatz stehen im Migrationsprotokoll.
+- **B7** — `_update_buchung` erhält `kontakt_id`/`person_id` über `model_fields_set` wie `bankkonto_id`; drei Tests (gemergt 10.09., Abnahme B7.md).
 - **A5** — Belege inhaltsadressiert im Store, Zweitziel inkrementell mit Prüfsumme, Übertragung außerhalb des Locks (gemergt 10.09., Abnahme A5-A6.md).
 - **A6** — `sichere_datenbank()` liefert Ergebnisobjekt, Betriebsstatus zeigt es, nur voll erfolgreicher Lauf gilt als gesichert (gemergt 10.09.).
 - **N3** — Kreditraten über `buchung.kredit_id`, Migration 015, Altmarker nachgezogen (gemergt 10.09., Abnahme N3.md).
