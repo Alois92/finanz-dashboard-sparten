@@ -240,6 +240,26 @@ CREATE TABLE buchung_beleg (
     PRIMARY KEY (buchung_id, beleg_id)
 );
 
+CREATE TABLE export_profil (
+    id INTEGER PRIMARY KEY,
+    bereich_id INTEGER NOT NULL REFERENCES bereich(id),
+    sparte_id INTEGER REFERENCES sparte(id),
+    jahr INTEGER NOT NULL,
+    name TEXT NOT NULL DEFAULT 'Steuer',
+    erstellt_am TEXT NOT NULL DEFAULT (datetime('now')),
+    aktualisiert_am TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (bereich_id, sparte_id, jahr, name)
+);
+
+CREATE TABLE export_profil_ausschluss (
+    profil_id INTEGER NOT NULL REFERENCES export_profil(id) ON DELETE CASCADE,
+    kategorie_id INTEGER REFERENCES kategorie(id),
+    buchung_id INTEGER REFERENCES buchung(id),
+    CHECK ((kategorie_id IS NULL) <> (buchung_id IS NULL))
+);
+
+CREATE INDEX idx_export_ausschluss_profil ON export_profil_ausschluss (profil_id);
+
 CREATE TABLE buchung_tag (
     buchung_id  INTEGER NOT NULL REFERENCES buchung(id) ON DELETE CASCADE,
     tag_id      INTEGER NOT NULL REFERENCES tag(id) ON DELETE CASCADE,

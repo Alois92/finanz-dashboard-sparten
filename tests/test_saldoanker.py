@@ -145,7 +145,7 @@ class SaldoankerMigrationTest(unittest.TestCase):
                         [(0, 'basis'), (1, 'schema_version'), (2, 'import_batch_erkennung'),
                          (3, 'bereiche'), (4, 'konten_bewegungen'), (5, 'placeholder')])
         con.commit()
-        self.assertEqual([6, 7], migrate.anwenden(con, None))
+        self.assertEqual([6, 7, 9], migrate.anwenden(con, None))
         snapshot = "\n".join(con.iterdump())
         self.assertEqual([], migrate.anwenden(con, None))
         self.assertEqual(snapshot, "\n".join(con.iterdump()))

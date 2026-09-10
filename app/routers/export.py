@@ -1,15 +1,20 @@
 """XLSX-Export und druckoptimierter Jahresbericht."""
 import datetime as dt
+import hashlib
 import html
 import io
+import pathlib
 import re
 import sqlite3
+import zipfile
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse, StreamingResponse
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill
+from pydantic import BaseModel, Field
 from ..db import db_dep
-from ..bereiche import Bereich, BereichDep, pruefe_sparte, sparten_ids
+from ..bereiche import (Bereich, BereichDep, pruefe_buchung, pruefe_kategorie,
+                        pruefe_sparte, sparten_ids)
 
 router = APIRouter(tags=["export"])
 EURO_FORMAT = '#.##0,00 \u20ac'
@@ -69,7 +74,15 @@ def _sheet(sheet, headers, widths, euro_from=None):
 
 @router.get("/api/export/xlsx")
 def export_xlsx(von: str | None = None, bis: str | None = None,
-                sparte_id: int | None = None, con: sqlite3.Connection = Depends(db_dep), bereich: BereichDep = Bereich(1)):
+                sparte_id: int | None = None, profil_id: int | None = None,
+                con: sqlite3.Connection = Depends(db_dep), bereich: BereichDep = Bereich(1)):
+    if profil_id is not None:
+        profil = _profil(con, profil_id, bereich)
+        rows = _auswahl_rows(con, profil, bereich)
+        stream = io.BytesIO(_export_workbook(rows)); stream.seek(0)
+        return StreamingResponse(stream,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": 'attachment; filename="finanz-export.xlsx"'})
     if sparte_id is not None:
         pruefe_sparte(con, sparte_id, bereich)
     von, bis = _validate(con, von, bis, sparte_id)
@@ -143,7 +156,11 @@ def _sums(con, start, end, sid, bereich):
 
 @router.get("/export/bericht", response_class=HTMLResponse)
 def jahresbericht(jahr: str, sparte_id: int | None = None,
+                  profil_id: int | None = None,
                   con: sqlite3.Connection = Depends(db_dep), bereich: BereichDep = Bereich(1)):
+    if profil_id is not None:
+        profil = _profil(con, profil_id, bereich)
+        return HTMLResponse(_profil_bericht(_preview(con, profil, bereich), profil))
     if not re.fullmatch(r"\d{4}", jahr) or not 1900 <= int(jahr) <= 9999:
         raise HTTPException(400, "jahr muss vierstellig sein")
     start, end = f"{jahr}-01-01", f"{jahr}-12-31"
@@ -208,3 +225,206 @@ th:first-child,td:first-child{{text-align:left}}
 <b>Saldo {_euro(total_in-total_out)}</b></p></section>
 {''.join(sections)}</body></html>"""
     return HTMLResponse(page)
+
+
+class ExportProfilAenderung(BaseModel):
+    kategorie_ids: list[int] = Field(default_factory=list)
+    buchung_ids: list[int] = Field(default_factory=list)
+
+
+class ExportAuswahl(BaseModel):
+    profil_id: int
+    revision: str | None = None
+    nur_suchtreffer: bool = False
+    q: str | None = None
+    trotz_fehlender_belege: bool = False
+
+
+def _jahr(jahr: int) -> None:
+    if not 1900 <= jahr <= 9999:
+        raise HTTPException(400, "jahr muss vierstellig sein")
+
+
+def _profil(con, profil_id, bereich):
+    row = con.execute("SELECT * FROM export_profil WHERE id=? AND bereich_id=?", (profil_id, bereich.id)).fetchone()
+    if not row:
+        raise HTTPException(404, "Export-Profil nicht gefunden")
+    return row
+
+
+def _ausschluesse(con, profil_id):
+    rows = con.execute("SELECT kategorie_id,buchung_id FROM export_profil_ausschluss WHERE profil_id=? ORDER BY kategorie_id,buchung_id", (profil_id,)).fetchall()
+    return [r[0] for r in rows if r[0] is not None], [r[1] for r in rows if r[1] is not None]
+
+
+def _profilantwort(con, profil, bereich):
+    kategorien, buchungen = _ausschluesse(con, profil["id"])
+    revision = _revision(con, profil, bereich)
+    return {**dict(profil), "kategorie_ids": kategorien, "buchung_ids": buchungen,
+            "ausschluesse": [{"kategorie_id": k, "buchung_id": b} for k, b in
+                              con.execute("SELECT kategorie_id,buchung_id FROM export_profil_ausschluss WHERE profil_id=? ORDER BY kategorie_id,buchung_id", (profil["id"],))],
+            "revision": revision}
+
+
+def _revision(con, profil, bereich):
+    rows = _auswahl_rows(con, profil, bereich)
+    kategorien, buchungen = _ausschluesse(con, profil["id"])
+    material = [(r["buchung_id"], r["geaendert_am"], r["text"], r["buchung_betrag_cent"]) for r in rows]
+    material += [("k", value) for value in kategorien] + [("b", value) for value in buchungen]
+    material += [("p", profil["id"], profil["aktualisiert_am"])]
+    return hashlib.sha256(repr(material).encode("utf-8")).hexdigest()
+
+
+def _auswahl_rows(con, profil, bereich, q=None, nur_suchtreffer=False):
+    clauses = ["v.datum>=?", "v.datum<=?", "s.bereich_id=?", "b.typ IN ('einnahme','ausgabe')"]
+    params = [f"{profil['jahr']}-01-01", f"{profil['jahr']}-12-31", bereich.id]
+    if profil["sparte_id"] is not None:
+        clauses.append("v.sparte_id=?"); params.append(profil["sparte_id"])
+    kategorien, buchungen = _ausschluesse(con, profil["id"])
+    if kategorien:
+        clauses.append("v.kategorie_id NOT IN (" + ",".join("?" for _ in kategorien) + ")"); params.extend(kategorien)
+    if buchungen:
+        clauses.append("v.buchung_id NOT IN (" + ",".join("?" for _ in buchungen) + ")"); params.extend(buchungen)
+    if nur_suchtreffer and q:
+        clauses.append("(LOWER(COALESCE(b.text,'')) LIKE ? OR LOWER(k.name) LIKE ?)")
+        needle = "%" + q.lower() + "%"; params.extend([needle, needle])
+    return con.execute(
+        "SELECT v.*,b.geaendert_am,b.text,b.betrag_cent buchung_betrag_cent,s.name sparte,k.name kategorie "
+        "FROM v_einnahmen_ausgaben v JOIN buchung b ON b.id=v.buchung_id "
+        "JOIN sparte s ON s.id=v.sparte_id JOIN kategorie k ON k.id=v.kategorie_id "
+        "WHERE " + " AND ".join(clauses) + " ORDER BY v.datum,v.buchung_id,v.zeile_id", params).fetchall()
+
+
+def _fehlende_belege(con, rows):
+    result = []
+    seen = set()
+    for row in rows:
+        for beleg in con.execute("SELECT be.id,be.dateiname,be.pfad FROM beleg be JOIN buchung_beleg bb ON bb.beleg_id=be.id WHERE bb.buchung_id=? ORDER BY be.id", (row["buchung_id"],)):
+            key = (row["buchung_id"], beleg["id"])
+            if key not in seen and (not beleg["pfad"] or not pathlib.Path(beleg["pfad"]).exists()):
+                result.append({"buchung_id": row["buchung_id"], "beleg_id": beleg["id"], "dateiname": beleg["dateiname"]})
+                seen.add(key)
+    return result
+
+
+def _preview(con, profil, bereich, q=None, nur_suchtreffer=False):
+    rows = _auswahl_rows(con, profil, bereich, q, True)
+    zeilen = []
+    einnahmen = ausgaben = 0
+    for row in rows:
+        amount = row["betrag_cent"]
+        if row["typ"] == "einnahme": einnahmen += amount
+        else: ausgaben += amount
+        belege = [r[0] for r in con.execute("SELECT beleg_id FROM buchung_beleg WHERE buchung_id=? ORDER BY beleg_id", (row["buchung_id"],))]
+        zeilen.append({"buchung_id": row["buchung_id"], "datum": row["datum"], "text": row["text"] or "",
+                       "kategorie": row["kategorie"], "betrag_cent": amount,
+                       "anteil_cent": amount, "belege": belege})
+    kategorien, buchungen = _ausschluesse(con, profil["id"])
+    return {"revision": _revision(con, profil, bereich), "zeilen": zeilen,
+            "summen": {"anzahl": len(zeilen), "einnahmen_cent": einnahmen, "ausgaben_cent": ausgaben},
+            "ausgeschlossen": {"kategorien": len(kategorien), "buchungen": len(buchungen)},
+            "belege_fehlend": _fehlende_belege(con, rows)}
+
+
+def _profil_bericht(preview, profil):
+    zeilen = "".join(f"<tr><td>{html.escape(row['datum'])}</td><td>{html.escape(row['kategorie'])}</td><td>{html.escape(row['text'])}</td><td>{row['betrag_cent'] / 100:.2f} EUR</td></tr>" for row in preview["zeilen"])
+    sums = preview["summen"]
+    return (f"<!doctype html><html lang='de'><head><meta charset='utf-8'><title>Export {profil['jahr']}</title></head><body>"
+            f"<h1>Export-Profil {html.escape(profil['name'])}</h1><p>Jahr {profil['jahr']} – Einnahmen {sums['einnahmen_cent']} Cent, Ausgaben {sums['ausgaben_cent']} Cent</p>"
+            f"<table><tr><th>Datum</th><th>Kategorie</th><th>Text</th><th>Betrag</th></tr>{zeilen}</table></body></html>")
+
+
+@router.get("/api/export/profil")
+def export_profil(jahr: int, sparte_id: int | None = None,
+                  con: sqlite3.Connection = Depends(db_dep), bereich: BereichDep = Bereich(1)):
+    _jahr(jahr)
+    if sparte_id is not None:
+        pruefe_sparte(con, sparte_id, bereich)
+    profil = con.execute("SELECT * FROM export_profil WHERE bereich_id=? AND sparte_id IS ? AND jahr=? AND name='Steuer'", (bereich.id, sparte_id, jahr)).fetchone()
+    if not profil:
+        cur = con.execute("INSERT INTO export_profil(bereich_id,sparte_id,jahr) VALUES(?,?,?)", (bereich.id, sparte_id, jahr))
+        con.commit(); profil = con.execute("SELECT * FROM export_profil WHERE id=?", (cur.lastrowid,)).fetchone()
+    return _profilantwort(con, profil, bereich)
+
+
+@router.put("/api/export/profil/{profil_id}")
+def export_profil_setzen(profil_id: int, aenderung: ExportProfilAenderung,
+                         con: sqlite3.Connection = Depends(db_dep), bereich: BereichDep = Bereich(1)):
+    profil = _profil(con, profil_id, bereich)
+    for kid in set(aenderung.kategorie_ids): pruefe_kategorie(con, kid, bereich)
+    for bid in set(aenderung.buchung_ids): pruefe_buchung(con, bid, bereich)
+    con.execute("DELETE FROM export_profil_ausschluss WHERE profil_id=?", (profil_id,))
+    con.executemany("INSERT INTO export_profil_ausschluss(profil_id,kategorie_id) VALUES(?,?)", [(profil_id, k) for k in set(aenderung.kategorie_ids)])
+    con.executemany("INSERT INTO export_profil_ausschluss(profil_id,buchung_id) VALUES(?,?)", [(profil_id, b) for b in set(aenderung.buchung_ids)])
+    con.execute("UPDATE export_profil SET aktualisiert_am=datetime('now') WHERE id=?", (profil_id,)); con.commit()
+    return _profilantwort(con, con.execute("SELECT * FROM export_profil WHERE id=?", (profil_id,)).fetchone(), bereich)
+
+
+@router.post("/api/export/profil/{profil_id}/uebernehmen-vom-vorjahr")
+def export_profil_vorjahr(profil_id: int, con: sqlite3.Connection = Depends(db_dep), bereich: BereichDep = Bereich(1)):
+    profil = _profil(con, profil_id, bereich)
+    vorher = con.execute("SELECT * FROM export_profil WHERE bereich_id=? AND sparte_id IS ? AND jahr=? AND name=?", (bereich.id, profil["sparte_id"], profil["jahr"] - 1, profil["name"])).fetchone()
+    con.execute("DELETE FROM export_profil_ausschluss WHERE profil_id=? AND kategorie_id IS NOT NULL", (profil_id,))
+    if vorher:
+        con.executemany("INSERT INTO export_profil_ausschluss(profil_id,kategorie_id) VALUES(?,?)", [(profil_id, r[0]) for r in con.execute("SELECT kategorie_id FROM export_profil_ausschluss WHERE profil_id=? AND kategorie_id IS NOT NULL", (vorher["id"],))])
+    con.execute("UPDATE export_profil SET aktualisiert_am=datetime('now') WHERE id=?", (profil_id,)); con.commit()
+    return _profilantwort(con, con.execute("SELECT * FROM export_profil WHERE id=?", (profil_id,)).fetchone(), bereich)
+
+
+@router.post("/api/export/vorschau")
+def export_vorschau(auswahl: ExportAuswahl, con: sqlite3.Connection = Depends(db_dep), bereich: BereichDep = Bereich(1)):
+    profil = _profil(con, auswahl.profil_id, bereich)
+    return _preview(con, profil, bereich, auswahl.q, auswahl.nur_suchtreffer)
+
+
+def _export_workbook(rows):
+    wb = Workbook(); sheet = wb.active; sheet.title = "Buchungen"
+    for row in rows:
+        sheet.append([_xlsx_text(row["datum"]), _xlsx_text(row["sparte"]), _xlsx_text(row["kategorie"]), _xlsx_text(row["typ"]), _xlsx_text(row["text"] or ""), row["betrag_cent"] / 100])
+    _sheet(sheet, ["Datum", "Sparte", "Kategorie", "Typ", "Text", "Anteil"], (12, 24, 28, 12, 36, 16), 6)
+    monthly = wb.create_sheet("Monatssummen")
+    monat = {}
+    for row in rows:
+        values = monat.setdefault(row["datum"][:7], [0, 0])
+        values[0 if row["typ"] == "einnahme" else 1] += row["betrag_cent"]
+    for key, (income, expense) in sorted(monat.items()):
+        monthly.append([key, income / 100, expense / 100, (income - expense) / 100])
+    _sheet(monthly, ["Monat", "Einnahmen", "Ausgaben", "Saldo"], (14, 18, 18, 18), 2)
+    category = wb.create_sheet("Kategorien")
+    grouped = {}
+    for row in rows:
+        key = (row["sparte"], row["kategorie"])
+        values = grouped.setdefault(key, [0, 0])
+        values[0 if row["typ"] == "einnahme" else 1] += row["betrag_cent"]
+    for (division, name), (income, expense) in sorted(grouped.items()):
+        category.append([_xlsx_text(division), _xlsx_text(name), income / 100, expense / 100, (income - expense) / 100])
+    _sheet(category, ["Sparte", "Kategorie", "Einnahmen", "Ausgaben", "Saldo"], (24, 30, 18, 18, 18), 3)
+    stream = io.BytesIO(); wb.save(stream); return stream.getvalue()
+
+
+@router.post("/api/export/paket")
+def export_paket(auswahl: ExportAuswahl, con: sqlite3.Connection = Depends(db_dep), bereich: BereichDep = Bereich(1)):
+    profil = _profil(con, auswahl.profil_id, bereich)
+    suchtext = auswahl.q if auswahl.nur_suchtreffer else None
+    preview = _preview(con, profil, bereich, suchtext, auswahl.nur_suchtreffer)
+    if auswahl.revision != preview["revision"]:
+        raise HTTPException(409, "Revision des Export-Profils oder der Buchungen stimmt nicht mehr")
+    if preview["belege_fehlend"] and not auswahl.trotz_fehlender_belege:
+        raise HTTPException(422, "Belege fehlen")
+    rows = _auswahl_rows(con, profil, bereich, suchtext, auswahl.nur_suchtreffer)
+    sparte = "Alle" if profil["sparte_id"] is None else con.execute("SELECT name FROM sparte WHERE id=?", (profil["sparte_id"],)).fetchone()[0]
+    dateiname = f"Buchungen_{re.sub(r'[^A-Za-z0-9_-]+', '_', sparte)}_{profil['jahr']}.xlsx"
+    files = []
+    content = io.BytesIO()
+    with zipfile.ZipFile(content, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(dateiname, _export_workbook(rows))
+        for row in rows:
+            for beleg in con.execute("SELECT DISTINCT be.id,be.dateiname,be.pfad FROM beleg be JOIN buchung_beleg bb ON bb.beleg_id=be.id WHERE bb.buchung_id=? ORDER BY be.id", (row["buchung_id"],)):
+                if not beleg["pfad"] or not pathlib.Path(beleg["pfad"]).exists() or beleg["id"] in files: continue
+                amount = row["buchung_betrag_cent"]
+                stem = f"{row['datum']}_{amount // 100},{abs(amount) % 100:02d}_EUR_B{row['buchung_id']}_Beleg{beleg['id']}{pathlib.Path(beleg['dateiname']).suffix.lower()}"
+                archive.writestr("Belege/" + stem, pathlib.Path(beleg["pfad"]).read_bytes()); files.append(beleg["id"])
+        missing = "\n".join(f"Buchung {r['buchung_id']}: Beleg {r['beleg_id']} {r['dateiname']}" for r in preview["belege_fehlend"]) or "Keine"
+        archive.writestr("INHALT.txt", f"Erstellt am: {dt.datetime.now().isoformat(timespec='seconds')}\nBereich: {bereich.id}\nSparte: {sparte}\nJahr: {profil['jahr']}\nProfilname: {profil['name']}\nRevision: {preview['revision']}\nAnzahl Buchungen: {preview['summen']['anzahl']}\nEinnahmen: {preview['summen']['einnahmen_cent']} Cent\nAusgaben: {preview['summen']['ausgaben_cent']} Cent\nNur Suchtreffer: {'ja' if auswahl.nur_suchtreffer else 'nein'}\nFehlende Belege:\n{missing}\n")
+    content.seek(0)
+    return StreamingResponse(content, media_type="application/zip", headers={"Content-Disposition": 'attachment; filename="export-paket.zip"'})
