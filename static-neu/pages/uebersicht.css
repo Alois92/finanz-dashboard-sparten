@@ -1,0 +1,62 @@
+/* P31: Startseite. Ergänzt static-neu/style.css nur um Klassen, die es dort noch
+   nicht gibt (Kacheln, Hinweise, Konten, Balkenlisten, Legende). Wird von
+   pages/uebersicht.js einmalig per <link> nachgeladen. */
+.kpi .pill.est{font-size:10px;padding:2px 6px;border-radius:999px;background:var(--panel-3);color:var(--muted);margin-left:8px}
+.kpi .delta{display:flex;gap:8px;align-items:center;font-size:12.5px;margin-top:2px}
+.pill{display:inline-flex;align-items:center;border-radius:999px;padding:2px 8px;font-size:11.5px;font-weight:600}
+.pill.up{background:color-mix(in srgb, var(--ein) 20%, transparent);color:var(--ein)}
+.pill.down{background:color-mix(in srgb, var(--aus) 20%, transparent);color:var(--aus)}
+.pill.flat{background:var(--panel-3);color:var(--muted)}
+
+.filter-note{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12.5px;margin:-8px 0 4px}
+.lnk{border:0;background:transparent;color:var(--info);text-decoration:underline;padding:0;font:inherit;cursor:pointer}
+
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px}
+.tile{text-align:left;background:var(--panel);border:1px solid var(--line);border-radius:var(--r-lg);padding:14px 16px;display:grid;gap:8px;color:inherit}
+.tile:hover{background:var(--panel-2);border-color:var(--line-strong)}
+.tile .tn{display:flex;align-items:center;gap:8px;font-weight:600}
+.tile .sdot{width:9px;height:9px;border-radius:50%;background:var(--dot);flex:none}
+.tile .tv{font-size:20px;font-weight:600}
+.tile .tea{display:flex;justify-content:space-between;font-size:12.5px;gap:8px}
+.tile .bar{height:6px;border-radius:4px;overflow:hidden;background:var(--panel-2);display:flex}
+.tile .bar i{display:block;height:100%}
+
+.g2-1{grid-template-columns:2fr 1fr}
+@media(max-width:760px){.g2-1{grid-template-columns:1fr}}
+
+.hints{display:grid;gap:8px}
+.hint-row{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel-2);font-size:13px}
+.hint-row > div:first-child{flex:1;min-width:0}
+.hint-row .x{border:0;background:transparent;color:var(--muted);font-size:16px;line-height:1;padding:2px 4px}
+.hint-row .x:hover{color:var(--ink)}
+
+.konten{display:grid;gap:8px}
+.konto{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:10px 12px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel-2)}
+.konto[role="button"]{cursor:pointer}
+.konto .kn{font-weight:600}
+.konto .ks{color:var(--muted);font-size:12px}
+.konto .kv{font-weight:600;text-align:right}
+.konto .kd{color:var(--muted);font-size:11.5px;text-align:right;display:flex;gap:6px;align-items:center;justify-content:flex-end}
+
+.hbars{display:grid;gap:10px}
+.hbar{display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:8px;cursor:pointer}
+.hbar .name{grid-column:1/4;font-size:13px}
+.hbar .track{grid-column:1/3;height:8px;border-radius:4px;background:var(--panel-2);overflow:hidden}
+.hbar .fill{display:block;height:100%}
+.hbar .v{font-size:12.5px;font-weight:600}
+.hbar .p{font-size:11.5px;color:var(--muted)}
+
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden}
+.seg button{border:0;background:transparent;padding:5px 12px;font-size:12.5px;color:var(--muted)}
+.seg button.active{background:var(--panel-3);color:var(--ink)}
+
+.chart-bars{display:flex;align-items:flex-end;gap:4px;height:120px;padding-top:10px}
+.chart-bars > div{flex:1;display:flex;gap:2px;align-items:flex-end;height:100%;cursor:pointer;border-radius:4px 4px 0 0}
+.chart-bars > div:hover{background:var(--panel-2)}
+.chart-bars i{flex:1;border-radius:2px 2px 0 0;min-height:1px}
+.chart-bars i.ein{background:var(--ein)}
+.chart-bars i.aus{background:var(--aus)}
+.legend{display:flex;gap:14px;margin-top:8px;font-size:11.5px;color:var(--muted)}
+.legend .ein::before,.legend .aus::before{content:"";display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:5px}
+.legend .ein::before{background:var(--ein)}
+.legend .aus::before{background:var(--aus)}
