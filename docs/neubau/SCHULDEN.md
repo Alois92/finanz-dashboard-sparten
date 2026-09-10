@@ -43,7 +43,7 @@ Offene Punkte aus Abnahmen und aus dem unabhängigen Prüfbericht (Fable, 9. Sep
 
 | Nr. | Befund | Fällig |
 |---|---|---|
-| **A2neu** | **Die Migrationsprobe auf einer Kopie der Produktionsdatenbank ist nur für 001–004 gefahren.** Für 005–009 (P12–P16) steht sie aus, entgegen der eigenen Prozessregel 1. Das ist die eigentliche Abnahme von M1. | **vor P20** |
+| **A2neu** (weiter offen nach P20, siehe `abnahme/P20.md`) | **Die Migrationsprobe auf einer Kopie der Produktionsdatenbank ist nur für 001–004 gefahren.** Für 005–009 (P12–P16) steht sie aus, entgegen der eigenen Prozessregel 1. Das ist die eigentliche Abnahme von M1. | **vor P20** |
 
 ### Wichtig, nicht sperrend
 
@@ -55,6 +55,8 @@ Offene Punkte aus Abnahmen und aus dem unabhängigen Prüfbericht (Fable, 9. Sep
 
 ### Erledigt
 
+- **B2** — entschieden in P20: Verein-Ausschluss ausschließlich über `sparte.bereich_id`; `typ` und `geschuetzt` sind informativ (gemergt 10.09.).
+- **B3** — entschieden in P20: Summen aus `v_einnahmen_ausgaben`, Kontostände aus `bewegung` (gemergt 10.09.).
 - **A1** — eigene frische Sicherung `…-vor-nachzug-<version>.db` vor jedem Nachzug (Zweig fix/a1, gemergt 10.09.).
 - **A4** — Ad-hoc-Schema aus `db.py` in Migration 011 überführt (gemergt 10.09.).
 - **N1** — Kennzahlen zählen je Term genau einmal, Eindeutigkeit per Migration 013 (gemergt 10.09.).
