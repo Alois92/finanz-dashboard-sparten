@@ -101,6 +101,7 @@ Bewusste Nutzer-Entscheidung: **keine Cloud-KI** für Rechnungsfotos.
 - **Produktiv:** `/var/lib/finanz/finanz.db` **im Container** (Eigentümer `finanz`, Modus `600`, WAL aktiv). Diese Datei wurde am 16./19.07. checksum-verifiziert vom NAS in den CT kopiert — der Produktivbetrieb läuft **nicht** live von der NAS-Datei.
 - **NAS-Datei** `\\192.168.1.119\Daten\Finanzdaten\finanz.db` ist die **Dev-/Rückfallkopie** (Stand ~16.07.), nicht die produktive Quelle. Nicht verwechseln.
 - **App-internes Backup** (`app/backup.py`): Tageskopie nach `<DB-Ordner>/backup/`, 30 Stück, SQLite-Backup-API, beim Start + alle 6 h. Zweitziel via `FINANZ_BACKUP_ZIEL2` möglich (UNC-Pfad, im CT als Drop-In).
+- **Sicherung vor Schema-Nachzug:** App-Start und `python -m app.migrate apply` erstellen bei anstehenden Migrationen immer eine eigene, frische Datenbankkopie im selben Backup-Ordner: `finanz-JJJJ-MM-TT-HHMM-vor-nachzug-v<zielversion>.db`. Die Zielversion ist die höchste anstehende Migration. Bei gleichem Namen wird `-2`, `-3`, … vor `.db` ergänzt; bestehende Kopien werden nie wiederverwendet oder überschrieben. Die SQLite-Backup-API übernimmt den aktuellen Stand, anschließend wird die Integrität geprüft. Diese Dateien sind von der Tagesrotation ausgenommen; nach erfolgreicher Nachzugssicherung bleiben separat die zehn zuletzt geschriebenen Nachzugssicherungen erhalten. Scheitert die Sicherung einer dauerhaften Datenbank, bricht der Nachzug mit `MigrationsFehler` ab und die App startet schreibgeschützt. Bei Wegwerf-Datenbanken sowie ohne anstehende Migrationen wird keine Nachzugssicherung angelegt. Der eigene Modus sichert nur die Datenbank; Belege, Tagesmanifest und Zweitziel gehören weiterhin zur Tageskopie.
 - **Proxmox-Backup:** manueller `vzdump` von CT 101 auf lokale Platte existiert; **automatisches NAS-Backup fehlt noch** (siehe Abschnitt 9).
 
 ### Wiederherstellung eines app-internen Sicherungssatzes
@@ -109,6 +110,13 @@ Bewusste Nutzer-Entscheidung: **keine Cloud-KI** für Rechnungsfotos.
 2. Den Inhalt von `belege-JJJJ-MM-TT/` nach `belege/` an denselben Speicherort zurückkopieren; die Unterordnerstruktur bleibt dabei unverändert.
 3. Das Manifest `manifest-JJJJ-MM-TT.json` prüfen und insbesondere DB- sowie Beleg-Prüfsummen mit den zurückkopierten Dateien vergleichen.
 4. Dienst wieder starten und anschließend `GET /api/betrieb/status` als angemeldeter Benutzer prüfen.
+
+Für einen Rückweg nach einem Schema-Nachzug den Dienst anhalten und die passende
+`finanz-JJJJ-MM-TT-HHMM-vor-nachzug-v<zielversion>.db` (gegebenenfalls mit
+laufendem Zusatz) als Datenbank zurückspielen; dazu die zum gesicherten Schema
+passende App-Version einsetzen. Diese Kopie enthält den Datenbankstand direkt
+vor dem Nachzug und hat kein eigenes Belegmanifest. Die letzten zehn solcher
+Kopien bleiben auch dann erhalten, wenn ältere Tageskopien entfernt werden.
 
 ---
 
