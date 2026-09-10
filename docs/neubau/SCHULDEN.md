@@ -74,3 +74,20 @@ Offene Punkte aus Abnahmen und aus dem unabhängigen Prüfbericht (Fable, 9. Sep
 
 - **B2 (drei Wahrheiten für „Verein")**: `app/auslagen.py:67-71` nutzt zusätzlich `sparte.typ='privat'` als Regel. **Vor P20 entscheiden: `bereich_id` ist maßgeblich**, sonst entsteht eine vierte Stelle.
 - **B3 (Umbuchungen doppelt)**: `create_umbuchung` schreibt jetzt Buchungspaar **und** Transfer samt Bewegungen. Festlegung für P20: Summen aus `v_einnahmen_ausgaben`, Kontostände aus `bewegung`.
+
+---
+
+## Ergänzungen aus den Frontend-Abnahmen (Fable, 10. September 2026, abends)
+
+Gemergt: P31, P40, P41, P42, P50, P60 (Umsetzung durch Claude Sonnet, Codex war gesperrt). Protokolle in `abnahme/`.
+
+| Nr. | Befund | Fällig |
+|---|---|---|
+| **B7** | `_update_buchung` in `app/routers/buchungen.py` setzt `kontakt_id`/`person_id` bei PUT ohne diese Felder auf NULL (kein `model_fields_set`-Schutz wie bei `bankkonto_id`). Belegt durch P50-Team. Der Bearbeiten-Dialog lässt die Felder deshalb vorerst unangetastet. | **vor P50b** |
+| P50b | Historie je Buchung: Endpunkt `GET /api/buchungen/{id}/verlauf` und Protokollierung bei PUT (Migration). Aus P50 herausgelöst, weil der Frontend-Nachtrag Migrationen verbot. | M5 |
+| P30b | Gerüst-Lücken: `state.filter`, `#year-select` ohne `onchange`, `#sparte-select` ohne Re-Render, `#filter-kategorie` leer, kein Mehrschritt-Dialog in `ui.js`. Alle Seiten kompensieren lokal. | **vor P32/P33** |
+| P31b | Hinweistexte aus `rechenbasis.hinweise` enthalten rohe Cent („5099 Cent“). Entweder nur `wert` liefern und im Frontend formatieren oder serverseitig formatieren. | klein |
+| P40b | `POST /api/parse` liefert nur einen Kategorietreffer ohne Herkunft; Karte P40 wollte bis zu drei mit Regel-Herkunft. | M4 |
+| P42b | `GET /api/bankumsaetze` liefert für verbuchte Umsätze weder Buchungstyp noch Regel-Herkunft. | M4 |
+| P60b | `GET /export/bericht` verlangt `jahr` auch bei `profil_id`; Ausschluss-Dialog holt Buchungen mit Limit 1000. | vor M6 |
+| — | Handy-Ansicht von Übersicht, Konten, Bankimport, Export im Browser noch nicht geprüft (nur Erfassen und Buchungsliste). | vor CT 102 |
