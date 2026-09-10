@@ -85,7 +85,8 @@ async function drawKategorieFilter(){
   kategorieOptionsKey=key;
   const behalten=state.filter.kategorieId||'';
   try{
-    const params=state.sparteId?{sparte_id:state.sparteId}:{};
+    // nur_aktive wie zuvor lokal in buchungen.js (P50): stillgelegte Kategorien gehören nicht in den Filter.
+    const params=state.sparteId?{sparte_id:state.sparteId,nur_aktive:'true'}:{nur_aktive:'true'};
     const kategorien=await api('/kategorien',{params});
     sel.innerHTML=`<option value="">alle</option>${kategorien.map(k=>`<option value="${k.id}">${esc(k.name)}</option>`).join('')}`;
     const gueltig=kategorien.some(k=>String(k.id)===behalten);
