@@ -129,7 +129,7 @@ class MigrationsprobeTest(unittest.TestCase):
                     self.assertEqual([], report['foreign_key_check'])
                     self.assertEqual(['ok'], report['integrity_check'])
                     self.assertEqual([], report['zweiter_anwenden_lauf'])
-                    self.assertEqual(list(range(1 if version0 else 4,15)), report['angewendet'])
+                    self.assertEqual(list(range(1 if version0 else 4, self.probe.migrate.liste_migrationen()[-1][0] + 1)), report['angewendet'])
                     self.assertTrue(report['bereiche']['korrekt'])
                     self.assertTrue(all(r['nachher'] == (2 if r['sparte_id']==2 else 1)
                                         for r in report['bereiche']['je_sparte_jahr']))
