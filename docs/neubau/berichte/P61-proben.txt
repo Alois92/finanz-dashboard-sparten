@@ -1,0 +1,84 @@
+ALTSTAND: p10 ; synthetisch, niemals Produktionsdaten
+Quellpruefsumme vorher: 5fcb720c4e4af9c6694046df9aed01698bbc6e1249e7142da57bd0904a53260f
+LAUF 1
+Migrationsprobe: Prüfungen bestanden
+Sparte 1, Jahr 2025: einnahmen_cent alt=200 neu=200; ausgaben_cent alt=100 neu=100
+Sparte 1, Jahr 2026: einnahmen_cent alt=0 neu=0; ausgaben_cent alt=90 neu=90
+Sparte 2, Jahr 2026: einnahmen_cent alt=80 neu=80; ausgaben_cent alt=0 neu=0
+Abweichungen: []
+Bereiche: {"korrekt": true, "je_sparte_jahr": [{"sparte_id": 1, "jahr": 2025, "vorher": 1, "nachher": 1, "erwartet": 1, "korrekt": true}, {"sparte_id": 1, "jahr": 2026, "vorher": 1, "nachher": 1, "erwartet": 1, "korrekt": true}, {"sparte_id": 2, "jahr": 2026, "vorher": 2, "nachher": 2, "erwartet": 2, "korrekt": true}]}
+Anzahl vorher/nachher: {'buchung': 9, 'buchungszeile': 18} {'buchung': 9, 'buchungszeile': 18}
+Transfers ungeklärt: 1 ; Zahlung unbekannt: 1
+Ungeklärte Fälle (Protokoll/Bestand und Log): {'transfer_objekte': ['umbuchungsgruppe:probe-offen'], 'zahlungs_objekte': ['buchung:9'], 'log': {'transfers': 1, 'zahlungen': 1, 'barbuchungen': 0}, 'transfers': 1, 'zahlungen': 1}
+Migrationsprotokoll: [{"id": 1, "version": 4, "zeitpunkt": "2026-09-10 18:53:48", "art": "umbuchung_ungeklaert", "objektkennung": "umbuchungsgruppe:probe-offen", "hinweis": "Umbuchungsgruppe probe-offen: Die Buchungen konnten nicht eindeutig aufgeloest werden."}, {"id": 2, "version": 4, "zeitpunkt": "2026-09-10 18:53:48", "art": "zahlung_ungeklaert", "objektkennung": "buchung:9", "hinweis": "Buchung 9: Bank- oder Kartenbuchung ohne zugehoerigen Umsatz."}]
+Migrationslog:
+  DB-Sicherung vor Schema-Nachzug: C:\Users\lblet\AppData\Local\Temp\p61-abnahme-zhfpvyk2\lauf1\sicherung.db
+  Migration 004: Kassen=2, Bewegungen=7, Transfers=2, ungeklärte Transfers=1, ungeklärte Barbuchungen=0
+  Migration 004: Zahlung unbekannt: Anzahl=1; Buchungs-IDs=[9]; Barbuchungs-IDs=[]
+foreign_key_check: [] ; integrity_check: ['ok']
+Angewendet: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14] ; zweiter Lauf: []
+Quelle SHA256 vorher/nachher: 5fcb720c4e4af9c6694046df9aed01698bbc6e1249e7142da57bd0904a53260f 5fcb720c4e4af9c6694046df9aed01698bbc6e1249e7142da57bd0904a53260f
+LAUF 2
+Migrationsprobe: Prüfungen bestanden
+Sparte 1, Jahr 2025: einnahmen_cent alt=200 neu=200; ausgaben_cent alt=100 neu=100
+Sparte 1, Jahr 2026: einnahmen_cent alt=0 neu=0; ausgaben_cent alt=90 neu=90
+Sparte 2, Jahr 2026: einnahmen_cent alt=80 neu=80; ausgaben_cent alt=0 neu=0
+Abweichungen: []
+Bereiche: {"korrekt": true, "je_sparte_jahr": [{"sparte_id": 1, "jahr": 2025, "vorher": 1, "nachher": 1, "erwartet": 1, "korrekt": true}, {"sparte_id": 1, "jahr": 2026, "vorher": 1, "nachher": 1, "erwartet": 1, "korrekt": true}, {"sparte_id": 2, "jahr": 2026, "vorher": 2, "nachher": 2, "erwartet": 2, "korrekt": true}]}
+Anzahl vorher/nachher: {'buchung': 9, 'buchungszeile': 18} {'buchung': 9, 'buchungszeile': 18}
+Transfers ungeklärt: 1 ; Zahlung unbekannt: 1
+Ungeklärte Fälle (Protokoll/Bestand und Log): {'transfer_objekte': ['umbuchungsgruppe:probe-offen'], 'zahlungs_objekte': ['buchung:9'], 'log': {'transfers': 1, 'zahlungen': 1, 'barbuchungen': 0}, 'transfers': 1, 'zahlungen': 1}
+Migrationsprotokoll: [{"id": 1, "version": 4, "zeitpunkt": "2026-09-10 18:53:48", "art": "umbuchung_ungeklaert", "objektkennung": "umbuchungsgruppe:probe-offen", "hinweis": "Umbuchungsgruppe probe-offen: Die Buchungen konnten nicht eindeutig aufgeloest werden."}, {"id": 2, "version": 4, "zeitpunkt": "2026-09-10 18:53:48", "art": "zahlung_ungeklaert", "objektkennung": "buchung:9", "hinweis": "Buchung 9: Bank- oder Kartenbuchung ohne zugehoerigen Umsatz."}]
+Migrationslog:
+  DB-Sicherung vor Schema-Nachzug: C:\Users\lblet\AppData\Local\Temp\p61-abnahme-zhfpvyk2\lauf2\sicherung.db
+  Migration 004: Kassen=2, Bewegungen=7, Transfers=2, ungeklärte Transfers=1, ungeklärte Barbuchungen=0
+  Migration 004: Zahlung unbekannt: Anzahl=1; Buchungs-IDs=[9]; Barbuchungs-IDs=[]
+foreign_key_check: [] ; integrity_check: ['ok']
+Angewendet: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14] ; zweiter Lauf: []
+Quelle SHA256 vorher/nachher: 5fcb720c4e4af9c6694046df9aed01698bbc6e1249e7142da57bd0904a53260f 5fcb720c4e4af9c6694046df9aed01698bbc6e1249e7142da57bd0904a53260f
+Alle fachlichen Berichtsfelder identisch (nur Zeitstempel/Backup-Pfad ausgenommen).
+Quellpruefsumme nachher: 5fcb720c4e4af9c6694046df9aed01698bbc6e1249e7142da57bd0904a53260f
+ALTSTAND: v0 ; synthetisch, niemals Produktionsdaten
+Quellpruefsumme vorher: 1e6237515712a9404ee1e07a61e99caef37d0a6cd362794ed7bda2df6025ca74
+LAUF 1
+Migrationsprobe: Prüfungen bestanden
+Sparte 1, Jahr 2025: einnahmen_cent alt=200 neu=200; ausgaben_cent alt=100 neu=100
+Sparte 1, Jahr 2026: einnahmen_cent alt=0 neu=0; ausgaben_cent alt=90 neu=90
+Sparte 2, Jahr 2026: einnahmen_cent alt=80 neu=80; ausgaben_cent alt=0 neu=0
+Abweichungen: []
+Bereiche: {"korrekt": true, "je_sparte_jahr": [{"sparte_id": 1, "jahr": 2025, "vorher": null, "nachher": 1, "erwartet": 1, "korrekt": true}, {"sparte_id": 1, "jahr": 2026, "vorher": null, "nachher": 1, "erwartet": 1, "korrekt": true}, {"sparte_id": 2, "jahr": 2026, "vorher": null, "nachher": 2, "erwartet": 2, "korrekt": true}]}
+Anzahl vorher/nachher: {'buchung': 9, 'buchungszeile': 18} {'buchung': 9, 'buchungszeile': 18}
+Transfers ungeklärt: 1 ; Zahlung unbekannt: 1
+Ungeklärte Fälle (Protokoll/Bestand und Log): {'transfer_objekte': ['umbuchungsgruppe:probe-offen'], 'zahlungs_objekte': ['buchung:9'], 'log': {'transfers': 1, 'zahlungen': 1, 'barbuchungen': 0}, 'transfers': 1, 'zahlungen': 1}
+Migrationsprotokoll: [{"id": 1, "version": 4, "zeitpunkt": "2026-09-10 18:53:48", "art": "umbuchung_ungeklaert", "objektkennung": "umbuchungsgruppe:probe-offen", "hinweis": "Umbuchungsgruppe probe-offen: Die Buchungen konnten nicht eindeutig aufgeloest werden."}, {"id": 2, "version": 4, "zeitpunkt": "2026-09-10 18:53:48", "art": "zahlung_ungeklaert", "objektkennung": "buchung:9", "hinweis": "Buchung 9: Bank- oder Kartenbuchung ohne zugehoerigen Umsatz."}]
+Migrationslog:
+  DB-Sicherung vor Schema-Nachzug: C:\Users\lblet\AppData\Local\Temp\p61-abnahme-iuaqxtcp\lauf1\sicherung.db
+  Migration 3: Entfernte fremde Zuordnungen auswertungsgruppe_sparte: 0
+  Migration 3: Entfernte fremde Zuordnungen kategorie_globalgruppe: 0
+  Migration 004: Kassen=2, Bewegungen=7, Transfers=2, ungeklärte Transfers=1, ungeklärte Barbuchungen=0
+  Migration 004: Zahlung unbekannt: Anzahl=1; Buchungs-IDs=[9]; Barbuchungs-IDs=[]
+foreign_key_check: [] ; integrity_check: ['ok']
+Angewendet: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14] ; zweiter Lauf: []
+Quelle SHA256 vorher/nachher: 1e6237515712a9404ee1e07a61e99caef37d0a6cd362794ed7bda2df6025ca74 1e6237515712a9404ee1e07a61e99caef37d0a6cd362794ed7bda2df6025ca74
+LAUF 2
+Migrationsprobe: Prüfungen bestanden
+Sparte 1, Jahr 2025: einnahmen_cent alt=200 neu=200; ausgaben_cent alt=100 neu=100
+Sparte 1, Jahr 2026: einnahmen_cent alt=0 neu=0; ausgaben_cent alt=90 neu=90
+Sparte 2, Jahr 2026: einnahmen_cent alt=80 neu=80; ausgaben_cent alt=0 neu=0
+Abweichungen: []
+Bereiche: {"korrekt": true, "je_sparte_jahr": [{"sparte_id": 1, "jahr": 2025, "vorher": null, "nachher": 1, "erwartet": 1, "korrekt": true}, {"sparte_id": 1, "jahr": 2026, "vorher": null, "nachher": 1, "erwartet": 1, "korrekt": true}, {"sparte_id": 2, "jahr": 2026, "vorher": null, "nachher": 2, "erwartet": 2, "korrekt": true}]}
+Anzahl vorher/nachher: {'buchung': 9, 'buchungszeile': 18} {'buchung': 9, 'buchungszeile': 18}
+Transfers ungeklärt: 1 ; Zahlung unbekannt: 1
+Ungeklärte Fälle (Protokoll/Bestand und Log): {'transfer_objekte': ['umbuchungsgruppe:probe-offen'], 'zahlungs_objekte': ['buchung:9'], 'log': {'transfers': 1, 'zahlungen': 1, 'barbuchungen': 0}, 'transfers': 1, 'zahlungen': 1}
+Migrationsprotokoll: [{"id": 1, "version": 4, "zeitpunkt": "2026-09-10 18:53:49", "art": "umbuchung_ungeklaert", "objektkennung": "umbuchungsgruppe:probe-offen", "hinweis": "Umbuchungsgruppe probe-offen: Die Buchungen konnten nicht eindeutig aufgeloest werden."}, {"id": 2, "version": 4, "zeitpunkt": "2026-09-10 18:53:49", "art": "zahlung_ungeklaert", "objektkennung": "buchung:9", "hinweis": "Buchung 9: Bank- oder Kartenbuchung ohne zugehoerigen Umsatz."}]
+Migrationslog:
+  DB-Sicherung vor Schema-Nachzug: C:\Users\lblet\AppData\Local\Temp\p61-abnahme-iuaqxtcp\lauf2\sicherung.db
+  Migration 3: Entfernte fremde Zuordnungen auswertungsgruppe_sparte: 0
+  Migration 3: Entfernte fremde Zuordnungen kategorie_globalgruppe: 0
+  Migration 004: Kassen=2, Bewegungen=7, Transfers=2, ungeklärte Transfers=1, ungeklärte Barbuchungen=0
+  Migration 004: Zahlung unbekannt: Anzahl=1; Buchungs-IDs=[9]; Barbuchungs-IDs=[]
+foreign_key_check: [] ; integrity_check: ['ok']
+Angewendet: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14] ; zweiter Lauf: []
+Quelle SHA256 vorher/nachher: 1e6237515712a9404ee1e07a61e99caef37d0a6cd362794ed7bda2df6025ca74 1e6237515712a9404ee1e07a61e99caef37d0a6cd362794ed7bda2df6025ca74
+Alle fachlichen Berichtsfelder identisch (nur Zeitstempel/Backup-Pfad ausgenommen).
+Quellpruefsumme nachher: 1e6237515712a9404ee1e07a61e99caef37d0a6cd362794ed7bda2df6025ca74
