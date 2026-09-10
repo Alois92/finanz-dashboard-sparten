@@ -107,7 +107,7 @@ def list_konten(con=Depends(db_dep), bereich: BereichDep = Bereich(1)):
     rows = [dict(r) for r in con.execute(f'SELECT {FELDER} FROM bankkonto WHERE bereich_id=? ORDER BY sortierung,name,id',(bereich.id,))]
     for row in rows:
         stand = berechne_kontostand(con, row['id'], date.today().isoformat())
-        row.update({feld: stand[feld] for feld in ('stand_cent', 'datenstand', 'letzter_import')})
+        row.update({feld: stand[feld] for feld in ('stand_cent', 'datenstand', 'letzter_import', 'hinweis')})
     return rows
 
 

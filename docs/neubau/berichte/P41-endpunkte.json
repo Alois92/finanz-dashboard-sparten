@@ -1,0 +1,500 @@
+[
+  {
+    "label": "Bankkonto anlegen",
+    "method": "POST",
+    "url": "/api/konten",
+    "body": {
+      "name": "P41-Bank",
+      "art": "bank",
+      "sparte_id": 1
+    },
+    "status": 201,
+    "response": {
+      "id": 1,
+      "name": "P41-Bank",
+      "art": "bank",
+      "waehrung": "EUR",
+      "sparte_id": 1,
+      "iban": null,
+      "bank": null,
+      "kartenendnummer": null,
+      "aktiv": 1,
+      "sortierung": 0
+    }
+  },
+  {
+    "label": "Kassa ohne Sparte (422)",
+    "method": "POST",
+    "url": "/api/konten",
+    "body": {
+      "name": "P41-Kassa-ohne-Sparte",
+      "art": "kassa"
+    },
+    "status": 422,
+    "response": {
+      "detail": "Kassa benötigt sparte_id"
+    }
+  },
+  {
+    "label": "Kassakonto anlegen",
+    "method": "POST",
+    "url": "/api/konten",
+    "body": {
+      "name": "P41-Kassa",
+      "art": "kassa",
+      "sparte_id": 1
+    },
+    "status": 201,
+    "response": {
+      "id": 2,
+      "name": "P41-Kassa",
+      "art": "kassa",
+      "waehrung": "EUR",
+      "sparte_id": 1,
+      "iban": null,
+      "bank": null,
+      "kartenendnummer": null,
+      "aktiv": 1,
+      "sortierung": 0
+    }
+  },
+  {
+    "label": "Kartenkonto anlegen",
+    "method": "POST",
+    "url": "/api/konten",
+    "body": {
+      "name": "P41-Karte",
+      "art": "karte",
+      "sparte_id": 1
+    },
+    "status": 201,
+    "response": {
+      "id": 3,
+      "name": "P41-Karte",
+      "art": "karte",
+      "waehrung": "EUR",
+      "sparte_id": 1,
+      "iban": null,
+      "bank": null,
+      "kartenendnummer": null,
+      "aktiv": 1,
+      "sortierung": 0
+    }
+  },
+  {
+    "label": "Kontenliste",
+    "method": "GET",
+    "url": "/api/konten",
+    "body": null,
+    "status": 200,
+    "response": [
+      {
+        "id": 1,
+        "name": "P41-Bank",
+        "art": "bank",
+        "waehrung": "EUR",
+        "sparte_id": 1,
+        "iban": null,
+        "bank": null,
+        "kartenendnummer": null,
+        "aktiv": 1,
+        "sortierung": 0,
+        "stand_cent": null,
+        "datenstand": "unbekannt",
+        "letzter_import": null,
+        "hinweis": ""
+      },
+      {
+        "id": 3,
+        "name": "P41-Karte",
+        "art": "karte",
+        "waehrung": "EUR",
+        "sparte_id": 1,
+        "iban": null,
+        "bank": null,
+        "kartenendnummer": null,
+        "aktiv": 1,
+        "sortierung": 0,
+        "stand_cent": null,
+        "datenstand": "unbekannt",
+        "letzter_import": null,
+        "hinweis": ""
+      },
+      {
+        "id": 2,
+        "name": "P41-Kassa",
+        "art": "kassa",
+        "waehrung": "EUR",
+        "sparte_id": 1,
+        "iban": null,
+        "bank": null,
+        "kartenendnummer": null,
+        "aktiv": 1,
+        "sortierung": 0,
+        "stand_cent": null,
+        "datenstand": "unbekannt",
+        "letzter_import": null,
+        "hinweis": ""
+      }
+    ]
+  },
+  {
+    "label": "Anker setzen (erster)",
+    "method": "POST",
+    "url": "/api/konten/2/anker",
+    "body": {
+      "stichtag": "2026-08-01",
+      "saldo_cent": 50000,
+      "quelle": "manuell"
+    },
+    "status": 201,
+    "response": {
+      "id": 1,
+      "konto_id": 2,
+      "stichtag": "2026-08-01",
+      "saldo_cent": 50000,
+      "quelle": "manuell",
+      "beleg_id": null,
+      "notiz": null
+    }
+  },
+  {
+    "label": "Stand nach Bewegung",
+    "method": "GET",
+    "url": "/api/konten/2/stand?stichtag=2026-08-20",
+    "body": null,
+    "status": 200,
+    "response": {
+      "konto_id": 2,
+      "stichtag": "2026-08-20",
+      "stand_cent": 60000,
+      "saldo_cent": 10000,
+      "anker": {
+        "stichtag": "2026-08-01",
+        "saldo_cent": 50000,
+        "quelle": "manuell"
+      },
+      "bewegungen_seit_anker": 1,
+      "letzter_import": null,
+      "import_alter_tage": null,
+      "datenstand": "aktuell",
+      "hinweis": ""
+    }
+  },
+  {
+    "label": "Zweiter Anker mit Differenz",
+    "method": "POST",
+    "url": "/api/konten/2/anker",
+    "body": {
+      "stichtag": "2026-08-20",
+      "saldo_cent": 61500,
+      "quelle": "manuell"
+    },
+    "status": 201,
+    "response": {
+      "id": 2,
+      "konto_id": 2,
+      "stichtag": "2026-08-20",
+      "saldo_cent": 61500,
+      "quelle": "manuell",
+      "gerechnet_cent": 60000,
+      "differenz_cent": 1500,
+      "beleg_id": null,
+      "notiz": null
+    }
+  },
+  {
+    "label": "Bewegungen des Kontos",
+    "method": "GET",
+    "url": "/api/konten/2/bewegungen?limit=1",
+    "body": null,
+    "status": 200,
+    "response": {
+      "bewegungen": [
+        {
+          "id": 1,
+          "konto_id": 2,
+          "datum": "2026-08-15",
+          "valuta": null,
+          "betrag_signed_cent": 10000,
+          "waehrung": "EUR",
+          "art": "zahlung",
+          "transfer_id": null,
+          "bankumsatz_id": null,
+          "text": null,
+          "gegenpartei": null,
+          "quelle": "manuell",
+          "storniert_am": null,
+          "erstellt_am": "2026-09-10 19:33:16"
+        }
+      ],
+      "naechster_cursor": null
+    }
+  },
+  {
+    "label": "Kassazählung mit Differenz",
+    "method": "POST",
+    "url": "/api/konten/2/zaehlung",
+    "body": {
+      "datum": "2026-08-21",
+      "gezaehlt_cent": 60000
+    },
+    "status": 201,
+    "response": {
+      "id": 1,
+      "konto_id": 2,
+      "datum": "2026-08-21",
+      "gerechnet_cent": 61500,
+      "gezaehlt_cent": 60000,
+      "differenz_cent": -1500,
+      "status": "offen",
+      "notiz": null
+    }
+  },
+  {
+    "label": "Zählung buchen",
+    "method": "POST",
+    "url": "/api/konten/2/zaehlung/1/buchen",
+    "body": {
+      "kategorie_id": 3
+    },
+    "status": 201,
+    "response": {
+      "id": 1,
+      "buchung_id": 3,
+      "gerechnet_cent": 61500,
+      "gezaehlt_cent": 60000,
+      "differenz_cent": -1500,
+      "status": "geklaert"
+    }
+  },
+  {
+    "label": "Kassazählungen offen",
+    "method": "GET",
+    "url": "/api/kassazaehlungen",
+    "body": null,
+    "status": 200,
+    "response": [
+      {
+        "id": 1,
+        "konto_id": 2,
+        "datum": "2026-08-21",
+        "gerechnet_cent": 61500,
+        "gezaehlt_cent": 60000,
+        "differenz_cent": -1500,
+        "status": "geklaert",
+        "notiz": null,
+        "buchung_id": 3,
+        "erstellt_am": "2026-09-10 19:33:16"
+      }
+    ]
+  },
+  {
+    "label": "Offene Abgleiche",
+    "method": "GET",
+    "url": "/api/konten/1/offene-abgleiche",
+    "body": null,
+    "status": 200,
+    "response": {
+      "konto_id": 1,
+      "manuelle_anzahl": 0,
+      "manuelle_bewegungen": [],
+      "umsaetze_anzahl": 0,
+      "offene_umsaetze": []
+    }
+  },
+  {
+    "label": "Auslage buchen (Buchung mit bezahlt_von_sparte_id)",
+    "method": "POST",
+    "url": "/api/buchungen",
+    "body": {
+      "sparte_id": 7,
+      "datum": "2026-08-05",
+      "typ": "ausgabe",
+      "zahlungsart": "bar",
+      "bezahlt_von_sparte_id": 5,
+      "zeilen": [
+        {
+          "kategorie_id": 4,
+          "betrag_cent": 5000
+        }
+      ]
+    },
+    "status": 201,
+    "response": {
+      "id": 4,
+      "sparte_id": 7,
+      "sparte_name": "P41-Hof",
+      "datum": "2026-08-05",
+      "typ": "ausgabe",
+      "version": 1,
+      "betrag_cent": 5000,
+      "zahlungsart": "bar",
+      "belegstatus": "beleg_fehlt",
+      "buchungsstatus": "offen",
+      "text": null,
+      "notiz": null,
+      "zahlungsstatus": "verknuepft",
+      "bezahlt_von_sparte_id": 5,
+      "auslage": {
+        "zahler_sparte_id": 5,
+        "offen_cent": 5000,
+        "ausgeglichen": false
+      },
+      "zeilen": [
+        {
+          "id": 4,
+          "kategorie_id": 4,
+          "kategorie_name": "P41-Kosten",
+          "betrag_cent": 5000,
+          "notiz": null,
+          "neutral": 0
+        }
+      ],
+      "neutral_cent": 0
+    }
+  },
+  {
+    "label": "Offene Auslagen",
+    "method": "GET",
+    "url": "/api/auslagen",
+    "body": null,
+    "status": 200,
+    "response": [
+      {
+        "zahler_sparte_id": 5,
+        "sparte_id": 7,
+        "offen_cent": 5000,
+        "anzahl": 1,
+        "auslagen": [
+          {
+            "id": 1,
+            "buchung_id": 4,
+            "datum": "2026-08-05",
+            "text": null,
+            "kategorie": "P41-Kosten",
+            "betrag_cent": 5000,
+            "offen_cent": 5000
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "label": "Ausgleich anlegen (bar, teilweise)",
+    "method": "POST",
+    "url": "/api/ausgleiche",
+    "body": {
+      "von_sparte_id": 7,
+      "nach_sparte_id": 5,
+      "auslage_ids": [
+        1
+      ],
+      "datum": "2026-08-06",
+      "betrag_cent": 2000,
+      "zahlungsart": "bar"
+    },
+    "status": 201,
+    "response": {
+      "id": 1,
+      "transfer_id": 1,
+      "zuordnungen": [
+        {
+          "auslage_id": 1,
+          "betrag_cent": 2000
+        }
+      ],
+      "warnungen": [
+        "Kassa P41-Hof hat nur 0,00 €, danach negativ"
+      ]
+    }
+  },
+  {
+    "label": "Offene Auslagen nach Teilausgleich",
+    "method": "GET",
+    "url": "/api/auslagen",
+    "body": null,
+    "status": 200,
+    "response": [
+      {
+        "zahler_sparte_id": 5,
+        "sparte_id": 7,
+        "offen_cent": 3000,
+        "anzahl": 1,
+        "auslagen": [
+          {
+            "id": 1,
+            "buchung_id": 4,
+            "datum": "2026-08-05",
+            "text": null,
+            "kategorie": "P41-Kosten",
+            "betrag_cent": 5000,
+            "offen_cent": 3000
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "label": "Ausgleichs-Historie",
+    "method": "GET",
+    "url": "/api/ausgleiche",
+    "body": null,
+    "status": 200,
+    "response": [
+      {
+        "id": 1,
+        "transfer_id": 1,
+        "datum": "2026-08-06",
+        "von_sparte_id": 7,
+        "nach_sparte_id": 5,
+        "betrag_cent": 2000,
+        "zahlungsart": "bar",
+        "client_request_id": null,
+        "aufgehoben_am": null,
+        "notiz": null,
+        "erstellt_am": "2026-09-10 19:33:17",
+        "zuordnungen": [
+          {
+            "auslage_id": 1,
+            "betrag_cent": 2000
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "label": "Ausgleich zurücknehmen",
+    "method": "DELETE",
+    "url": "/api/ausgleiche/1",
+    "body": null,
+    "status": 204,
+    "response": "b''"
+  },
+  {
+    "label": "Offene Auslagen nach Rücknahme",
+    "method": "GET",
+    "url": "/api/auslagen",
+    "body": null,
+    "status": 200,
+    "response": [
+      {
+        "zahler_sparte_id": 5,
+        "sparte_id": 7,
+        "offen_cent": 5000,
+        "anzahl": 1,
+        "auslagen": [
+          {
+            "id": 1,
+            "buchung_id": 4,
+            "datum": "2026-08-05",
+            "text": null,
+            "kategorie": "P41-Kosten",
+            "betrag_cent": 5000,
+            "offen_cent": 5000
+          }
+        ]
+      }
+    ]
+  }
+]
