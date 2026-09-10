@@ -277,10 +277,13 @@ def import_csv(
         neue_umsatz_ids.append(cur.lastrowid)
     con.execute("UPDATE import_batch SET anzahl_neu = ?, anzahl_dubletten = ? WHERE id = ?", (neu, dubletten, batch_id))
     if spalten["saldo"] is not None:
-        letzter = max(posten, key=lambda posten: (posten["datum"], posten["csv_zeile"]))
+        richtung = -1 if _csv_absteigend(posten) else 1
+        letzter = max(posten, key=lambda p: (p["datum"], richtung * p["csv_zeile"]))
         con.execute(
-            "INSERT OR IGNORE INTO kontostand_anker(konto_id,stichtag,saldo_cent,quelle,notiz) "
-            "VALUES(?,?,?,'import',?)",
+            "INSERT INTO kontostand_anker(konto_id,stichtag,saldo_cent,quelle,notiz) "
+            "VALUES(?,?,?,'import',?) "
+            "ON CONFLICT(konto_id,stichtag) DO UPDATE SET "
+            "saldo_cent=excluded.saldo_cent, quelle=excluded.quelle, notiz=excluded.notiz",
             (bankkonto_id, letzter["datum"], letzter["saldo_cent"],
              f"CSV-Import {datei.filename}"),
         )
@@ -309,6 +312,25 @@ def import_csv(
     return {"batch_id": batch_id, "neu": neu, "dubletten": dubletten, "gesamt": len(posten), "saldo_ok": saldo_ok, "saldo_hinweis": saldo_hinweis, "erkannt": erkannt}
 
 
+def _csv_absteigend(posten: list[dict]) -> bool:
+    """Erkennt die Dateirichtung anhand der Tage, sonst der Saldo-Uebergaenge.
+
+    Bei nur einem Tag zaehlen die passenden Uebergaenge je Richtung.
+    Ohne eindeutiges Ergebnis bleibt die bisherige aufsteigende Reihenfolge.
+    """
+    for vorher, nachher in zip(posten, posten[1:]):
+        if vorher["datum"] != nachher["datum"]:
+            return vorher["datum"] > nachher["datum"]
+    aufsteigend = absteigend = 0
+    for vorher, nachher in zip(posten, posten[1:]):
+        if vorher["saldo_cent"] is None or nachher["saldo_cent"] is None:
+            continue
+        differenz = nachher["saldo_cent"] - vorher["saldo_cent"]
+        aufsteigend += differenz == nachher["betrag_cent"]
+        absteigend += -differenz == vorher["betrag_cent"]
+    return absteigend > aufsteigend
+
+
 def _saldo_pruefen(posten: list[dict], hat_saldo: bool):
     """Prueft die Saldo-Kette. Rueckgabe (saldo_ok, hinweis).
 
@@ -320,6 +342,8 @@ def _saldo_pruefen(posten: list[dict], hat_saldo: bool):
     mit_saldo = [p for p in posten if p["saldo_cent"] is not None]
     if len(mit_saldo) < 2:
         return None, "Zu wenige Saldo-Werte fuer einen Abgleich"
+    if _csv_absteigend(posten):
+        mit_saldo.reverse()
     for i in range(1, len(mit_saldo)):
         vorher = mit_saldo[i - 1]["saldo_cent"]
         nachher = mit_saldo[i]["saldo_cent"]
