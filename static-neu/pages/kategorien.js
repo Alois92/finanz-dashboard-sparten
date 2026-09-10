@@ -83,6 +83,9 @@ export async function render(root, state) {
   // dieses Reiters. "Wunsch an das Gerüst": eine exportierte Invalidierungsfunktion
   // für kategorieOptionsKey würde diesen lokalen Ersatz überflüssig machen.
   function patchZentraleKategorieFilterFallsAktiv() {
+    // Gerüst-Cache für #filter-kategorie ungültig machen (Ereignis aus app.js, P30b/P33), damit der
+    // Kopf-Filter auch nach einem späteren Sparten-Rückwechsel frisch lädt.
+    window.dispatchEvent(new CustomEvent('neu:kategorien-geaendert'));
     const sel = document.querySelector('#filter-kategorie');
     if (!sel) return;
     const globalSparte = state.filter ? state.filter.sparteId : state.sparteId;
