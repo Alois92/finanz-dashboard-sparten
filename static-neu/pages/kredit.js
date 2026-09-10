@@ -224,8 +224,10 @@ async function ladeZuordnenKandidaten(state, k){
   // ohne Kredit-Zuordnung würden in der Kandidatenliste sonst stillschweigend fehlen.
   const antwort = await api('/buchungen', {params: {sparte_id: k.sparte_id, von: k.beginn, bis: HEUTE, limit: 500}, bereichId: state.bereichId});
   const buchungen = antwort.buchungen || [];
+  // Seit dem Kopf-Nachzug liefert GET /api/kredite kategorie_rate_id direkt; die Herleitung aus einer
+  // bestehenden Rate bleibt nur als Rueckfall fuer aeltere Antworten.
   const vorhandeneRate = buchungen.find(b => b.kredit_id === k.id && (b.zeilen || []).some(z => z.neutral));
-  const kategorieRateId = vorhandeneRate ? vorhandeneRate.zeilen.find(z => z.neutral).kategorie_id : null;
+  const kategorieRateId = k.kategorie_rate_id ?? (vorhandeneRate ? vorhandeneRate.zeilen.find(z => z.neutral).kategorie_id : null);
   if(kategorieRateId == null) return [];
   return buchungen.filter(b =>
     b.kredit_id == null &&

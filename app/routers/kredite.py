@@ -111,6 +111,7 @@ def _listeintrag(con, row):
     return {
         "id": row["id"], "name": row["name"], "sparte_id": row["sparte_id"],
         "monatsrate_cent": row["monatsrate_cent"], "beginn": row["beginn"],
+        "kategorie_zins_id": row["kategorie_zins_id"], "kategorie_rate_id": row["kategorie_rate_id"],
         "jahre": [dict(j) for j in con.execute(
             "SELECT jahr, zins_cent, restschuld_cent, status FROM kredit_jahr "
             "WHERE kredit_id=? ORDER BY jahr", (row["id"],)
