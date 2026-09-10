@@ -169,4 +169,6 @@ def create_transfer(t: TransferIn, con=Depends(db_dep), bereich: BereichDep = Be
 def delete_transfer(transfer_id: int, con=Depends(db_dep), bereich: BereichDep = Bereich(1)):
     pruefe_transfer(con,transfer_id,bereich)
     with con:
+        if con.execute('SELECT 1 FROM ausgleich WHERE transfer_id = ?', (transfer_id,)).fetchone():
+            raise HTTPException(409, 'Ausgleich über /api/ausgleiche/{id} aufheben')
         storniere_transfer(con,transfer_id)

@@ -19,7 +19,7 @@ from .db import get_connection, init_db
 from .migrate import MigrationsFehler, status as migrationsstatus
 from .routers import (belege, beleg_auswertung, buchungen, dashboard, export,
                       gruppen, import_bank, import_excel, schnellerfassung,
-                      stammdaten, konten)
+                      stammdaten, konten, auslagen)
 
 STUDIO_DIR = pathlib.Path(__file__).resolve().parent.parent / "static-studio"
 
@@ -65,6 +65,7 @@ app.include_router(auth_router)
 app.include_router(export.router)
 app.include_router(stammdaten.router, prefix="/api")
 app.include_router(konten.router, prefix="/api")
+app.include_router(auslagen.router, prefix="/api")
 app.include_router(buchungen.router, prefix="/api")
 app.include_router(dashboard.router, prefix="/api")
 app.include_router(gruppen.router, prefix="/api")

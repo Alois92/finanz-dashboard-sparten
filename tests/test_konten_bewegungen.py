@@ -40,7 +40,7 @@ class KontenMigrationTest(unittest.TestCase):
                     original.backup(con)
                     con.row_factory = sqlite3.Row
                     vorher = list(con.execute('SELECT * FROM v_einnahmen_ausgaben'))
-                    self.assertEqual([4], migrate.anwenden(con, None))
+                    self.assertEqual([4, 5], migrate.anwenden(con, None))
                     self.assertEqual(2, con.execute("SELECT count(*) FROM bankkonto WHERE art='kassa'").fetchone()[0])
                     self.assertEqual(3, con.execute("SELECT count(*) FROM bewegung WHERE quelle='import'").fetchone()[0])
                     self.assertEqual(2, con.execute('SELECT count(*) FROM transfer').fetchone()[0])
@@ -98,7 +98,8 @@ class KontenApiTest(unittest.TestCase):
         kid = self.con.execute("SELECT id FROM bankkonto WHERE art='kassa' AND sparte_id=?",(self.haupt,)).fetchone()[0]
         self.assertEqual(-150,self.stand(kid))
         mid = self.con.execute('SELECT bewegung_id FROM buchung_bewegung WHERE buchung_id=?',(result['id'],)).fetchone()[0]
-        b['typ']='einnahme'
+        b['typ'] = 'einnahme'
+        b['version'] = result['version']
         self.assertEqual(200,self.request('PUT',f"/api/buchungen/{result['id']}",b)[0])
         self.assertEqual(150,self.stand(kid))
         self.assertEqual(mid,self.con.execute('SELECT bewegung_id FROM buchung_bewegung WHERE buchung_id=?',(result['id'],)).fetchone()[0])
@@ -141,7 +142,7 @@ class KontenApiTest(unittest.TestCase):
         self.assertEqual(-150,self.stand(kid))
         uid = self.con.execute("INSERT INTO bankumsatz(bankkonto_id,datum,betrag_cent,import_hash) VALUES(?,'2026-01-02',-150,'test')",(kid,)).lastrowid
         self.con.commit()
-        updated = {**self.payload(),'bankkonto_id':kid,'bankumsatz_id':uid}
+        updated = {**self.payload(), 'bankkonto_id': kid, 'bankumsatz_id': uid, 'version': b['version']}
         self.assertEqual(200,self.request('PUT',f"/api/buchungen/{b['id']}",updated)[0])
         self.assertEqual(-150,self.stand(kid))
         self.assertEqual(1,self.con.execute("SELECT count(*) FROM bewegung WHERE quelle='import'").fetchone()[0])
@@ -175,8 +176,14 @@ class KontenApiTest(unittest.TestCase):
         payload = {**self.payload(),'bankkonto_id':kid,'bankumsatz_id':uid}
         status,b = self.request('POST','/api/buchungen',payload)
         self.assertEqual(201,status,b)
-        self.assertEqual(422,self.request('PUT',f"/api/buchungen/{b['id']}",{**self.payload(),'bankkonto_id':other})[0])
-        self.assertEqual(200,self.request('PUT',f"/api/buchungen/{b['id']}",{**self.payload(),'bankkonto_id':None,'bankumsatz_id':None})[0])
+        self.assertEqual(422, self.request(
+            'PUT', f"/api/buchungen/{b['id']}",
+            {**self.payload(), 'bankkonto_id': other, 'version': b['version']},
+        )[0])
+        self.assertEqual(200, self.request(
+            'PUT', f"/api/buchungen/{b['id']}",
+            {**self.payload(), 'bankkonto_id': None, 'bankumsatz_id': None, 'version': b['version']},
+        )[0])
         self.assertEqual('offen',self.con.execute('SELECT importstatus FROM bankumsatz WHERE id=?',(uid,)).fetchone()[0])
 
     def test_kompatible_barumbuchung_und_storno(self):

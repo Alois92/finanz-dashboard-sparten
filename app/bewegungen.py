@@ -87,7 +87,15 @@ def synchronisiere_buchung(con, buchung_id, bereich):
         mid = import_bewegung(con,b['bankumsatz_id'],bereich)
         con.execute("UPDATE bankumsatz SET importstatus='verbucht' WHERE id=?",(b['bankumsatz_id'],))
     elif b['typ'] in ('einnahme','ausgabe'):
-        kid = kassa_fuer_sparte(con,b['sparte_id'],bereich) if b['zahlungsart']=='bar' else b['bankkonto_id'] if b['zahlungsart'] in ('bank','karte') else None
+        auslage = con.execute(
+            'SELECT zahler_sparte_id FROM auslage WHERE buchung_id = ?', (buchung_id,)
+        ).fetchone()
+        zahler = auslage['zahler_sparte_id'] if auslage else b['sparte_id']
+        kid = None
+        if b['zahlungsart'] == 'bar':
+            kid = kassa_fuer_sparte(con, zahler, bereich)
+        elif b['zahlungsart'] in ('bank', 'karte'):
+            kid = b['bankkonto_id']
         if kid is not None:
             pruefe_konto(con,kid,bereich)
             own = [m for m in alt if m['quelle'] in ('manuell','nachzug') and m['transfer_id'] is None and m['storniert_am'] is None]
