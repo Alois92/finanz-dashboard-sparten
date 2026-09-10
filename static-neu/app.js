@@ -2,7 +2,7 @@ import {api} from './api.js';
 import {esc} from './format.js';
 import {toast,drill,closeSheet} from './ui.js';
 
-const routes={uebersicht:['Übersicht','uebersicht'],sparte:['Sparte','sparte'],erfassen:['Erfassen','erfassen'],buchungen:['Buchungen','buchungen'],konten:['Konten','konten'],kategorien:['Kategorien','kategorien'],belege:['Belege','belege'],bankimport:['Bankimport','bankimport'],export:['Export','export']};
+const routes={uebersicht:['Übersicht','uebersicht'],sparte:['Sparte','sparte'],erfassen:['Erfassen','erfassen'],buchungen:['Buchungen','buchungen'],konten:['Konten','konten'],kredit:['Kredit','kredit'],kategorien:['Kategorien','kategorien'],belege:['Belege','belege'],bankimport:['Bankimport','bankimport'],export:['Export','export']};
 
 const initialSparteId=localStorage.getItem('neu-sparte')||'';
 const initialJahr=localStorage.getItem('neu-jahr')||'';

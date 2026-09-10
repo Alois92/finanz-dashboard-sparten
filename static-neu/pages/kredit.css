@@ -1,0 +1,18 @@
+.kredit-card{border-bottom:1px solid var(--line);padding:14px 0}
+.kredit-card:last-child{border-bottom:0}
+.kredit-head{cursor:pointer}
+.kredit-name{font-weight:600}
+.kredit-sub{font-size:12px}
+.kredit-jahre{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.pill.kredit-jahr-pill{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--panel-2);border-radius:999px;padding:4px 10px;font-size:12px;color:var(--ink-2)}
+.pill.kredit-jahr-pill:hover{background:var(--panel-3)}
+.pill.kredit-jahr-pill.active{border-color:var(--ink);color:var(--ink)}
+.kredit-detail{margin-top:14px;padding-top:14px;border-top:1px dashed var(--line)}
+.kredit-jahr-kopf{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:10px}
+.kredit-jahr-actions{display:flex;gap:8px;flex-wrap:wrap}
+.kredit-zuordnen{margin-top:16px}
+.kredit-zuordnen h3{margin-bottom:8px}
+#kredit-form .field,#kredit-jahr-form .field,#kredit-rate-form .field{margin-bottom:10px}
+@media(max-width:760px){
+  .kredit-jahr-kopf{flex-direction:column;align-items:flex-start}
+}
