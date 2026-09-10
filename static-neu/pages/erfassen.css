@@ -1,0 +1,35 @@
+.erfassen-page .quick-card form{display:grid;gap:14px}
+.ef-amount-row{display:grid;grid-template-columns:auto 1fr;gap:14px;align-items:end}
+.segmented{display:inline-flex;border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.seg-btn{border:0;background:var(--panel);color:var(--ink-2);padding:9px 16px;font-weight:600}
+.seg-btn.active{background:var(--btn);color:var(--btn-ink)}
+.seg-btn.aus.active{background:var(--aus);color:#fff}
+.seg-btn.ein.active{background:var(--ein);color:#fff}
+.ef-betrag-field input{font-size:26px;font-weight:600;font-family:var(--font-display);text-align:right;padding:9px 12px}
+.ef-katline{display:flex;gap:8px}
+.ef-katline select{flex:1;min-width:0}
+.ef-sugg{background:var(--panel-2);border:1px solid var(--line);border-radius:var(--r);padding:8px 12px;font-size:13px;color:var(--ink-2)}
+.ef-sugg b{color:var(--ink)}
+.ef-toggle-field{display:flex;align-items:center;gap:8px;font-size:13.5px;color:var(--ink-2)}
+.ef-toggle-field input{width:18px;height:18px}
+.ef-hint{display:block;margin-top:4px;font-size:12px}
+.ef-beleg-hint{font-size:12.5px}
+.ef-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.ef-actions .btn.primary{padding:10px 22px;font-size:15px}
+.ef-photo-placeholder{display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.ef-recent{display:grid;gap:2px}
+.ef-recent-row{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--line)}
+.ef-recent-row:last-child{border-bottom:0}
+.ef-recent-main{min-width:0}
+.ef-recent-text{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:38ch;display:block}
+.ef-recent-meta{font-size:12px;color:var(--muted)}
+.ef-recent-amount{white-space:nowrap;font-weight:600}
+.ef-badge{display:inline-block;margin-left:6px;font-size:10.5px;font-weight:600;color:var(--info);border:1px solid var(--line-strong);border-radius:999px;padding:1px 7px}
+.ef-badge.ok{color:var(--ein)}
+.ef-empty{color:var(--muted);padding:8px 0}
+@media(max-width:760px){
+  .ef-amount-row{grid-template-columns:1fr;gap:10px}
+  .segmented{width:100%}
+  .seg-btn{flex:1;text-align:center}
+  .ef-betrag-field input{font-size:30px;text-align:left}
+}
