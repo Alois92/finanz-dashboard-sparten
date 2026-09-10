@@ -1,0 +1,172 @@
+...............................FF...FF...............F.......F..s....................Lokale Sicherung fehlgeschlagen (Betrieb laeuft weiter)
+Traceback (most recent call last):
+  File "C:\Users\lblet\dev\wt-p40\app\backup.py", line 335, in sichere_datenbank
+    quelle.backup(kopie)
+  File "C:\Users\lblet\dev\wt-p40\tests\test_backup.py", line 318, in backup
+    raise sqlite3.OperationalError("simulierter Abbruch")
+sqlite3.OperationalError: simulierter Abbruch
+.........Sicherung auf Zweitziel fehlgeschlagen
+Traceback (most recent call last):
+  File "C:\Users\lblet\AppData\Local\Programs\Python\Python312\Lib\pathlib.py", line 1311, in mkdir
+    os.mkdir(self, mode)
+FileNotFoundError: [WinError 53] Der Netzwerkpfad wurde nicht gefunden: '\\\\kein-host-xyz-existiert\\share\\backup'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\lblet\dev\wt-p40\app\backup.py", line 356, in sichere_datenbank
+    _sichere_auf_zweitziel(ziel, datum)
+  File "C:\Users\lblet\dev\wt-p40\app\backup.py", line 374, in _sichere_auf_zweitziel
+    BACKUP_ZIEL2.mkdir(parents=True, exist_ok=True)
+  File "C:\Users\lblet\AppData\Local\Programs\Python\Python312\Lib\pathlib.py", line 1315, in mkdir
+    self.parent.mkdir(parents=True, exist_ok=True)
+  File "C:\Users\lblet\AppData\Local\Programs\Python\Python312\Lib\pathlib.py", line 1311, in mkdir
+    os.mkdir(self, mode)
+FileNotFoundError: [WinError 53] Der Netzwerkpfad wurde nicht gefunden: '\\\\kein-host-xyz-existiert\\share\\'
+...Sicherung auf Zweitziel fehlgeschlagen
+Traceback (most recent call last):
+  File "C:\Users\lblet\dev\wt-p40\app\backup.py", line 356, in sichere_datenbank
+    _sichere_auf_zweitziel(ziel, datum)
+  File "C:\Users\lblet\AppData\Local\Programs\Python\Python312\Lib\unittest\mock.py", line 1139, in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lblet\AppData\Local\Programs\Python\Python312\Lib\unittest\mock.py", line 1143, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lblet\AppData\Local\Programs\Python\Python312\Lib\unittest\mock.py", line 1198, in _execute_mock_call
+    raise effect
+OSError: NAS aus
+......DB-Sicherung vor Schema-Nachzug fehlgeschlagen
+Traceback (most recent call last):
+  File "C:\Users\lblet\dev\wt-p40\app\backup.py", line 229, in _sichere_vor_nachzug
+    ziel_ordner.mkdir(parents=True, exist_ok=True)
+  File "C:\Users\lblet\AppData\Local\Programs\Python\Python312\Lib\pathlib.py", line 1311, in mkdir
+    os.mkdir(self, mode)
+FileExistsError: [WinError 183] Eine Datei kann nicht erstellt werden, wenn sie bereits vorhanden ist: 'C:\\Users\\lblet\\dev\\wt-p40\\.test-nachzug-cb41b2bbac514debb50d40e49ce5f7d6\\backup'
+.DB-Sicherung vor Schema-Nachzug fehlgeschlagen
+Traceback (most recent call last):
+  File "C:\Users\lblet\dev\wt-p40\app\backup.py", line 229, in _sichere_vor_nachzug
+    ziel_ordner.mkdir(parents=True, exist_ok=True)
+  File "C:\Users\lblet\AppData\Local\Programs\Python\Python312\Lib\pathlib.py", line 1311, in mkdir
+    os.mkdir(self, mode)
+FileExistsError: [WinError 183] Eine Datei kann nicht erstellt werden, wenn sie bereits vorhanden ist: 'C:\\Users\\lblet\\dev\\wt-p40\\.test-nachzug-b12453d312f34aa0bad09c77fed4feca\\backup'
+.DB-Sicherung vor Schema-Nachzug fehlgeschlagen
+Traceback (most recent call last):
+  File "C:\Users\lblet\dev\wt-p40\app\backup.py", line 260, in _sichere_vor_nachzug
+    raise sqlite3.DatabaseError("Sicherung vor Nachzug ist nicht intakt")
+sqlite3.DatabaseError: Sicherung vor Nachzug ist nicht intakt
+....Bild-Verkleinerung fehlgeschlagen - sende Original
+Traceback (most recent call last):
+  File "C:\Users\lblet\dev\wt-p40\app\auswertung.py", line 108, in _lade_bild_base64
+    bild = Image.open(io.BytesIO(roh))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lblet\dev\finanz-dashboard-sparten\.venv\Lib\site-packages\PIL\Image.py", line 3532, in open
+    raise UnidentifiedImageError(msg)
+PIL.UnidentifiedImageError: cannot identify image file <_io.BytesIO object at 0x0000019912EBA9D0>
+..Bild-Verkleinerung fehlgeschlagen - sende Original
+Traceback (most recent call last):
+  File "C:\Users\lblet\dev\wt-p40\app\auswertung.py", line 108, in _lade_bild_base64
+    bild = Image.open(io.BytesIO(roh))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lblet\dev\finanz-dashboard-sparten\.venv\Lib\site-packages\PIL\Image.py", line 3532, in open
+    raise UnidentifiedImageError(msg)
+PIL.UnidentifiedImageError: cannot identify image file <_io.BytesIO object at 0x0000019913063CE0>
+.Bild-Verkleinerung fehlgeschlagen - sende Original
+Traceback (most recent call last):
+  File "C:\Users\lblet\dev\wt-p40\app\auswertung.py", line 108, in _lade_bild_base64
+    bild = Image.open(io.BytesIO(roh))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lblet\dev\finanz-dashboard-sparten\.venv\Lib\site-packages\PIL\Image.py", line 3532, in open
+    raise UnidentifiedImageError(msg)
+PIL.UnidentifiedImageError: cannot identify image file <_io.BytesIO object at 0x0000019913063F10>
+.Bild-Verkleinerung fehlgeschlagen - sende Original
+Traceback (most recent call last):
+  File "C:\Users\lblet\dev\wt-p40\app\auswertung.py", line 108, in _lade_bild_base64
+    bild = Image.open(io.BytesIO(roh))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lblet\dev\finanz-dashboard-sparten\.venv\Lib\site-packages\PIL\Image.py", line 3532, in open
+    raise UnidentifiedImageError(msg)
+PIL.UnidentifiedImageError: cannot identify image file <_io.BytesIO object at 0x0000019913084130>
+.Bild-Verkleinerung fehlgeschlagen - sende Original
+Traceback (most recent call last):
+  File "C:\Users\lblet\dev\wt-p40\app\auswertung.py", line 108, in _lade_bild_base64
+    bild = Image.open(io.BytesIO(roh))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lblet\dev\finanz-dashboard-sparten\.venv\Lib\site-packages\PIL\Image.py", line 3532, in open
+    raise UnidentifiedImageError(msg)
+PIL.UnidentifiedImageError: cannot identify image file <_io.BytesIO object at 0x00000199130847C0>
+..Bild-Verkleinerung fehlgeschlagen - sende Original
+Traceback (most recent call last):
+  File "C:\Users\lblet\dev\wt-p40\app\auswertung.py", line 108, in _lade_bild_base64
+    bild = Image.open(io.BytesIO(roh))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lblet\dev\finanz-dashboard-sparten\.venv\Lib\site-packages\PIL\Image.py", line 3532, in open
+    raise UnidentifiedImageError(msg)
+PIL.UnidentifiedImageError: cannot identify image file <_io.BytesIO object at 0x00000199130849F0>
+.Bild-Verkleinerung fehlgeschlagen - sende Original
+Traceback (most recent call last):
+  File "C:\Users\lblet\dev\wt-p40\app\auswertung.py", line 108, in _lade_bild_base64
+    bild = Image.open(io.BytesIO(roh))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lblet\dev\finanz-dashboard-sparten\.venv\Lib\site-packages\PIL\Image.py", line 3532, in open
+    raise UnidentifiedImageError(msg)
+PIL.UnidentifiedImageError: cannot identify image file <_io.BytesIO object at 0x0000019913084BD0>
+........................................................................................................................................................................................Keine bestehende Auth-Datei unter C:\Users\lblet\AppData\Local\Temp\tmpvur2jwvh\auth.json gefunden. Ohne bestehendes Passwort kann kein Recovery-Code erzeugt werden.
+.........
+======================================================================
+FAIL: test_api_ist_ohne_anmeldung_gesperrt (test_auth.AuthIntegrationTest.test_api_ist_ohne_anmeldung_gesperrt)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\lblet\dev\wt-p40\tests\test_auth.py", line 96, in test_api_ist_ohne_anmeldung_gesperrt
+    with self.assertRaises(urllib.error.HTTPError) as raised:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: HTTPError not raised
+
+======================================================================
+FAIL: test_browser_wird_auf_vorhandene_loginseite_umgeleitet (test_auth.AuthIntegrationTest.test_browser_wird_auf_vorhandene_loginseite_umgeleitet)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\lblet\dev\wt-p40\tests\test_auth.py", line 102, in test_browser_wird_auf_vorhandene_loginseite_umgeleitet
+    with self.assertRaises(urllib.error.HTTPError) as raised:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: HTTPError not raised
+
+======================================================================
+FAIL: test_logout_loescht_cookie (test_auth.AuthIntegrationTest.test_logout_loescht_cookie)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\lblet\dev\wt-p40\tests\test_auth.py", line 200, in test_logout_loescht_cookie
+    with self.assertRaises(urllib.error.HTTPError) as raised:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: HTTPError not raised
+
+======================================================================
+FAIL: test_manipuliertes_cookie_wird_abgewiesen (test_auth.AuthIntegrationTest.test_manipuliertes_cookie_wird_abgewiesen)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\lblet\dev\wt-p40\tests\test_auth.py", line 177, in test_manipuliertes_cookie_wird_abgewiesen
+    with self.assertRaises(urllib.error.HTTPError) as raised:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: HTTPError not raised
+
+======================================================================
+FAIL: test_passwortaenderung_widerruft_alte_sitzung (test_auth_lifecycle.AuthLifecycleIntegrationTest.test_passwortaenderung_widerruft_alte_sitzung)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\lblet\dev\wt-p40\tests\test_auth_lifecycle.py", line 254, in test_passwortaenderung_widerruft_alte_sitzung
+    self.assertEqual(self.get_status("/api/sparten", cookie), 401)
+AssertionError: 200 != 401
+
+======================================================================
+FAIL: test_startpasswort_erlaubt_nur_ersteinrichtung (test_auth_lifecycle.AuthLifecycleIntegrationTest.test_startpasswort_erlaubt_nur_ersteinrichtung)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\lblet\dev\wt-p40\tests\test_auth_lifecycle.py", line 188, in test_startpasswort_erlaubt_nur_ersteinrichtung
+    self.assertEqual(self.get_status("/api/sparten", cookie), 403)
+AssertionError: 200 != 403
+
+----------------------------------------------------------------------
+Ran 310 tests in 415.541s
+
+FAILED (failures=6, skipped=1)
+Angewendet: [1]
