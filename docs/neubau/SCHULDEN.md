@@ -124,6 +124,11 @@ Gemergt: **P50b + P51** (Migrationen 016/017, Abnahme `P51.md`, Migrationsprobe 
 **Alle 26 Pakete sind gebaut.** Offen sind nur noch die Ausführung der Umstellung nach Betriebsdoku Abschnitt 11
 und der Modellwechsel P43c.
 
+**Vorgabe des Nutzers (11.09.):** Vor der Umstellung prüft ein Testagent die gesamte App auf der Testinstanz
+**so unabhängig und vollständig wie möglich** („jeden Hebel, jeden Drücker, jede Einstellung“, Belege inklusive),
+kein Nutzertest. Zuschnitt: vier Tester mit je eigener Instanz auf der migrierten Prod-Kopie, Berichte
+`berichte/QA-1…4-*.md`, Befunde danach vom Kopf behoben. Erster Anlauf abgebrochen, wird neu gestartet.
+
 | Nr. | Befund | Fällig |
 |---|---|---|
 | P51b | Storno-Bestätigung und Grund laufen über native `confirm`/`prompt` (wie Löschen), nicht über den App-Dialog; funktional, uneinheitlich. | klein |
