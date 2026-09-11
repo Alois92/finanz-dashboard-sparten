@@ -233,16 +233,16 @@ class ExportSeiteTests(unittest.TestCase):
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             headers.get("content-type"))
 
-    def test_jahresbericht_mit_profil_id_braucht_weiterhin_jahr_parameter(self):
-        """Dokumentiert eine Lücke in app/routers/export.py (siehe Bericht,
-        'Wunsch an das Gerüst'): jahr ist ein Pflichtparameter der Route, auch
-        wenn profil_id übergeben wird und jahr dann inhaltlich ungenutzt bleibt.
-        export.js haengt deshalb immer beide Parameter an den Link an."""
+    def test_jahresbericht_mit_profil_id_braucht_kein_jahr_mehr(self):
+        """P60b (Kopf-Nachzug nach Abnahme P60): mit profil_id kommt das Jahr aus dem
+        Profil, jahr ist nur noch ohne Profil Pflicht. Vorher dokumentierte dieser
+        Test die Lücke (422 ohne jahr)."""
         _, profil = self.request_json(
             "GET", f"/api/export/profil?bereich_id=1&sparte_id={self.sid}&jahr=2026")
-        status, _headers, _content = self.request(
+        status, headers, content = self.request(
             "GET", f"/export/bericht?bereich_id=1&profil_id={profil['id']}")
-        self.assertEqual(422, status)
+        self.assertEqual(200, status)
+        self.assertIn(b"Export-Profil", content)
         status, headers, content = self.request(
             "GET", f"/export/bericht?bereich_id=1&profil_id={profil['id']}&jahr=2026")
         self.assertEqual(200, status)
