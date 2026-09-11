@@ -1,0 +1,38 @@
+﻿== tests.test_umstellung_pruefung -v ==
+python.exe : test_anmeldeseiten_bleiben_unter_root_erreichbar (tests.test_umstellung_pruefung.FrontendMountTest.test_anmeldeseiten_bleiben_unter_root_erreichbar) ... ok
+In Zeile:4 Zeichen:1
++ & C:\Users\lblet\dev\finanz-dashboard-sparten\.venv\Scripts\python.ex ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (test_anmeldesei...eichbar) ... ok:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+test_root_verzeichnis_haengt_an_finanz_frontend (tests.test_umstellung_pruefung.FrontendMountTest.test_root_verzeichnis_haengt_an_finanz_frontend) ... ok
+test_studio_und_neu_bleiben_nebeneinander (tests.test_umstellung_pruefung.FrontendMountTest.test_studio_und_neu_bleiben_nebeneinander) ... ok
+test_anstehende_migration_und_fehlende_sicherung (tests.test_umstellung_pruefung.StatusTest.test_anstehende_migration_und_fehlende_sicherung) ... ok
+test_gueltiger_status_ohne_befund (tests.test_umstellung_pruefung.StatusTest.test_gueltiger_status_ohne_befund) ... ok
+test_schreibgeschuetzte_instanz_wird_erkannt (tests.test_umstellung_pruefung.StatusTest.test_schreibgeschuetzte_instanz_wird_erkannt)
+Echte Anwendung, echte Anmeldung, Nachzug als fehlgeschlagen markiert. ... ok
+test_unerreichbar_und_401_sind_kein_ok (tests.test_umstellung_pruefung.StatusTest.test_unerreichbar_und_401_sind_kein_ok) ... ok
+test_gleicher_inhalt_meldet_keine_abweichung (tests.test_umstellung_pruefung.ZahlenvergleichTest.test_gleicher_inhalt_meldet_keine_abweichung) ... ok
+test_nicht_nachgezogene_datenbank_meldet_klaren_fehler (tests.test_umstellung_pruefung.ZahlenvergleichTest.test_nicht_nachgezogene_datenbank_meldet_klaren_fehler) ... ok
+test_pruefung_veraendert_keine_der_beiden_datenbanken (tests.test_umstellung_pruefung.ZahlenvergleichTest.test_pruefung_veraendert_keine_der_beiden_datenbanken) ... ok
+test_quellen_werden_geprueft (tests.test_umstellung_pruefung.ZahlenvergleichTest.test_quellen_werden_geprueft) ... ok
+test_schreibversuch_auf_der_lesenden_verbindung_scheitert (tests.test_umstellung_pruefung.ZahlenvergleichTest.test_schreibversuch_auf_der_lesenden_verbindung_scheitert) ... ok
+test_veraenderte_buchung_nur_nachher_wird_gemeldet (tests.test_umstellung_pruefung.ZahlenvergleichTest.test_veraenderte_buchung_nur_nachher_wird_gemeldet) ... ok
+test_kein_ok_bei_problemen (tests.test_umstellung_pruefung.ZusammenfassungTest.test_kein_ok_bei_problemen) ... ok
+test_positiver_text_nur_wenn_beides_stimmt (tests.test_umstellung_pruefung.ZusammenfassungTest.test_positiver_text_nur_wenn_beides_stimmt) ... ok
+test_status_problem_schlaegt_durch (tests.test_umstellung_pruefung.ZusammenfassungTest.test_status_problem_schlaegt_durch) ... ok
+test_veraenderte_datei_verhindert_ok (tests.test_umstellung_pruefung.ZusammenfassungTest.test_veraenderte_datei_verhindert_ok) ... ok
+
+----------------------------------------------------------------------
+Ran 17 tests in 5.124s
+
+OK
+
+== unittest discover -s tests (frische FINANZ_DB) ==
+----------------------------------------------------------------------
+Ran 430 tests in 184.961s
+
+OK (skipped=1)
+Angewendet: [1]
+

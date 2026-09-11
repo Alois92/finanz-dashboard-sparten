@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
@@ -23,6 +23,22 @@ from .routers import (belege, beleg_auswertung, buchungen, dashboard, export,
 
 STUDIO_DIR = pathlib.Path(__file__).resolve().parent.parent / "static-studio"
 NEU_DIR = pathlib.Path(__file__).resolve().parent.parent / "static-neu"
+
+# Anmeldung, Ersteinrichtung und Passwortwechsel liegen nur im Studio und ihre
+# Pfade sind in app/auth.py fest verdrahtet (OEFFENTLICHE_PFADE, Umleitungen).
+# Sie bleiben deshalb unter / erreichbar, egal welches Frontend den Root-Mount hat.
+AUTH_SEITEN = (
+    "login.html", "login.js",
+    "password-setup.html", "password-setup.js",
+    "password-change.html", "password-change.js",
+    "password-recover.html", "password-recover.js",
+    "password-common.css",
+)
+
+
+def frontend_verzeichnis(wert: str | None) -> pathlib.Path:
+    """Welches Frontend unter / liegt. Unbekannte Werte bleiben beim Studio."""
+    return NEU_DIR if (wert or "").strip().lower() == "neu" else STUDIO_DIR
 
 
 @asynccontextmanager
@@ -182,8 +198,24 @@ def betrieb_status():
 
 
 # Neues Frontend zuerst mounten; die Auth-Middleware schuetzt /neu wie /studio.
-# Studio ist weiterhin unter / UND /studio erreichbar.
-# (alte Lesezeichen bleiben gueltig). /api hat Vorrang, da zuerst registriert.
+# Beide Oberflaechen bleiben unter /neu und /studio erreichbar (alte Lesezeichen
+# bleiben gueltig). /api hat Vorrang, da zuerst registriert.
 app.mount("/neu", StaticFiles(directory=NEU_DIR, html=True), name="neu")
 app.mount("/studio", StaticFiles(directory=STUDIO_DIR, html=True), name="studio")
-app.mount("/", StaticFiles(directory=STUDIO_DIR, html=True), name="root")
+
+# Die Anmeldeseiten kommen immer aus dem Studio und werden vor dem Root-Mount
+# registriert, damit sie auch dann unter / liegen, wenn / auf static-neu zeigt.
+def _auth_seite(datei: str):
+    async def ausliefern(request: Request) -> FileResponse:
+        return FileResponse(STUDIO_DIR / datei)
+    return ausliefern
+
+
+for _seite in AUTH_SEITEN:
+    app.add_route(f"/{_seite}", _auth_seite(_seite), methods=["GET", "HEAD"], name=f"auth-{_seite}")
+
+# Welches Frontend unter / liegt, entscheidet FINANZ_FRONTEND (Standard: studio).
+# Die Umstellung auf den Neubau setzt dort per systemd-Drop-In "neu"; der
+# Rueckweg entfernt das Drop-In, ohne dass Code geaendert werden muss.
+ROOT_DIR = frontend_verzeichnis(os.environ.get("FINANZ_FRONTEND"))
+app.mount("/", StaticFiles(directory=ROOT_DIR, html=True), name="root")
