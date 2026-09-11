@@ -32,8 +32,13 @@ OLLAMA_TEXT_TIMEOUT_SEKUNDEN = int(os.environ.get("FINANZ_OLLAMA_TEXT_TIMEOUT", 
 _SICHERHEITEN = {"hoch", "mittel", "niedrig"}
 
 PROMPT_VORLAGE = (
-    "Ordne den folgenden Buchungstext genau EINER der aufgelisteten Kategorien "
-    "zu, oder keiner, wenn nichts eindeutig passt.\n"
+    "Du hilfst bei der privaten Buchhaltung eines Haushalts in Tirol (Österreich). "
+    "Ordne den folgenden Buchungstext der am besten passenden Kategorie aus der Liste zu. "
+    "Nutze Alltagswissen über Firmen und Begriffe: Supermärkte wie Billa, Spar, Hofer oder MPreis "
+    "sind Lebensmittel/Essen; Energieversorger wie TIWAG sind Strom/Fixkosten; Tankstellen sind Auto; "
+    "Versicherungsnamen sind Versicherungen. Wähle immer die inhaltlich nächste Kategorie, auch "
+    "wenn sie nicht wörtlich im Text steht, und gib dann die Sicherheit als \"mittel\" oder "
+    "\"niedrig\" an. Nur wenn wirklich gar nichts passt, liefere kategorie_id null.\n"
     "Buchungstext: {text!r}\n"
     "Betrag: {betrag}\n"
     "Richtung: {richtung}\n"
@@ -41,9 +46,12 @@ PROMPT_VORLAGE = (
     "Antworte AUSSCHLIESSLICH mit einem JSON-Objekt in genau diesem Format, "
     "ohne weiteren Text davor oder danach: "
     '{{"kategorie_id": ganze Zahl aus der Liste oder null, '
-    '"sicherheit": "hoch" oder "mittel" oder "niedrig", "begruendung": string}}. '
-    "Ist keine Kategorie eindeutig passend, liefere kategorie_id null."
+    '"sicherheit": "hoch" oder "mittel" oder "niedrig", "begruendung": kurzer string}}.'
 )
+
+# Platzhalterkategorien aus der Bestandsübernahme (Migration: „Einnahme (noch zuordnen)“,
+# „Ausgabe (noch zuordnen)“) sind kein Vorschlag, sondern das Gegenteil davon.
+_PLATZHALTER_MARKER = "noch zuordnen"
 
 _RICHTUNG_TEXT = {"einnahme": "Einnahme", "ausgabe": "Ausgabe", "umbuchung": "Umbuchung"}
 _RICHTUNG_FILTER = {"einnahme": ("einnahme", "beides"), "ausgabe": ("ausgabe", "beides")}
@@ -82,7 +90,10 @@ def _kandidaten(con: sqlite3.Connection, bereich_id: int, sparte_id, typ) -> tup
     if richtungen:
         sql += " AND richtung IN (?, ?)"
         params += list(richtungen)
-    kategorien = con.execute(sql, params).fetchall()
+    kategorien = [
+        k for k in con.execute(sql, params).fetchall()
+        if _PLATZHALTER_MARKER not in (k["name"] or "").lower()
+    ]
     return kategorien, sparten_namen
 
 

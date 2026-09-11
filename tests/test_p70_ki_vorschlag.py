@@ -87,6 +87,20 @@ class KiVorschlagTest(unittest.TestCase):
         self.assertNotIn(self.kat_andere_sparte_id, ids)  # fremde Sparte ausgeschlossen
         self.assertEqual({self.sparte_id: 'P70 Testsparte'}, sparten_namen)
 
+    def test_kandidaten_ohne_platzhalterkategorien(self):
+        # Abnahme P70: „… (noch zuordnen)“ ist kein Vorschlag, sondern das Fehlen eines Vorschlags.
+        platzhalter_id = self.con.execute(
+            "INSERT INTO kategorie(sparte_id, name, richtung) VALUES(?, 'P70 Ausgabe (noch zuordnen)', 'ausgabe')",
+            (self.sparte_id,),
+        ).lastrowid
+        self.con.commit()
+        kategorien, _ = ki_vorschlag._kandidaten(
+            self.con, bereich_id=1, sparte_id=self.sparte_id, typ="ausgabe",
+        )
+        ids = {k["id"] for k in kategorien}
+        self.assertIn(self.kat_essen_id, ids)
+        self.assertNotIn(platzhalter_id, ids)
+
     def test_kandidaten_richtungsfilter_bei_typ(self):
         kategorien, _ = ki_vorschlag._kandidaten(
             self.con, bereich_id=1, sparte_id=self.sparte_id, typ="ausgabe",
