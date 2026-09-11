@@ -87,7 +87,7 @@ Gemergt: P31, P40, P41, P42, P50, P60 (Umsetzung durch Claude Sonnet, Codex war 
 | Nr. | Befund | Fällig |
 |---|---|---|
 | **B7** | `_update_buchung` in `app/routers/buchungen.py` setzt `kontakt_id`/`person_id` bei PUT ohne diese Felder auf NULL (kein `model_fields_set`-Schutz wie bei `bankkonto_id`). Belegt durch P50-Team. Der Bearbeiten-Dialog lässt die Felder deshalb vorerst unangetastet. | **vor P50b** |
-| P50b | Historie je Buchung: Endpunkt `GET /api/buchungen/{id}/verlauf` und Protokollierung bei PUT (Migration). Aus P50 herausgelöst, weil der Frontend-Nachtrag Migrationen verbot. | M5 |
+| ~~P50b~~ | erledigt 11.09. (Migration 016, Abnahme P51.md). | — |
 | ~~P31b~~ | erledigt 11.09. (Abnahme P60b-P31b-P32b.md): Hinweise liefern Euro-Text und `wert_cent`. | — |
 | P40b | `POST /api/parse` liefert nur einen Kategorietreffer ohne Herkunft; Karte P40 wollte bis zu drei mit Regel-Herkunft. | M4 |
 | P42b | `GET /api/bankumsaetze` liefert für verbuchte Umsätze weder Buchungstyp noch Regel-Herkunft. | M4 |
@@ -109,8 +109,24 @@ Prüf-Dialog ohne Vorbelegung, Qwen-3-Denkmodus (`think: false`).
 
 | Nr. | Befund | Fällig |
 |---|---|---|
-| P43b | `request_wiederholung.art` kennt nur `buchung`/`ausgleich`; die Foto-Übernahme nutzt den `buchung`-Topf mit. Eigener Wert per Migration, zusammen mit der nächsten Migration (P51 oder P50b). | nächste Migration |
+| ~~P43b~~ | erledigt 11.09. (Migration 016, eigener Wert `beleg_uebernahme`, Abnahme P51.md). | — |
 | P43c | Modellwechsel in Produktion: `FINANZ_OLLAMA_MODEL` auf das Gewinnermodell des Vergleichs (`outputs/modelltest/`) umstellen, Modell in CT 101 laden, Laufzeit auf der CPU messen. `think: false` ist seit `fa6409b` im Code. | vor P62 |
 | ~~P32b~~ | erledigt 11.09. (Abnahme P60b-P31b-P32b.md): Gruppen-Hash gewinnt, Kopf-Wahl verlässt die Gruppe. | — |
 | P52b | Bei „Alle Sparten“ listet die Kreditseite alle Kredite des Bereichs; kein Beleg-Upload im Dialog „Jahr bestätigen“, nur Verknüpfung vorhandener Belege. | klein |
 | — | Handy-Ansicht: Kredit bei 375 px geprüft; Sparte, Kategorien, Belege nur durch die Agenten (Viewport-Emulation des Werkzeugs sprang). | vor CT 102 |
+
+---
+
+## Ergänzungen vom 11. September 2026, nachmittags (Fable)
+
+Gemergt: **P50b + P51** (Migrationen 016/017, Abnahme `P51.md`, Migrationsprobe auf der Prod-Kopie bestanden),
+**P62** (Umstellungsablauf, Prüfskript, `FINANZ_FRONTEND`, Abnahme `P62.md`), Test-Nachzug `F-tests-017`.
+**Alle 26 Pakete sind gebaut.** Offen sind nur noch die Ausführung der Umstellung nach Betriebsdoku Abschnitt 11
+und der Modellwechsel P43c.
+
+| Nr. | Befund | Fällig |
+|---|---|---|
+| P51b | Storno-Bestätigung und Grund laufen über native `confirm`/`prompt` (wie Löschen), nicht über den App-Dialog; funktional, uneinheitlich. | klein |
+| P51c | 422-Text „Kategorie 2 erlaubt keine Erstattung“ nennt die ID statt des Namens. | klein |
+| P61b | `scripts/migrationsprobe.py` meldet `buchung.storniert_am` als Kostenstorno-Altbestand, obwohl die Spalte seit 017 regulär ist; Prüfung auf `buchungszeile`-Spalten beschränken. | vor Umstellung |
+| — | Testsuite: zweiter Lauf auf derselben `FINANZ_DB`-Datei verfälscht `test_auto_kategorien`; Wegwerfdatei immer vorher löschen (Kopf-Läufe tun das). | Prozess |
