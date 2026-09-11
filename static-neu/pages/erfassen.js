@@ -32,6 +32,7 @@ const M = {
   manuellSparte: false,
   manuellKategorie: false,
   letzterVorschlag: null,
+  requestId: null,  // QA2-04: client_request_id fuer die aktuelle Formularfuellung, s.u.
 };
 
 function heute(){
@@ -60,6 +61,10 @@ export async function render(root, state){
   M.manuellSparte = false;
   M.manuellKategorie = false;
   M.letzterVorschlag = null;
+  // QA2-04: einmal pro Formularaufbau erzeugen, damit ein Speichern-Retry
+  // nach einem Fehler (z.B. Netzwerkabbruch) dieselbe client_request_id
+  // verwendet und der Server ihn als Wiederholung erkennen kann.
+  M.requestId = crypto.randomUUID();
 
   const sparten = (state.sparten || []).slice();
   const privatSparten = sparten.filter(s => s.typ === 'privat');
@@ -442,6 +447,8 @@ export async function render(root, state){
     datumInput.value = heute();
     M.manuellKategorie = false;
     M.letzterVorschlag = null;
+    // Neue client_request_id fuer die naechste Buchung (Formular ist jetzt leer).
+    M.requestId = crypto.randomUUID();
     betragInput.focus();
   }
 
@@ -465,7 +472,7 @@ export async function render(root, state){
       zahlungsart: zahlungsartSelect.value,
       text: textArea.value.trim() || null,
       zeilen: [{kategorie_id: kategorieId, betrag_cent: Math.round(betrag * 100)}],
-      client_request_id: crypto.randomUUID(),
+      client_request_id: M.requestId,
     };
     if(!kontoField.hidden && kontoSelect.value){
       payload.bankkonto_id = Number(kontoSelect.value);
