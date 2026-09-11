@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
 from ..auslagen import offen_cent, pruefe_ausgleich, pruefe_auslage
+from ..schemas import BETRAG_CENT_MAX
 from ..bereiche import Bereich, BereichDep, pruefe_kategorie, pruefe_konto, pruefe_sparte
 from ..bewegungen import erzeuge_transfer, kassa_fuer_sparte, storniere_transfer
 from ..db import db_dep
@@ -19,7 +20,7 @@ class AusgleichIn(BaseModel):
     nach_sparte_id: int
     auslage_ids: list[int] = Field(min_length=1)
     datum: str
-    betrag_cent: int = Field(gt=0, strict=True)
+    betrag_cent: int = Field(gt=0, le=BETRAG_CENT_MAX, strict=True)
     zahlungsart: Literal['bar', 'bank']
     von_konto_id: int | None = None
     nach_konto_id: int | None = None
