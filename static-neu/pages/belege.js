@@ -163,8 +163,23 @@ function warteAufAuswertung(root, auftragId, reload){
     }
     const nochAktiv = laufend.some(a => a.id === auftragId);
     if(!nochAktiv){
-      box.hidden = true;
-      toast('Beleg ausgewertet, bitte unter „Belege zur Prüfung" prüfen.');
+      // Fehlgeschlagen? (P71: z. B. Scan-PDF ohne Textebene) - dann die
+      // Meldung aus app/auswertung.py in der Statuszeile anzeigen statt
+      // pauschal Erfolg zu melden.
+      let fehlgeschlagen;
+      try{
+        fehlgeschlagen = (await api('/beleg-auswertungen?status=fehler')).find(a => a.id === auftragId);
+      }catch{
+        fehlgeschlagen = null;
+      }
+      if(fehlgeschlagen){
+        box.hidden = false;
+        box.textContent = fehlgeschlagen.fehler || 'Auswertung fehlgeschlagen.';
+        toast(fehlgeschlagen.fehler || 'Auswertung fehlgeschlagen.');
+      }else{
+        box.hidden = true;
+        toast('Beleg ausgewertet, bitte unter „Belege zur Prüfung" prüfen.');
+      }
       reload();
       return;
     }
@@ -235,7 +250,7 @@ function openPruefDialog(auftrag, state, reload){
   const privatSparten = state.sparten.filter(s => s.typ === 'privat');
 
   drill('Beleg prüfen', `
-    <p class="prf-header">${esc(ergebnis.haendler || 'Unbekannter Händler')} · ${ergebnis.datum ? fmtDate(ergebnis.datum) : 'ohne Datum'}${ergebnis.gesamt_cent != null ? ' · ' + fmtEur(ergebnis.gesamt_cent) : ''}</p>
+    <p class="prf-header">${esc(ergebnis.haendler || 'Unbekannter Händler')} · ${ergebnis.datum ? fmtDate(ergebnis.datum) : 'ohne Datum'}${ergebnis.gesamt_cent != null ? ' · ' + fmtEur(ergebnis.gesamt_cent) : ''} · ${ergebnis.quelle === 'pdf_text' ? 'aus PDF-Text' : 'aus Foto'}</p>
     ${ergebnis.hinweis ? `<p class="prf-hinweis">${esc(ergebnis.hinweis)}</p>` : ''}
     <form id="prf-form" novalidate>
       <label class="field">Sparte

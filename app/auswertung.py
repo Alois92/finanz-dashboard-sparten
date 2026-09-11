@@ -23,6 +23,7 @@ import json
 import logging
 import os
 import pathlib
+import re
 import sqlite3
 import urllib.error
 import urllib.request
@@ -37,8 +38,9 @@ log = logging.getLogger("finanz.auswertung")
 OLLAMA_URL = os.environ.get("FINANZ_OLLAMA_URL", "http://127.0.0.1:11434").rstrip("/")
 OLLAMA_MODEL = os.environ.get("FINANZ_OLLAMA_MODEL", "qwen2.5vl:7b")
 
-# Nur Bildformate koennen dem Vision-Modell als Base64 mitgegeben werden.
-ERLAUBTE_ENDUNGEN = {"jpg", "jpeg", "png", "webp"}
+# Bildformate gehen als Base64 ans Vision-Modell, PDF wird stattdessen per
+# Textebene ausgewertet (siehe _pdf_text/_auswerten, Paket P71).
+ERLAUBTE_ENDUNGEN = {"jpg", "jpeg", "png", "webp", "pdf"}
 MAX_VERSUCHE = 5
 MAX_POSITIONEN = 50
 PRUEF_INTERVALL_SEKUNDEN = 15
@@ -46,8 +48,9 @@ PRUEF_INTERVALL_SEKUNDEN = 15
 # vielen Positionen laenger als 10 min - Timeout deshalb per ENV anpassbar.
 OLLAMA_TIMEOUT_SEKUNDEN = int(os.environ.get("FINANZ_OLLAMA_TIMEOUT", "600"))
 
-PROMPT = (
-    "Analysiere den abgebildeten Kassenbon oder die Rechnung. "
+# Gemeinsamer Regelteil fuer Foto- und Text-Prompt (P71): nur die Einleitung
+# unterscheidet sich, die JSON-Vorgaben sollen niemals auseinanderlaufen.
+_PROMPT_KERN = (
     "Antworte AUSSCHLIESSLICH mit einem JSON-Objekt in genau diesem Format, "
     "ohne weiteren Text davor oder danach: "
     '{"haendler": string oder null, "datum": "JJJJ-MM-TT" oder null, '
@@ -65,6 +68,19 @@ PROMPT = (
     "Ist der Beleg unleserlich oder kein Kassenbon/keine Rechnung, liefere "
     "eine leere Positionsliste (\"positionen\": [])."
 )
+
+PROMPT = "Analysiere den abgebildeten Kassenbon oder die Rechnung. " + _PROMPT_KERN
+
+# Fuer PDFs mit Textebene (P71): kein Bild, sondern der extrahierte Text wird
+# nach diesem Prompt angehaengt (siehe _auswerten: PROMPT_TEXT + "\n\n" + text).
+PROMPT_TEXT = "Hier ist der Text einer Rechnung: " + _PROMPT_KERN
+
+# Obergrenzen fuer die PDF-Textextraktion (siehe _pdf_text): so bleibt der
+# Prompt auf der CPU beherrschbar, siehe Entscheidung des Kopfs in der
+# Auftragskarte P71.
+PDF_MAX_SEITEN = 5
+PDF_MAX_ZEICHEN = 12000
+PDF_MIN_ZEICHEN = 40
 
 
 # ---------------------------------------------------------------------------
@@ -136,6 +152,43 @@ def _lade_bild_base64(pfad: pathlib.Path) -> str:
     except Exception:
         log.warning("Bild-Verkleinerung fehlgeschlagen - sende Original", exc_info=True)
     return base64.b64encode(roh).decode("ascii")
+
+
+def _pdf_text(pfad: pathlib.Path) -> tuple[str, bool]:
+    """Text aus der Textebene eines PDFs extrahieren (P71, kein OCR/Rendering).
+
+    Liest hoechstens die ersten PDF_MAX_SEITEN Seiten, normalisiert Leerraum
+    und schneidet nach PDF_MAX_ZEICHEN ab. Liefert (text, gekuerzt).
+
+    Wirft ValueError (unwiederbringlich, siehe _auswerten-Doku):
+      - pypdf fehlt (Paket nicht installiert),
+      - die Datei ist kein lesbares PDF,
+      - weniger als PDF_MIN_ZEICHEN sichtbarer Text vorhanden ist (Scan ohne
+        Textebene - der Nutzer soll das Foto stattdessen hochladen).
+    """
+    try:
+        from pypdf import PdfReader
+    except ImportError as exc:
+        raise ValueError(
+            "PDF-Auswertung nicht möglich – Paket 'pypdf' fehlt"
+        ) from exc
+
+    try:
+        reader = PdfReader(str(pfad))
+        seiten_text = [
+            (seite.extract_text() or "") for seite in reader.pages[:PDF_MAX_SEITEN]
+        ]
+    except Exception as exc:
+        raise ValueError(f"PDF konnte nicht gelesen werden: {exc}") from exc
+
+    text = re.sub(r"\s+", " ", " ".join(seiten_text)).strip()
+    if len(text) < PDF_MIN_ZEICHEN:
+        raise ValueError("PDF ohne Textebene – bitte als Foto hochladen")
+
+    gekuerzt = len(text) > PDF_MAX_ZEICHEN
+    if gekuerzt:
+        text = text[:PDF_MAX_ZEICHEN]
+    return text, gekuerzt
 
 
 def _parse_ergebnis(rohtext: str) -> dict:
@@ -335,22 +388,37 @@ def _auswerten(con: sqlite3.Connection, beleg_id: int) -> dict:
         pruefe_sparte(con, beleg["sparte_id"], bereich)
     endung = pathlib.Path(beleg["dateiname"] or "").suffix.lower().lstrip(".")
     if endung not in ERLAUBTE_ENDUNGEN:
-        raise ValueError("Nur JPG/PNG/WebP-Fotos können lokal ausgewertet werden")
+        raise ValueError(
+            "Nur JPG/PNG/WebP-Fotos oder PDF-Rechnungen können lokal ausgewertet werden"
+        )
 
     pfad = pathlib.Path(beleg["pfad"])
     if not pfad.exists():
         raise ValueError("Belegdatei nicht gefunden")
 
-    body = {
-        "model": OLLAMA_MODEL,
-        "stream": False,
-        "format": "json",
-        "messages": [{
-            "role": "user",
-            "content": PROMPT,
-            "images": [_lade_bild_base64(pfad)],
-        }],
-    }
+    gekuerzt = False
+    if endung == "pdf":
+        text, gekuerzt = _pdf_text(pfad)
+        body = {
+            "model": OLLAMA_MODEL,
+            "stream": False,
+            "format": "json",
+            "messages": [{
+                "role": "user",
+                "content": PROMPT_TEXT + "\n\n" + text,
+            }],
+        }
+    else:
+        body = {
+            "model": OLLAMA_MODEL,
+            "stream": False,
+            "format": "json",
+            "messages": [{
+                "role": "user",
+                "content": PROMPT,
+                "images": [_lade_bild_base64(pfad)],
+            }],
+        }
     if _denkmodus_abschalten(OLLAMA_MODEL):
         # Qwen-3-Modelle antworten sonst nur im "thinking"-Feld und liefern leeren Inhalt
         # (auf CPU ausserdem minutenlanges Denken vor der eigentlichen Antwort).
@@ -361,6 +429,13 @@ def _auswerten(con: sqlite3.Connection, beleg_id: int) -> dict:
         raise ValueError("Ollama-Antwort enthält keinen Inhalt")
     ergebnis = _parse_ergebnis(rohtext)
     ergebnis = _brutto_abgleich(ergebnis)
+    ergebnis["quelle"] = "pdf_text" if endung == "pdf" else "foto"
+    if gekuerzt:
+        zusatz = "Text war länger als 12.000 Zeichen und wurde gekürzt."
+        vorhandener_hinweis = ergebnis.get("hinweis")
+        ergebnis["hinweis"] = (
+            f"{vorhandener_hinweis} {zusatz}" if vorhandener_hinweis else zusatz
+        )
 
     for p in ergebnis["positionen"]:
         kat_id, kat_name = _kategorie_fuer_position(con, p["text"], beleg["sparte_id"], bereich.id)
