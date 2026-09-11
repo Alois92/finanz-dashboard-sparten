@@ -155,13 +155,13 @@ def _sums(con, start, end, sid, bereich):
     return row["ein"] or 0, row["aus"] or 0
 
 @router.get("/export/bericht", response_class=HTMLResponse)
-def jahresbericht(jahr: str, sparte_id: int | None = None,
+def jahresbericht(jahr: str | None = None, sparte_id: int | None = None,
                   profil_id: int | None = None,
                   con: sqlite3.Connection = Depends(db_dep), bereich: BereichDep = Bereich(1)):
     if profil_id is not None:
         profil = _profil(con, profil_id, bereich)
         return HTMLResponse(_profil_bericht(_preview(con, profil, bereich), profil))
-    if not re.fullmatch(r"\d{4}", jahr) or not 1900 <= int(jahr) <= 9999:
+    if not jahr or not re.fullmatch(r"\d{4}", jahr) or not 1900 <= int(jahr) <= 9999:
         raise HTTPException(400, "jahr muss vierstellig sein")
     start, end = f"{jahr}-01-01", f"{jahr}-12-31"
     if sparte_id is not None:

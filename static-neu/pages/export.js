@@ -199,26 +199,31 @@ async function vomVorjahrUebernehmen(ctx) {
 // damit im Dialog auch bereits ausgeschlossene Kategorien/Buchungen wieder
 // eingeschlossen werden können – die Export-Vorschau selbst liefert nur die
 // (noch) nicht ausgeschlossenen Zeilen.
+// P60b: geht seitenweise über den Cursor (Muster aus pages/buchungen.js), statt nach
+// der ersten Seite mit Limit 1000 abzubrechen – sonst blieben bei sehr großen Jahren
+// Buchungen im Dialog unsichtbar.
 async function ladeBuchungszeilen(ctx) {
   if (ctx.unbeschraenkteListeGeladen) return;
   const zeilen = [];
   let cursor = null;
-  const params = {jahr: ctx.jahr, limit: 1000};
-  if (ctx.sparteId) params.sparte_id = ctx.sparteId;
-  const seite = await api('/buchungen', {params, bereichId: ctx.bereich});
-  for (const b of seite.buchungen) {
-    if (b.typ !== 'einnahme' && b.typ !== 'ausgabe') continue;
-    for (const z of b.zeilen) {
-      if (z.neutral) continue;
-      zeilen.push({
-        buchung_id: b.id, datum: b.datum, text: b.text || '',
-        kategorie_id: z.kategorie_id, kategorie: z.kategorie_name,
-        betrag_cent: z.betrag_cent,
-      });
+  do {
+    const params = {jahr: ctx.jahr, limit: 100};
+    if (ctx.sparteId) params.sparte_id = ctx.sparteId;
+    if (cursor) params.cursor = cursor;
+    const seite = await api('/buchungen', {params, bereichId: ctx.bereich});
+    for (const b of seite.buchungen) {
+      if (b.typ !== 'einnahme' && b.typ !== 'ausgabe') continue;
+      for (const z of b.zeilen) {
+        if (z.neutral) continue;
+        zeilen.push({
+          buchung_id: b.id, datum: b.datum, text: b.text || '',
+          kategorie_id: z.kategorie_id, kategorie: z.kategorie_name,
+          betrag_cent: z.betrag_cent,
+        });
+      }
     }
-  }
-  cursor = seite.naechster_cursor;
-  ctx.zeilenAbgeschnitten = Boolean(cursor);
+    cursor = seite.naechster_cursor;
+  } while (cursor);
   zeilen.sort((a, b) => a.datum < b.datum ? 1 : a.datum > b.datum ? -1 : 0);
   ctx.zeilen = zeilen;
   const kats = new Map();
@@ -261,13 +266,12 @@ async function oeffneAusschlussDialog(ctx) {
       const buchOff = pendingBuch.has(z.buchung_id);
       const off = katOff || buchOff;
       return `<tr class="ex-row ${off ? 'ex-row-off' : ''}"><td><input type="checkbox" data-buchung="${z.buchung_id}" ${buchOff ? '' : 'checked'} ${katOff ? 'disabled title="Kategorie ganz ausgeschlossen"' : ''}></td><td class="muted">${fmtDate(z.datum)}</td><td>${esc(z.text || '–')}</td><td>${esc(z.kategorie || '–')}</td><td>${fmtEur(z.betrag_cent)}</td></tr>`;
-    }).join('') : `<tr><td colspan="5" class="ex-empty">Keine Buchungen${ctx.zeilenAbgeschnitten ? ' (Liste ist auf 1000 Zeilen begrenzt)' : ''}.</td></tr>`;
+    }).join('') : '<tr><td colspan="5" class="ex-empty">Keine Buchungen.</td></tr>';
     return `<div class="ex-dialog">
       <p class="muted">Kategorie anklicken schließt sie komplett aus (Zeilen darin lassen sich dann nicht mehr einzeln anhaken). Änderungen werden erst mit „Speichern“ übernommen.</p>
       <label class="field">In dieser Liste suchen<input id="ex-dlg-q" value="${esc(filterQ)}" placeholder="Text oder Kategorie"></label>
       <div class="ex-kats" id="ex-dlg-kats">${kats}</div>
       <div class="table-wrap"><table class="tbl"><thead><tr><th></th><th>Datum</th><th>Text</th><th>Kategorie</th><th>Betrag</th></tr></thead><tbody id="ex-dlg-body">${rows}</tbody></table></div>
-      ${ctx.zeilenAbgeschnitten ? '<p class="muted">Es werden nur die ersten 1000 Buchungen des Zeitraums angezeigt.</p>' : ''}
       <div class="ex-savebar">
         <span class="muted">${pendingKat.size} Kategorien, ${pendingBuch.size} Buchungen ausgeschlossen</span>
         <button class="btn" type="button" id="ex-dlg-cancel">Abbrechen</button>
