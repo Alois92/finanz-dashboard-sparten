@@ -26,6 +26,13 @@ function ensureCss() {
 // Sparte/Gruppe ändert.
 let jahreZustand = {schluessel: null, verfuegbar: [], aktiv: new Set()};
 
+// P32b: merkt sich den zuletzt betretenen Gruppen-Hash-Suffix (z. B. "gruppe-2"), damit
+// render() zwischen "Gruppe gerade betreten" (Sparte im Kopf ggf. noch aus einem
+// vorherigen Besuch gesetzt, muss geräumt werden) und "Nutzer wählt jetzt aktiv im
+// Kopf eine Sparte, während die Gruppe schon offen ist" (Hash-Suffix muss weichen)
+// unterscheiden kann - beide Fälle sehen an state.sparteId allein gleich aus.
+let gruppenZustand = {suffix: null};
+
 function hashSuffix() {
   const raw = location.hash.replace(/^#\//, '');
   const parts = raw.split('/');
@@ -70,14 +77,36 @@ function sparteName(state, id) {
   return state.sparten?.find(s => String(s.id) === String(id))?.name || `Sparte ${id}`;
 }
 
+// P32b: ein expliziter Gruppen-Hash (#/sparte/gruppe-<id>) gewinnt jetzt auch dann, wenn
+// im Kopf-Select noch eine Sparte steht. Beim Betreten der Gruppe wird die Sparte im
+// Kopf/Sidebar wie bei einem echten Wechsel geräumt ("Alle Sparten"); wählt der Nutzer
+// danach aktiv eine Sparte im Kopf, verlässt die Seite beim nächsten Render die Gruppe
+// und zeigt die gewählte Einzelsparte (Hash-Suffix entfernt).
 export function render(root, state) {
   ensureCss();
   const suffix = hashSuffix();
   if (syncSparteAusHash(state, suffix)) return;
-  const gruppeId = !state.sparteId ? parseGruppeId(suffix) : null;
+  const gruppeId = parseGruppeId(suffix);
+  if (gruppeId != null) {
+    if (gruppenZustand.suffix !== suffix) {
+      gruppenZustand.suffix = suffix;
+      if (state.sparteId) {
+        state.sparteId = '';
+        if (state.filter) state.filter.sparteId = '';
+        localStorage.setItem('neu-sparte', '');
+        window.dispatchEvent(new Event('hashchange'));
+        return;
+      }
+    } else if (state.sparteId) {
+      gruppenZustand.suffix = null;
+      location.hash = '#/sparte';
+      return;
+    }
+    return renderGruppe(root, state, gruppeId);
+  }
+  gruppenZustand.suffix = null;
   const sparteId = state.sparteId || (state.filter && state.filter.sparteId) || '';
-  if (!sparteId && gruppeId == null) return renderAuswahl(root, state);
-  if (gruppeId != null) return renderGruppe(root, state, gruppeId);
+  if (!sparteId) return renderAuswahl(root, state);
   return renderEinzelsparte(root, state, sparteId);
 }
 
