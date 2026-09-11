@@ -47,6 +47,10 @@ PRUEF_INTERVALL_SEKUNDEN = 15
 # Auf langsamer CPU (Token-Generierung teils <1 Token/s) braucht ein Bon mit
 # vielen Positionen laenger als 10 min - Timeout deshalb per ENV anpassbar.
 OLLAMA_TIMEOUT_SEKUNDEN = int(os.environ.get("FINANZ_OLLAMA_TIMEOUT", "600"))
+# Deterministische Auswertung: der Modellvergleich im Gewinnermodell-Umstieg
+# lief mit temperature=0 und lieferte spuerbar bessere Datumswerte als der
+# Ollama-Standard (temperature=0.8) - siehe SCHULDEN.md/QA4-01..04.
+OLLAMA_TEMPERATUR = float(os.environ.get("FINANZ_OLLAMA_TEMPERATUR", "0"))
 
 # Gemeinsamer Regelteil fuer Foto- und Text-Prompt (P71): nur die Einleitung
 # unterscheidet sich, die JSON-Vorgaben sollen niemals auseinanderlaufen.
@@ -426,6 +430,8 @@ def _auswerten(con: sqlite3.Connection, beleg_id: int) -> dict:
                 "images": [_lade_bild_base64(pfad)],
             }],
         }
+    # Deterministische Antworten (QA4-01..04): gilt fuer Foto- und PDF-Weg.
+    body["options"] = {"temperature": OLLAMA_TEMPERATUR}
     if _denkmodus_abschalten(OLLAMA_MODEL):
         # Qwen-3-Modelle antworten sonst nur im "thinking"-Feld und liefern leeren Inhalt
         # (auf CPU ausserdem minutenlanges Denken vor der eigentlichen Antwort).

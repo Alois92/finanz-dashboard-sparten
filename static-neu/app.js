@@ -26,7 +26,23 @@ let kategorieOptionsKey=null;
 // Seiten, die Kategorien ändern (P33), melden das per Ereignis; der Optionen-Cache von #filter-kategorie wird dann beim nächsten Render neu geladen.
 window.addEventListener('neu:kategorien-geaendert',()=>{kategorieOptionsKey=null});
 
-function currentRoute(){const raw=location.hash.replace(/^#\//,'')||'uebersicht';const route=raw.split('/')[0];return routes[route]?route:'uebersicht'}
+// QA3-07: Tiefen-Link "#/sparte/<id>/<seite>" (z. B. aus der P52-Auftragskarte
+// vorgeschlagen) fiel bisher auf die Sparte-Uebersicht zurueck, weil nur das
+// erste Pfadsegment ausgewertet wurde. Die App fuehrt die Sparten-Auswahl
+// nicht ueber URL-Segmente, sondern ueber den globalen Filter (state.filter.
+// sparteId, siehe setFilter) - ein solcher Link setzt daher jetzt diesen
+// Filter und loest zur eigentlichen Seite auf, statt sie zu verwerfen.
+function currentRoute(){
+  const raw=location.hash.replace(/^#\//,'')||'uebersicht';
+  const teile=raw.split('/');
+  if(teile[0]==='sparte'&&teile.length>=3&&/^\d+$/.test(teile[1])&&teile[2]!=='sparte'&&routes[teile[2]]){
+    state.filter.sparteId=teile[1];
+    state.sparteId=teile[1];
+    localStorage.setItem('neu-sparte',teile[1]);
+    return teile[2];
+  }
+  return routes[teile[0]]?teile[0]:'uebersicht';
+}
 function go(route){state.route=route;location.hash=`#/${route}`;render()}
 function setTheme(theme){state.theme=theme;document.documentElement.dataset.theme=theme;localStorage.setItem('neu-theme',theme)}
 

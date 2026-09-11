@@ -147,7 +147,6 @@ async function openJahrDialog(k, jahr, reload){
       <label class="field">Restschuld in € (optional)<input name="restschuld" inputmode="decimal" placeholder="0,00"></label>
       <label class="field">Beleg (optional)<select name="beleg_id">${belegOptions}</select></label>
       <p class="field-error" id="kredit-jahr-error" hidden></p>
-      <div id="kredit-jahr-ergebnis" hidden></div>
       <button class="btn primary" type="submit">Bestätigen</button>
     </form>
   `);
@@ -164,14 +163,14 @@ async function openJahrDialog(k, jahr, reload){
     const body = {zins_cent: zins, restschuld_cent: restschuld, beleg_id: fd.get('beleg_id') ? Number(fd.get('beleg_id')) : null};
     try{
       const res = await api(`/kredite/${k.id}/jahre/${jahr}`, {method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
-      const ergebnis = document.querySelector('#kredit-jahr-ergebnis');
-      ergebnis.hidden = false;
-      const abweichungenHtml = res.abweichungen && res.abweichungen.length
-        ? `<div class="warn-box">${res.abweichungen.map(a => `<p>${esc(a)}</p>`).join('')}</div>`
-        : '<p class="muted">Keine Abweichungen.</p>';
-      ergebnis.innerHTML = `<p>${res.raten} Rate(n), ${fmtEur(res.verteilt_cent)} Zins verteilt.</p>${abweichungenHtml}`;
-      toast(res.abweichungen && res.abweichungen.length ? 'Jahr bestätigt, mit Abweichung.' : 'Jahr bestätigt.');
-      form.querySelectorAll('input,select,button').forEach(f => f.disabled = true);
+      // QA3-06: Dialog nach erfolgreichem Speichern schließen statt liegen zu
+      // lassen - er lag zuvor als Overlay über der Seite und fing Klicks auf
+      // darunterliegende Elemente ohne erkennbaren Grund ab. Abweichungen
+      // gehen dabei nicht verloren: der Toast nennt sie.
+      document.querySelector('#drill').close();
+      toast(res.abweichungen && res.abweichungen.length
+        ? `Jahr bestätigt, mit Abweichung: ${res.abweichungen.join(' ')}`
+        : `Jahr bestätigt: ${res.raten} Rate(n), ${fmtEur(res.verteilt_cent)} Zins verteilt.`);
       reload();
     }catch(error){
       box.textContent = error.detail || error.message; box.hidden = false;

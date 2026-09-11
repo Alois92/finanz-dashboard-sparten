@@ -56,6 +56,31 @@ class P41KontenTest(unittest.TestCase):
         self.assertIsNone(row["stand_cent"])
         self.assertEqual("unbekannt", row["datenstand"])
 
+    def test_konto_bearbeiten_speichert_aenderungen_und_deaktivierung(self):
+        """QA3-04: Frontend bot bisher keinen Weg, ein Konto zu bearbeiten/
+        deaktivieren, obwohl PATCH /api/konten/{id} das laengst unterstuetzt.
+        Prueft direkt gegen die API, dass die im neuen konten.js-Dialog
+        verwendeten Felder (name/sparte_id/iban/bank/aktiv) tatsaechlich
+        wirken und in der Liste sichtbar werden (inaktiv-Pille)."""
+        konto = self.konto(art="bank", sparte_id=self.haupt, name="P41-Bearbeiten-Test")
+        status, res = self.request("PATCH", f"/api/konten/{konto['id']}", {
+            "name": "P41-Bearbeiten-Test geaendert", "iban": "AT001234", "bank": "Testbank", "aktiv": 0,
+        })
+        self.assertEqual(200, status, res)
+        self.assertEqual("P41-Bearbeiten-Test geaendert", res["name"])
+        self.assertEqual(0, res["aktiv"])
+
+        status, konten = self.request("GET", "/api/konten")
+        row = next(k for k in konten if k["id"] == konto["id"])
+        self.assertEqual(0, row["aktiv"])
+
+    def test_konten_js_bietet_bearbeiten_dialog(self):
+        quelle = (STATIC / "konten.js").read_text(encoding="utf-8")
+        self.assertIn("data-bearbeiten", quelle)
+        self.assertIn("openBearbeitenDialog", quelle)
+        self.assertIn("method: 'PATCH'", quelle)
+        self.assertIn("name=\"aktiv\"", quelle)
+
     def test_kassa_ohne_sparte_liefert_422_feldfehler(self):
         status, res = self.request("POST", "/api/konten", {"name": "P41-Kassa-ohne-Sparte", "art": "kassa"})
         self.assertEqual(422, status)

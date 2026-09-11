@@ -113,37 +113,58 @@ function drawKonten(root, state, data, reload){
     if(ankerBtn) ankerBtn.onclick = () => openAnkerDialog(k, reload);
     const zaehlBtn = row.querySelector('[data-zaehlung]');
     if(zaehlBtn) zaehlBtn.onclick = () => openZaehlungDialog(k, state, reload);
+    const bearbeitenBtn = row.querySelector('[data-bearbeiten]');
+    if(bearbeitenBtn) bearbeitenBtn.onclick = () => openBearbeitenDialog(k, state, reload);
   }
 }
 
 function kontoRowHtml(k, data){
-  const stand = k.stand_cent == null ? '<span class="muted">kein Anker</span>' : `${fmtEur(k.stand_cent)} <span class="muted">${esc(k.waehrung)}</span>`;
+  // QA3-01: fmtEur() liefert bereits das Waehrungssymbol (Intl.NumberFormat,
+  // style:'currency') - der Waehrungscode wurde bisher zusaetzlich angehaengt
+  // ("€ 1.600,00 EUR"). Nur noch anzeigen, wenn das Konto NICHT auf EUR
+  // lautet (fmtEur formatiert ohnehin immer als €, das waere dann sonst
+  // irrefuehrend und muss auffallen statt zu verschwinden).
+  const stand = k.stand_cent == null
+    ? '<span class="muted">kein Anker</span>'
+    : `${fmtEur(k.stand_cent)}${k.waehrung !== 'EUR' ? ` <span class="muted">${esc(k.waehrung)}</span>` : ''}`;
   const badgeCls = k.datenstand === 'aktuell' ? 'badge-ok' : k.datenstand === 'veraltet' ? 'badge-warn' : 'badge-muted';
   const titel = k.hinweis || DATENSTAND_TITEL[k.datenstand] || '';
-  const abgleich = data.abgleiche[k.id];
+  // QA3-05: ein Abgleich mit einem Bankumsatz kann nur bei Bank-/Kartenkonten
+  // vorkommen (CSV-Import ist fuer Kassakonten serverseitig ausgeschlossen,
+  // Depot/Wallet haben ohnehin keinen Import) - der Hinweis wuerde dort nie
+  // "abgleichbar" werden und nur verwirren, z. B. nach einer gebuchten
+  // Kassadifferenz (erzeugt eine manuelle Bewegung ohne Bankumsatz-Gegenstueck).
+  const abgleichFaehig = k.art === 'bank' || k.art === 'karte';
+  const abgleich = abgleichFaehig ? data.abgleiche[k.id] : null;
   const offeneAbgleiche = abgleich && (abgleich.manuelle_anzahl > 0 || abgleich.umsaetze_anzahl > 0);
   const hinweisAbgleich = offeneAbgleiche
     ? `<div class="kto-hint">${abgleich.manuelle_anzahl} offene manuelle Bewegung(en), ${abgleich.umsaetze_anzahl} offene(r) Bankumsatz/Bankumsätze zum Abgleichen.</div>`
     : '';
   const aktionen = k.art === 'kassa'
-    ? `<div class="kto-actions">
-         <button class="btn small" data-anker>Anfangsstand ändern</button>
-         <button class="btn small" data-zaehlung>Kassa gezählt, Differenz buchen</button>
-       </div>`
+    ? `<button class="btn small" data-anker>Anfangsstand ändern</button>
+       <button class="btn small" data-zaehlung>Kassa gezählt, Differenz buchen</button>`
     : '';
   const karteHinweis = k.art === 'karte'
     ? '<div class="kto-hint">Der Ausgleich der Karte ist eine Umbuchung, keine Ausgabe.</div>' : '';
+  // QA3-04: bisher gab es keinen Weg, ein bestehendes Konto zu bearbeiten
+  // oder zu deaktivieren - PATCH /api/konten/{id} unterstuetzt das laengst
+  // (name/iban/bank/sparte_id/aktiv). Deaktivierte Konten wurden ausserdem
+  // von aktiven optisch nicht unterscheidbar dargestellt.
+  const inaktivPille = !k.aktiv ? '<span class="badge badge-muted">inaktiv</span>' : '';
   return `
-    <div class="kto-row" data-konto="${k.id}">
+    <div class="kto-row${!k.aktiv ? ' kto-inaktiv' : ''}" data-konto="${k.id}">
       <div class="kto-main">
-        <div class="kto-name">${esc(k.name)}</div>
+        <div class="kto-name">${esc(k.name)} ${inaktivPille}</div>
         <div class="kto-sub muted">${esc(ART_LABEL[k.art] || k.art)}</div>
       </div>
       <div class="kto-stand">
         <div class="kto-val">${stand}</div>
         <span class="badge ${badgeCls}" title="${esc(titel)}">${esc(DATENSTAND_LABEL[k.datenstand] || k.datenstand)}</span>
       </div>
-      ${aktionen}
+      <div class="kto-actions">
+        ${aktionen}
+        <button class="btn small" data-bearbeiten>Bearbeiten</button>
+      </div>
       ${karteHinweis}
       ${hinweisAbgleich}
     </div>`;
@@ -186,6 +207,52 @@ function openKontoDialog(state, reload){
       reload();
     }catch(error){
       const box = document.querySelector('#konto-error');
+      box.textContent = error.detail || error.message;
+      box.hidden = false;
+    }
+  };
+}
+
+// QA3-04: Bearbeiten-Dialog fuer ein bestehendes Konto (PATCH /api/konten/{id}).
+// Bewusst nur die unkritischen Stammdaten (Name/IBAN/Bank/Sparte/Aktiv) - Art
+// und Waehrung sind serverseitig gesperrt, sobald das Konto Bewegungen hat
+// (409 "Konto mit Bewegungen darf Art, Währung und Sparte nicht wechseln"),
+// daher hier nicht editierbar angeboten.
+function openBearbeitenDialog(konto, state, reload){
+  const sparteOptions = `<option value="">– keine –</option>` + state.sparten
+    .map(s => `<option value="${s.id}" ${String(konto.sparte_id) === String(s.id) ? 'selected' : ''}>${esc(s.name)}</option>`)
+    .join('');
+  drill(`Konto bearbeiten – ${esc(konto.name)}`, `
+    <form id="konto-bearb-form">
+      <label class="field">Name<input name="name" required maxlength="120" value="${esc(konto.name)}"></label>
+      <label class="field">Sparte<select name="sparte_id">${sparteOptions}</select></label>
+      <label class="field">IBAN<input name="iban" maxlength="34" value="${esc(konto.iban || '')}"></label>
+      <label class="field">Bank<input name="bank" maxlength="80" value="${esc(konto.bank || '')}"></label>
+      <label class="field" style="flex-direction:row;align-items:center;gap:8px">
+        <input type="checkbox" name="aktiv" style="width:auto" ${konto.aktiv ? 'checked' : ''}> Konto ist aktiv
+      </label>
+      <p class="field-error" id="konto-bearb-error" hidden></p>
+      <button class="btn primary" type="submit">Speichern</button>
+    </form>
+  `);
+  const form = document.querySelector('#konto-bearb-form');
+  form.onsubmit = async e => {
+    e.preventDefault();
+    const fd = new FormData(form);
+    const body = {
+      name: fd.get('name'),
+      sparte_id: fd.get('sparte_id') ? Number(fd.get('sparte_id')) : null,
+      iban: fd.get('iban') || null,
+      bank: fd.get('bank') || null,
+      aktiv: fd.get('aktiv') === 'on' ? 1 : 0,
+    };
+    try{
+      await api(`/konten/${konto.id}`, {method: 'PATCH', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+      closeDrill();
+      toast('Konto gespeichert.');
+      reload();
+    }catch(error){
+      const box = document.querySelector('#konto-bearb-error');
       box.textContent = error.detail || error.message;
       box.hidden = false;
     }

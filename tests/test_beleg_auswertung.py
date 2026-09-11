@@ -110,6 +110,54 @@ class BelegAuswertungTest(unittest.TestCase):
         self.assertEqual(self.kategorie_id, ergebnis["positionen"][0]["kategorie_id"])
         self.assertEqual("Lebensmittel BA", ergebnis["positionen"][0]["kategorie_name"])
 
+    def test_ollama_aufruf_enthaelt_temperatur_option(self):
+        """Deterministische Auswertung (Kopf-Auftrag zu QA4-01..04): der Body
+        an Ollama muss options.temperature enthalten, per FINANZ_OLLAMA_TEMPERATUR
+        ueberschreibbar, Standard 0 (bestes Ergebnis im Modellvergleich)."""
+        beleg_id = self._lege_beleg_an()
+        con = get_connection()
+        self.addCleanup(con.close)
+        auftrag = auswerten_anfordern(beleg_id, con)
+
+        gemockte_antwort = {
+            "message": {
+                "content": json.dumps({
+                    "haendler": "Testmarkt", "datum": "2026-07-15",
+                    "positionen": [{"text": "Lebensmittel BA Einkauf", "betrag_cent": 1234}],
+                    "gesamt_cent": 1234,
+                }),
+            },
+        }
+        with patch.object(auswertung, "_ollama_aufruf", return_value=gemockte_antwort) as mock_aufruf:
+            auswertung._verarbeite_naechsten_auftrag()
+
+        self.assertEqual(1, mock_aufruf.call_count)
+        _url, body = mock_aufruf.call_args[0]
+        self.assertIn("options", body)
+        self.assertEqual(auswertung.OLLAMA_TEMPERATUR, body["options"]["temperature"])
+        self.assertEqual(0, body["options"]["temperature"])
+
+    def test_ollama_temperatur_per_env_ueberschreibbar(self):
+        with patch.dict(os.environ, {"FINANZ_OLLAMA_TEMPERATUR": "0.4"}):
+            with patch.object(auswertung, "OLLAMA_TEMPERATUR", 0.4):
+                beleg_id = self._lege_beleg_an()
+                con = get_connection()
+                self.addCleanup(con.close)
+                auswerten_anfordern(beleg_id, con)
+                gemockte_antwort = {
+                    "message": {
+                        "content": json.dumps({
+                            "haendler": "Testmarkt", "datum": "2026-07-15",
+                            "positionen": [{"text": "Lebensmittel BA Einkauf", "betrag_cent": 1234}],
+                            "gesamt_cent": 1234,
+                        }),
+                    },
+                }
+                with patch.object(auswertung, "_ollama_aufruf", return_value=gemockte_antwort) as mock_aufruf:
+                    auswertung._verarbeite_naechsten_auftrag()
+                _url, body = mock_aufruf.call_args[0]
+                self.assertEqual(0.4, body["options"]["temperature"])
+
     def test_ollama_nicht_erreichbar_bleibt_offen(self):
         beleg_id = self._lege_beleg_an()
         con = get_connection()
