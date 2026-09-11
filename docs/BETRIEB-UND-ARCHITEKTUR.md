@@ -256,7 +256,11 @@ Der Nutzer öffnet `https://192.168.1.254:8006`, meldet sich an und öffnet die
 
 2. Neues, versioniertes Release `/opt/finanz-app-next-<commit>` ausliefern
    (bundle-/skriptbasierter Weg aus Abschnitt 7), Abhängigkeiten im venv
-   installieren — **ohne** den laufenden Dienst zu stoppen.
+   installieren — **ohne** den laufenden Dienst zu stoppen:
+
+   ```sh
+   pct exec 101 -- bash -lc "cd /opt/finanz-app-next-<commit> && .venv/bin/pip install -r requirements.txt"
+   ```
 3. Dienst auf das neue Release umstellen (`WorkingDirectory` per Drop-in bzw.
    wie im bestehenden Weg vorgesehen) und neu starten. Beim Start läuft der
    Schema-Nachzug automatisch und legt unmittelbar davor die eigene Sicherung
