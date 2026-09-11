@@ -161,3 +161,20 @@ damit erledigt (`/api/parse` liefert `quelle`/`regel_name`).
 | P43c | Modellwechsel in CT 101 auf `qwen3.5:4b` und CPU-Laufzeit messen — Teil der Umstellung (Abschnitt 11). | Umstellung |
 | — | Handy-Ansicht 375 px: alle vier Tester meldeten eine springende Viewport-Emulation des Werkzeugs; nur Kredit, Belege, Export verlässlich geprüft. | vor CT 102 |
 | — | P70: Laufzeit des Textaufrufs auf der CPU von CT 101 offen (GPU: 2–3 s). | Umstellung |
+
+## Nachträge vom 11. September 2026, spätabends (Fable)
+
+Gemergt: **P40c** (bis drei Kategorietreffer mit Herkunft, Bankumsatz zeigt Buchung; erledigt QA2-03, P40b, P42b),
+**QA2-05b** (Betragsgrenzen über `BETRAG_CENT_MAX` in allen 14 Eingabefeldern), ENV-Doku der Auswertung,
+**P72 Betriebsseite** mit manueller Sicherung (Abnahme `P72.md`, erledigt QA4-06). Handy-Prüfung QA-5 mit
+verlässlicher Messung (`clientWidth`), Bericht `berichte/QA-5-handy-375px.md`.
+
+| Nr. | Befund | Fällig |
+|---|---|---|
+| ~~QA2-03~~, ~~P40b~~, ~~P42b~~ | erledigt durch P40c. | — |
+| ~~QA2-05b~~ | erledigt. | — |
+| ~~QA4-06~~ | erledigt durch P72 (Sicherung, Betriebsseite). | — |
+| QA5-01 | Erfassen-Grid bei 375 px 112 px zu breit (`erfassen.css`, fehlendes `min-width:0`). | **P73, in Arbeit** |
+| QA5-02 | Sidebar unter 760 px ausgeblendet ohne Ersatzmenü: Sparte, Konten, Kredit, Kategorien, Export, Betrieb, Bereichswechsel, Theme, Passwort, Abmelden auf dem Handy unerreichbar. | **P73, in Arbeit** |
+| QA5-03 | Tap-Ziele in Listen 19–21 px hoch. | P73 |
+| QA5-04 | Scrollbare Tabellen ohne sichtbaren Hinweis. | P73 |
