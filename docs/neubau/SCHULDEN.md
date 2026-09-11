@@ -88,10 +88,10 @@ Gemergt: P31, P40, P41, P42, P50, P60 (Umsetzung durch Claude Sonnet, Codex war 
 |---|---|---|
 | **B7** | `_update_buchung` in `app/routers/buchungen.py` setzt `kontakt_id`/`person_id` bei PUT ohne diese Felder auf NULL (kein `model_fields_set`-Schutz wie bei `bankkonto_id`). Belegt durch P50-Team. Der Bearbeiten-Dialog lässt die Felder deshalb vorerst unangetastet. | **vor P50b** |
 | P50b | Historie je Buchung: Endpunkt `GET /api/buchungen/{id}/verlauf` und Protokollierung bei PUT (Migration). Aus P50 herausgelöst, weil der Frontend-Nachtrag Migrationen verbot. | M5 |
-| P31b | Hinweistexte aus `rechenbasis.hinweise` enthalten rohe Cent („5099 Cent“). Entweder nur `wert` liefern und im Frontend formatieren oder serverseitig formatieren. | klein |
+| ~~P31b~~ | erledigt 11.09. (Abnahme P60b-P31b-P32b.md): Hinweise liefern Euro-Text und `wert_cent`. | — |
 | P40b | `POST /api/parse` liefert nur einen Kategorietreffer ohne Herkunft; Karte P40 wollte bis zu drei mit Regel-Herkunft. | M4 |
 | P42b | `GET /api/bankumsaetze` liefert für verbuchte Umsätze weder Buchungstyp noch Regel-Herkunft. | M4 |
-| P60b | `GET /export/bericht` verlangt `jahr` auch bei `profil_id`; Ausschluss-Dialog holt Buchungen mit Limit 1000. | vor M6 |
+| ~~P60b~~ | erledigt 11.09. (Abnahme P60b-P31b-P32b.md): `jahr` nur ohne Profil Pflicht, Ausschluss-Dialog per Cursor. | — |
 | — | Handy-Ansicht von Übersicht, Konten, Bankimport, Export im Browser noch nicht geprüft (nur Erfassen und Buchungsliste). | vor CT 102 |
 
 ---
@@ -111,6 +111,6 @@ Prüf-Dialog ohne Vorbelegung, Qwen-3-Denkmodus (`think: false`).
 |---|---|---|
 | P43b | `request_wiederholung.art` kennt nur `buchung`/`ausgleich`; die Foto-Übernahme nutzt den `buchung`-Topf mit. Eigener Wert per Migration, zusammen mit der nächsten Migration (P51 oder P50b). | nächste Migration |
 | P43c | Modellwechsel in Produktion: `FINANZ_OLLAMA_MODEL` auf das Gewinnermodell des Vergleichs (`outputs/modelltest/`) umstellen, Modell in CT 101 laden, Laufzeit auf der CPU messen. `think: false` ist seit `fa6409b` im Code. | vor P62 |
-| P32b | Gruppen-Hash `#/sparte/gruppe-<id>` greift nur bei „Alle Sparten“ im Kopf; mit gewählter Sparte bleibt die Sparte. Entweder Hash gewinnt oder Gruppenwahl in den Kopf-Select aufnehmen. | klein |
+| ~~P32b~~ | erledigt 11.09. (Abnahme P60b-P31b-P32b.md): Gruppen-Hash gewinnt, Kopf-Wahl verlässt die Gruppe. | — |
 | P52b | Bei „Alle Sparten“ listet die Kreditseite alle Kredite des Bereichs; kein Beleg-Upload im Dialog „Jahr bestätigen“, nur Verknüpfung vorhandener Belege. | klein |
 | — | Handy-Ansicht: Kredit bei 375 px geprüft; Sparte, Kategorien, Belege nur durch die Agenten (Viewport-Emulation des Werkzeugs sprang). | vor CT 102 |
