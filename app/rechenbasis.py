@@ -211,14 +211,21 @@ def cursor_decode(cursor):
         raise HTTPException(422, 'Ungültiger Cursor') from None
 
 
+def _euro_text(cent):
+    """Euro-Text wie format.js (fmtEur) ihn im Frontend zeigt, z. B. '50,99 €'."""
+    value = f"{abs(cent) / 100:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    return ('-' if cent < 0 else '') + value + ' €'
+
+
 def hinweise(con, f, stichtag):
     result = []
     drill = {k: v for k, v in asdict(f).items() if v is not None}
 
-    def add(art, wert, text, extra=None, ident=''):
+    def add(art, wert, text, extra=None, ident='', wert_cent=None):
         wert = str(wert)
         result.append({'schluessel': f'{art}:{ident}:{wert}', 'art': art,
-                       'wert': wert, 'text': text, 'drill': {**drill, **(extra or {})}})
+                       'wert': wert, 'wert_cent': wert_cent, 'text': text,
+                       'drill': {**drill, **(extra or {})}})
 
     ist = summen(con, f)
     prognose = erwartung(con, f, stichtag)
@@ -232,8 +239,8 @@ def hinweise(con, f, stichtag):
                           'FROM v_einnahmen_ausgaben v' + where +
                           ' GROUP BY v.buchung_id ORDER BY cent DESC,v.buchung_id DESC LIMIT 1', params).fetchone()
     if biggest:
-        add('groesste_buchung', biggest['cent'], f"Größte Buchung: {biggest['cent']} Cent.",
-            {'kategorie_id': biggest['kategorie_id']})
+        add('groesste_buchung', biggest['cent'], f"Größte Buchung: {_euro_text(biggest['cent'])}.",
+            {'kategorie_id': biggest['kategorie_id']}, wert_cent=biggest['cent'])
     categories = je_kategorie(con, f)
     if ist['ausgaben_cent']:
         top = max(categories, key=lambda c: c['ausgaben_cent'])
@@ -262,7 +269,7 @@ def hinweise(con, f, stichtag):
         'FROM auslage a WHERE a.buchung_id IN (SELECT v.buchung_id FROM v_einnahmen_ausgaben v' + where + ')',
         [stichtag, *params]).fetchone()[0]
     if open_row > 0:
-        add('auslagen_offen', open_row, f'Offene Auslagen: {open_row} Cent.')
+        add('auslagen_offen', open_row, f'Offene Auslagen: {_euro_text(open_row)}.', wert_cent=open_row)
     ids = sparten_ids(con, f)
     sql = ('SELECT COUNT(*) FROM bankumsatz u JOIN bankkonto k ON k.id=u.bankkonto_id '
            "WHERE k.bereich_id=? AND u.datum<=? AND u.importstatus='offen' AND NOT EXISTS "
