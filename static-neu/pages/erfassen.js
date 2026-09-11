@@ -388,7 +388,10 @@ export async function render(root, state){
     if(!text || text.length < 3) return;
     // Regulaerer Vorschlagsweg (Namensabgleich/Merkregel) hat schon eine
     // Kategorie gefunden - die KI wird nur als Rueckfallebene gebraucht.
-    if(M.letzterVorschlag && M.letzterVorschlag.kategorie_id) return;
+    // Massgeblich ist das Kategoriefeld, nicht die Parse-Antwort: der Namensabgleich
+    // kann eine Kategorie einer ANDEREN Sparte treffen, die hier nicht waehlbar ist
+    // (Abnahme P70, Befund 3) - dann bleibt das Feld leer und die KI soll helfen.
+    if(kategorieSelect.value) return;
     if(M.kiLetzterText === text) return; // pro Text nur ein Aufruf
     M.kiLetzterText = text;
     kiBox.hidden = false;
