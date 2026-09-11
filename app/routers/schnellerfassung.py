@@ -15,7 +15,7 @@ from pydantic import BaseModel
 from ..db import db_dep
 from ..bereiche import Bereich, BereichDep, pruefe_sparte
 from ..ki_vorschlag import ist_aktiv, kategorie_vorschlag
-from ..regeln import finde_regel
+from ..regeln import finde_regel, finde_regeln
 
 router = APIRouter(tags=["schnellerfassung"])
 
@@ -226,7 +226,19 @@ def _parse_einzeltext(text: str, con: sqlite3.Connection, bereich_id: int) -> di
     quelle = "name" if kategorie_id is not None else None
     regel_name = None
 
-    # ---- Merkregeln: greifen nur, wenn der Namensabgleich keine Kategorie fand ----
+    # ---- Kategorie-Treffer-Liste (P40c): bis zu 3, Reihenfolge Namensabgleich
+    # -> Merkregeln. kategorie_id/quelle/regel_name (oben/unten) bleiben der
+    # ERSTE Treffer, damit bestehende Aufrufer unveraendert funktionieren.
+    kategorie_treffer: list[dict] = []
+    if kategorie_id is not None:
+        kategorie_treffer.append({
+            "kategorie_id": kategorie_id, "kategorie_name": kategorie_name,
+            "sparte_id": sparte_id, "sparte_name": sparte_name,
+            "quelle": "name", "regel_name": None,
+        })
+
+    # ---- Merkregeln: greifen als Vorschlag nur, wenn der Namensabgleich
+    # keine Kategorie fand (unveraendertes Verhalten der Top-Level-Felder) ----
     if kategorie_id is None:
         regel = finde_regel(con, text, bereich_id=bereich_id, sparte_id=sparte_id)
         if regel and not regel.get("konflikt") and regel["ziel_kategorie_id"]:
@@ -243,6 +255,39 @@ def _parse_einzeltext(text: str, con: sqlite3.Connection, bereich_id: int) -> di
                     sparte_id = regel_sparte_id
                     s = next((x for x in sparten if x["id"] == sparte_id), None)
                     sparte_name = s["name"] if s else None
+            kategorie_treffer.append({
+                "kategorie_id": kategorie_id, "kategorie_name": kategorie_name,
+                "sparte_id": sparte_id, "sparte_name": sparte_name,
+                "quelle": "regel", "regel_name": regel_name,
+            })
+
+    # ---- Weitere Regeltreffer fuer die Auswahlliste (max. 3 insgesamt) ----
+    # Wird unabhaengig davon geholt, ob der Namensabgleich schon eine
+    # Kategorie fand - so kann der Nutzer trotzdem zwischen Herkunftsquellen
+    # waehlen (QA2-03/P40-Karte).
+    if len(kategorie_treffer) < 3:
+        ausgeschlossene_kategorien = {t["kategorie_id"] for t in kategorie_treffer}
+        weitere = finde_regeln(
+            con, text, bereich_id=bereich_id, sparte_id=sparte_id,
+            maximal=3 + len(ausgeschlossene_kategorien),
+        )
+        for kandidat in weitere:
+            if len(kategorie_treffer) >= 3:
+                break
+            kat_id = kandidat["ziel_kategorie_id"]
+            if not kat_id or kat_id in ausgeschlossene_kategorien:
+                continue
+            kat_row = next((k for k in kategorien if k["id"] == kat_id), None)
+            if kat_row is None:
+                continue
+            s_id = kandidat["ziel_sparte_id"] or kandidat["kat_sparte_id"]
+            s_row = next((x for x in sparten if x["id"] == s_id), None) if s_id else None
+            kategorie_treffer.append({
+                "kategorie_id": kat_id, "kategorie_name": kat_row["name"],
+                "sparte_id": s_id, "sparte_name": s_row["name"] if s_row else None,
+                "quelle": "regel", "regel_name": kandidat["name"],
+            })
+            ausgeschlossene_kategorien.add(kat_id)
 
     # ---- Rest-Text als Beschreibung aufbereiten ----
     beschreibung = re.sub(r"\s+", " ", rest).strip(" ,;.-").strip()
@@ -260,4 +305,5 @@ def _parse_einzeltext(text: str, con: sqlite3.Connection, bereich_id: int) -> di
         "kategorie_name": kategorie_name,
         "quelle": quelle,
         "regel_name": regel_name,
+        "treffer": kategorie_treffer,
     }

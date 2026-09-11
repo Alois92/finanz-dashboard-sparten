@@ -554,6 +554,32 @@ def list_bankumsaetze(
                 )}
             else:
                 u["vorschlag"] = None
+
+    # P42c: verbuchten Umsaetzen die zugehoerige Buchung mitgeben (Typ,
+    # Text, Kategorie), damit die Uebersicht nicht mehr nur "verbucht" zeigt.
+    for u in rows:
+        u["buchung"] = None
+    verbuchte = [r for r in rows if r["importstatus"] == "verbucht"]
+    if verbuchte:
+        platzhalter = ",".join("?" * len(verbuchte))
+        buchungs_rows = con.execute(
+            "SELECT b.bankumsatz_id AS bankumsatz_id, b.id AS id, b.typ AS typ, "
+            "b.text AS text, k.name AS kategorie_name "
+            "FROM buchung b LEFT JOIN buchungszeile bz ON bz.buchung_id = b.id "
+            "LEFT JOIN kategorie k ON k.id = bz.kategorie_id "
+            f"WHERE b.bankumsatz_id IN ({platzhalter})",
+            [r["id"] for r in verbuchte],
+        ).fetchall()
+        buchung_je_umsatz: dict = {}
+        for row in buchungs_rows:
+            # Pro Buchung entsteht normalerweise genau eine Buchungszeile
+            # (siehe verbuche_umsatz) - den ersten Treffer je Umsatz behalten.
+            buchung_je_umsatz.setdefault(row["bankumsatz_id"], {
+                "id": row["id"], "typ": row["typ"], "text": row["text"],
+                "kategorie_name": row["kategorie_name"],
+            })
+        for u in verbuchte:
+            u["buchung"] = buchung_je_umsatz.get(u["id"])
     return rows
 
 

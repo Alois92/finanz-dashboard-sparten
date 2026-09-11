@@ -146,8 +146,18 @@ function statusVon(u) {
   return {css: 'offen', label: 'offen'};
 }
 
+const TYP_LABEL = {ausgabe: 'Ausgabe', einnahme: 'Einnahme', umbuchung: 'Umbuchung'};
+
 function zuordnungZelle(u, state) {
-  if (u.importstatus === 'verbucht') return '<span class="muted">siehe Buchungsliste</span>';
+  if (u.importstatus === 'verbucht') {
+    if (u.buchung) {
+      const teile = [`verbucht als ${esc(TYP_LABEL[u.buchung.typ] || u.buchung.typ || '')}`];
+      if (u.buchung.kategorie_name) teile.push(esc(u.buchung.kategorie_name));
+      if (u.buchung.text) teile.push(esc(u.buchung.text));
+      return `<span class="zk">${teile.join(' · ')}</span>`;
+    }
+    return '<span class="muted">siehe Buchungsliste</span>';
+  }
   if (u.importstatus === 'ignoriert') return '<span class="muted">–</span>';
   if (u.vorschlag) {
     const regel = u.vorschlag.regel_name ? ` · Regel „${esc(u.vorschlag.regel_name)}“` : '';

@@ -1,0 +1,150 @@
+................................................................s....................Lokale Sicherung fehlgeschlagen (Betrieb laeuft weiter)
+Traceback (most recent call last):
+  File "C:\Users\lblet\dev\wt-p40c\app\backup.py", line 335, in sichere_datenbank
+    quelle.backup(kopie)
+  File "C:\Users\lblet\dev\wt-p40c\tests\test_backup.py", line 318, in backup
+    raise sqlite3.OperationalError("simulierter Abbruch")
+sqlite3.OperationalError: simulierter Abbruch
+.........Sicherung auf Zweitziel fehlgeschlagen
+Traceback (most recent call last):
+  File "C:\Users\lblet\AppData\Local\Programs\Python\Python312\Lib\pathlib.py", line 1311, in mkdir
+    os.mkdir(self, mode)
+FileNotFoundError: [WinError 53] Der Netzwerkpfad wurde nicht gefunden: '\\\\kein-host-xyz-existiert\\share\\backup'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\lblet\dev\wt-p40c\app\backup.py", line 356, in sichere_datenbank
+    _sichere_auf_zweitziel(ziel, datum)
+  File "C:\Users\lblet\dev\wt-p40c\app\backup.py", line 374, in _sichere_auf_zweitziel
+    BACKUP_ZIEL2.mkdir(parents=True, exist_ok=True)
+  File "C:\Users\lblet\AppData\Local\Programs\Python\Python312\Lib\pathlib.py", line 1315, in mkdir
+    self.parent.mkdir(parents=True, exist_ok=True)
+  File "C:\Users\lblet\AppData\Local\Programs\Python\Python312\Lib\pathlib.py", line 1311, in mkdir
+    os.mkdir(self, mode)
+FileNotFoundError: [WinError 53] Der Netzwerkpfad wurde nicht gefunden: '\\\\kein-host-xyz-existiert\\share\\'
+...Sicherung auf Zweitziel fehlgeschlagen
+Traceback (most recent call last):
+  File "C:\Users\lblet\dev\wt-p40c\app\backup.py", line 356, in sichere_datenbank
+    _sichere_auf_zweitziel(ziel, datum)
+  File "C:\Users\lblet\AppData\Local\Programs\Python\Python312\Lib\unittest\mock.py", line 1139, in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lblet\AppData\Local\Programs\Python\Python312\Lib\unittest\mock.py", line 1143, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lblet\AppData\Local\Programs\Python\Python312\Lib\unittest\mock.py", line 1198, in _execute_mock_call
+    raise effect
+OSError: NAS aus
+......DB-Sicherung vor Schema-Nachzug fehlgeschlagen
+Traceback (most recent call last):
+  File "C:\Users\lblet\dev\wt-p40c\app\backup.py", line 229, in _sichere_vor_nachzug
+    ziel_ordner.mkdir(parents=True, exist_ok=True)
+  File "C:\Users\lblet\AppData\Local\Programs\Python\Python312\Lib\pathlib.py", line 1311, in mkdir
+    os.mkdir(self, mode)
+FileExistsError: [WinError 183] Eine Datei kann nicht erstellt werden, wenn sie bereits vorhanden ist: 'C:\\Users\\lblet\\dev\\wt-p40c\\.test-nachzug-cfadfdc441fa4beab9ef3a5fb811fc14\\backup'
+.DB-Sicherung vor Schema-Nachzug fehlgeschlagen
+Traceback (most recent call last):
+  File "C:\Users\lblet\dev\wt-p40c\app\backup.py", line 229, in _sichere_vor_nachzug
+    ziel_ordner.mkdir(parents=True, exist_ok=True)
+  File "C:\Users\lblet\AppData\Local\Programs\Python\Python312\Lib\pathlib.py", line 1311, in mkdir
+    os.mkdir(self, mode)
+FileExistsError: [WinError 183] Eine Datei kann nicht erstellt werden, wenn sie bereits vorhanden ist: 'C:\\Users\\lblet\\dev\\wt-p40c\\.test-nachzug-074bd48fcf274aa59938ca1c51b0a737\\backup'
+.DB-Sicherung vor Schema-Nachzug fehlgeschlagen
+Traceback (most recent call last):
+  File "C:\Users\lblet\dev\wt-p40c\app\backup.py", line 260, in _sichere_vor_nachzug
+    raise sqlite3.DatabaseError("Sicherung vor Nachzug ist nicht intakt")
+sqlite3.DatabaseError: Sicherung vor Nachzug ist nicht intakt
+....Bild-Verkleinerung fehlgeschlagen - sende Original
+Traceback (most recent call last):
+  File "C:\Users\lblet\dev\wt-p40c\app\auswertung.py", line 147, in _lade_bild_base64
+    bild = Image.open(io.BytesIO(roh))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lblet\dev\finanz-dashboard-sparten\.venv\Lib\site-packages\PIL\Image.py", line 3532, in open
+    raise UnidentifiedImageError(msg)
+PIL.UnidentifiedImageError: cannot identify image file <_io.BytesIO object at 0x000001C3BD28E980>
+..Bild-Verkleinerung fehlgeschlagen - sende Original
+Traceback (most recent call last):
+  File "C:\Users\lblet\dev\wt-p40c\app\auswertung.py", line 147, in _lade_bild_base64
+    bild = Image.open(io.BytesIO(roh))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lblet\dev\finanz-dashboard-sparten\.venv\Lib\site-packages\PIL\Image.py", line 3532, in open
+    raise UnidentifiedImageError(msg)
+PIL.UnidentifiedImageError: cannot identify image file <_io.BytesIO object at 0x000001C3BD8D5B20>
+.Bild-Verkleinerung fehlgeschlagen - sende Original
+Traceback (most recent call last):
+  File "C:\Users\lblet\dev\wt-p40c\app\auswertung.py", line 147, in _lade_bild_base64
+    bild = Image.open(io.BytesIO(roh))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lblet\dev\finanz-dashboard-sparten\.venv\Lib\site-packages\PIL\Image.py", line 3532, in open
+    raise UnidentifiedImageError(msg)
+PIL.UnidentifiedImageError: cannot identify image file <_io.BytesIO object at 0x000001C3BD8D5D50>
+.Bild-Verkleinerung fehlgeschlagen - sende Original
+Traceback (most recent call last):
+  File "C:\Users\lblet\dev\wt-p40c\app\auswertung.py", line 147, in _lade_bild_base64
+    bild = Image.open(io.BytesIO(roh))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lblet\dev\finanz-dashboard-sparten\.venv\Lib\site-packages\PIL\Image.py", line 3532, in open
+    raise UnidentifiedImageError(msg)
+PIL.UnidentifiedImageError: cannot identify image file <_io.BytesIO object at 0x000001C3BD8D5F30>
+.Bild-Verkleinerung fehlgeschlagen - sende Original
+Traceback (most recent call last):
+  File "C:\Users\lblet\dev\wt-p40c\app\auswertung.py", line 147, in _lade_bild_base64
+    bild = Image.open(io.BytesIO(roh))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lblet\dev\finanz-dashboard-sparten\.venv\Lib\site-packages\PIL\Image.py", line 3532, in open
+    raise UnidentifiedImageError(msg)
+PIL.UnidentifiedImageError: cannot identify image file <_io.BytesIO object at 0x000001C3BD8D6110>
+.Bild-Verkleinerung fehlgeschlagen - sende Original
+Traceback (most recent call last):
+  File "C:\Users\lblet\dev\wt-p40c\app\auswertung.py", line 147, in _lade_bild_base64
+    bild = Image.open(io.BytesIO(roh))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lblet\dev\finanz-dashboard-sparten\.venv\Lib\site-packages\PIL\Image.py", line 3532, in open
+    raise UnidentifiedImageError(msg)
+PIL.UnidentifiedImageError: cannot identify image file <_io.BytesIO object at 0x000001C3BD8D67F0>
+.Bild-Verkleinerung fehlgeschlagen - sende Original
+Traceback (most recent call last):
+  File "C:\Users\lblet\dev\wt-p40c\app\auswertung.py", line 147, in _lade_bild_base64
+    bild = Image.open(io.BytesIO(roh))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lblet\dev\finanz-dashboard-sparten\.venv\Lib\site-packages\PIL\Image.py", line 3532, in open
+    raise UnidentifiedImageError(msg)
+PIL.UnidentifiedImageError: cannot identify image file <_io.BytesIO object at 0x000001C3BD347830>
+..Bild-Verkleinerung fehlgeschlagen - sende Original
+Traceback (most recent call last):
+  File "C:\Users\lblet\dev\wt-p40c\app\auswertung.py", line 147, in _lade_bild_base64
+    bild = Image.open(io.BytesIO(roh))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lblet\dev\finanz-dashboard-sparten\.venv\Lib\site-packages\PIL\Image.py", line 3532, in open
+    raise UnidentifiedImageError(msg)
+PIL.UnidentifiedImageError: cannot identify image file <_io.BytesIO object at 0x000001C3BD38CEA0>
+.Bild-Verkleinerung fehlgeschlagen - sende Original
+Traceback (most recent call last):
+  File "C:\Users\lblet\dev\wt-p40c\app\auswertung.py", line 147, in _lade_bild_base64
+    bild = Image.open(io.BytesIO(roh))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lblet\dev\finanz-dashboard-sparten\.venv\Lib\site-packages\PIL\Image.py", line 3532, in open
+    raise UnidentifiedImageError(msg)
+PIL.UnidentifiedImageError: cannot identify image file <_io.BytesIO object at 0x000001C3BD347830>
+....................................................................................................................................................................................................................................................KI-Kategorievorschlag fehlgeschlagen: <urlopen error weg>
+..........KI-Kategorievorschlag fehlgeschlagen: Expecting value: line 1 column 1 (char 0)
+.KI-Kategorievorschlag fehlgeschlagen: Ollama-Antwort enthält keinen Inhalt
+......KI-Kategorievorschlag fehlgeschlagen: <urlopen error Verbindung abgelehnt>
+..Bild-Verkleinerung fehlgeschlagen - sende Original
+Traceback (most recent call last):
+  File "C:\Users\lblet\dev\wt-p40c\app\auswertung.py", line 147, in _lade_bild_base64
+    bild = Image.open(io.BytesIO(roh))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lblet\dev\finanz-dashboard-sparten\.venv\Lib\site-packages\PIL\Image.py", line 3532, in open
+    raise UnidentifiedImageError(msg)
+PIL.UnidentifiedImageError: cannot identify image file <_io.BytesIO object at 0x000001C3BD9F34C0>
+...invalid pdf header: b'das i'
+EOF marker not found
+.............................................................................................................................................Keine bestehende Auth-Datei unter C:\Users\lblet\AppData\Local\Temp\tmp5jma2s6h\auth.json gefunden. Ohne bestehendes Passwort kann kein Recovery-Code erzeugt werden.
+..............................................
+----------------------------------------------------------------------
+Ran 572 tests in 712.221s
+
+OK (skipped=1)
+Angewendet: [1]

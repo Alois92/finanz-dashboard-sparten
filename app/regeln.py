@@ -48,14 +48,17 @@ def aktive_regeln(con: sqlite3.Connection, bereich_id: int):
     ).fetchall()
 
 
-def finde_regel(
+def _regel_kandidaten(
     con_oder_regeln: Union[sqlite3.Connection, list], text: Optional[str], *,
     sparte_id: int | None = None, konto_id: int | None = None,
     bereich_id: int = 1, betrag_cent: int | None = None,
-) -> Optional[dict]:
-    """Erste aktive Regel, die zum ``text`` passt (Reihenfolge wie
-    ``aktive_regeln``). Eine Regel trifft, wenn EINE der beiden Richtungen
-    passt:
+) -> list:
+    """Alle aktiven Regeln, die zum ``text`` passen (unsortierte Kandidatenliste).
+
+    Gemeinsame Trefferlogik fuer ``finde_regel`` (ein Treffer) und
+    ``finde_regeln`` (Trefferliste, P40c) - NICHT doppelt implementieren.
+    Jeder Kandidat ist ein Tupel (regel_row, laenge_bedingung, ausgabe_dict).
+    Eine Regel trifft, wenn EINE der beiden Richtungen passt:
 
       (a) die normalisierte bedingung_text ist Substring des normalisierten
           Eingabetexts (langer Text, z. B. Bankumsatz-Haystack oder ein
@@ -71,9 +74,6 @@ def finde_regel(
     ``con_oder_regeln`` ist entweder eine offene Verbindung (dann werden die
     aktiven Regeln selbst geladen) oder bereits das Ergebnis von
     ``aktive_regeln`` (z. B. um sie ueber mehrere Aufrufe wiederzuverwenden).
-
-    Rueckgabe (oder ``None``, falls nichts passt):
-      regel_id, name, ziel_sparte_id, ziel_kategorie_id, ziel_typ, kat_sparte_id
     """
     if isinstance(con_oder_regeln, sqlite3.Connection):
         regeln = aktive_regeln(con_oder_regeln, bereich_id)
@@ -81,7 +81,7 @@ def finde_regel(
         regeln = con_oder_regeln
     haystack = normalisiere_regeltext(text)
     if not haystack:
-        return None
+        return []
     eingabe_tokens = _signifikante_tokens(text)
     kandidaten = []
     for r in regeln:
@@ -120,6 +120,24 @@ def finde_regel(
             "quelle": r["quelle"],
             "auto_verbuchen": r["auto_verbuchen"],
         }))
+    return kandidaten
+
+
+def finde_regel(
+    con_oder_regeln: Union[sqlite3.Connection, list], text: Optional[str], *,
+    sparte_id: int | None = None, konto_id: int | None = None,
+    bereich_id: int = 1, betrag_cent: int | None = None,
+) -> Optional[dict]:
+    """Erste aktive Regel, die zum ``text`` passt (Reihenfolge wie
+    ``aktive_regeln``). Trefferlogik siehe ``_regel_kandidaten``.
+
+    Rueckgabe (oder ``None``, falls nichts passt):
+      regel_id, name, ziel_sparte_id, ziel_kategorie_id, ziel_typ, kat_sparte_id
+    """
+    kandidaten = _regel_kandidaten(
+        con_oder_regeln, text, sparte_id=sparte_id, konto_id=konto_id,
+        bereich_id=bereich_id, betrag_cent=betrag_cent,
+    )
     if not kandidaten:
         return None
     beste_prioritaet = min(item[0]["prioritaet"] for item in kandidaten)
@@ -136,3 +154,41 @@ def finde_regel(
     result["konflikt"] = False
     result["konflikte"] = []
     return result
+
+
+def finde_regeln(
+    con_oder_regeln: Union[sqlite3.Connection, list], text: Optional[str], *,
+    sparte_id: int | None = None, konto_id: int | None = None,
+    bereich_id: int = 1, betrag_cent: int | None = None, maximal: int = 3,
+) -> list:
+    """P40c: bis zu ``maximal`` Regeltreffer statt nur des einen besten.
+
+    Nutzt dieselbe Trefferlogik wie ``finde_regel`` (``_regel_kandidaten``),
+    sortiert aber nach Prioritaet (aufsteigend) und Bedingungslaenge
+    (absteigend, spezifischere Regeln zuerst) und liefert je Zielkategorie
+    hoechstens einen Eintrag (Duplikate durch mehrere passende Regeln auf
+    dieselbe Kategorie werden herausgefiltert). Konflikte zwischen
+    gleichwertigen Regeln (wie bei ``finde_regel``) tauchen hier einfach als
+    mehrere Treffer auf - das ist fuer eine Auswahlliste gewuenscht, anders
+    als bei ``finde_regel``, wo ein einzelner Vorschlag entschieden sein muss.
+    """
+    kandidaten = _regel_kandidaten(
+        con_oder_regeln, text, sparte_id=sparte_id, konto_id=konto_id,
+        bereich_id=bereich_id, betrag_cent=betrag_cent,
+    )
+    if not kandidaten:
+        return []
+    kandidaten_sortiert = sorted(
+        kandidaten, key=lambda item: (item[0]["prioritaet"], -item[1], item[0]["id"])
+    )
+    ergebnis = []
+    gesehene_kategorien = set()
+    for _r, _laenge, daten in kandidaten_sortiert:
+        kategorie_id = daten["ziel_kategorie_id"]
+        if kategorie_id is None or kategorie_id in gesehene_kategorien:
+            continue
+        gesehene_kategorien.add(kategorie_id)
+        ergebnis.append(dict(daten))
+        if len(ergebnis) >= maximal:
+            break
+    return ergebnis
