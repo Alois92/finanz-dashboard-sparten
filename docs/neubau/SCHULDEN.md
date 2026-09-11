@@ -178,3 +178,7 @@ verlässlicher Messung (`clientWidth`), Bericht `berichte/QA-5-handy-375px.md`.
 | QA5-02 | Sidebar unter 760 px ausgeblendet ohne Ersatzmenü: Sparte, Konten, Kredit, Kategorien, Export, Betrieb, Bereichswechsel, Theme, Passwort, Abmelden auf dem Handy unerreichbar. | **P73, in Arbeit** |
 | QA5-03 | Tap-Ziele in Listen 19–21 px hoch. | P73 |
 | QA5-04 | Scrollbare Tabellen ohne sichtbaren Hinweis. | P73 |
+
+**P73 Mobil-Navigation** gemergt (12.09. nachts, Abnahme `P73.md`): QA5-01 bis QA5-04 erledigt. Offen bleibt nur die
+Umstellung auf CT 101 (Abschnitt 11 der Betriebsdoku, mit dem Nutzer) inklusive P43c und der CPU-Laufzeit des
+KI-Vorschlags; danach die Handy-Prüfung der Dialoge „Zuordnen“, „Beleg prüfen“, „Jahr bestätigen“ mit echten Daten.
