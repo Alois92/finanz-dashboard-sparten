@@ -309,11 +309,7 @@ class P50BuchungenTest(unittest.TestCase):
         ).fetchone()
         self.assertIsNone(row)
 
-    # ---------- Historie fehlt bewusst (siehe Bericht) ----------
-
-    def test_verlauf_endpunkt_existiert_in_diesem_paket_nicht(self):
-        status, _ = self.request("GET", f"/api/buchungen/{self.buchung_id}/verlauf?bereich_id=1")
-        self.assertEqual(404, status)
+    # ---------- Historie: siehe tests/test_p50b_verlauf.py (P50b hat die Luecke geschlossen) ----------
 
 
 class P50JsSyntaxTest(unittest.TestCase):

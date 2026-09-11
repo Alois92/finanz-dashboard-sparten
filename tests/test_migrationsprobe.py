@@ -154,9 +154,15 @@ class MigrationsprobeTest(unittest.TestCase):
         report = self.probe.lauf(self.source, work)
         con = self.connection(work / 'kopie.db')
         con.execute('UPDATE buchungszeile SET neutral=1 WHERE id=1')
+        # buchungszeile.storniert_am gibt es in keiner offiziellen Migration - reiner
+        # Test-Aufbau fuer den Zeilen-Kostenstorno.
         con.execute('ALTER TABLE buchungszeile ADD COLUMN storniert_am TEXT')
         con.execute("UPDATE buchungszeile SET storniert_am='2026-01-01' WHERE id=2")
-        con.execute('ALTER TABLE buchung ADD COLUMN storniert_am TEXT')
+        # buchung.storniert_am kommt seit Migration 017 bereits aus dem Nachzug selbst
+        # (self.probe.lauf oben) - hier nur noch ergaenzend pruefen und befuellen, nicht
+        # nochmal anlegen (sonst "duplicate column name", siehe Bericht F-tests-017-runde1).
+        if 'storniert_am' not in self.probe._spalten(con, 'buchung'):
+            con.execute('ALTER TABLE buchung ADD COLUMN storniert_am TEXT')
         con.execute("UPDATE buchung SET storniert_am='2026-01-01' WHERE id=2")
         self.assertEqual(report['summen_vorher'], self.probe.summen_je_sparte_jahr(con))
         diff = self.probe.vergleiche(report['summen_vorher'], self.probe.summen_neu(con))
