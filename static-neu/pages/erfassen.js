@@ -36,6 +36,8 @@ const M = {
   kiLetzterText: null, // Text, zu dem zuletzt die KI gefragt wurde (Dedupe: pro Text nur 1 Aufruf)
   kiVorschlag: null,
   requestId: null,  // QA2-04: client_request_id fuer die aktuelle Formularfuellung, s.u.
+  treffer: [],       // P40c: bis zu 3 Kategorietreffer aus /parse, mit Herkunft
+  trefferIndex: 0,   // per Pfeiltasten waehlbarer Treffer (0 = Vorgabe)
 };
 
 function heute(){
@@ -68,6 +70,8 @@ export async function render(root, state){
   M.kiTimer = null;
   M.kiLetzterText = null;
   M.kiVorschlag = null;
+  M.treffer = [];
+  M.trefferIndex = 0;
   // QA2-04: einmal pro Formularaufbau erzeugen, damit ein Speichern-Retry
   // nach einem Fehler (z.B. Netzwerkabbruch) dieselbe client_request_id
   // verwendet und der Server ihn als Wiederholung erkennen kann.
@@ -305,17 +309,59 @@ export async function render(root, state){
     }
   }
 
-  function zeigeVorschlag(v){
-    if(!v || (!v.sparte_name && !v.kategorie_name)){
+  // P40c/QA2-03: bis zu drei Kategorietreffer mit Herkunft als anklickbare
+  // Chips; der markierte (M.trefferIndex) ist optisch hervorgehoben und wird
+  // per Klick oder Tab in Sparte/Kategorie uebernommen (uebernehmeTreffer).
+  function renderTrefferChips(){
+    if(!M.treffer.length){
       suggBox.hidden = true;
       suggBox.innerHTML = '';
       return;
     }
-    const teile = [];
-    if(v.sparte_name) teile.push(`Sparte <b>${esc(v.sparte_name)}</b>`);
-    if(v.kategorie_name) teile.push(`Kategorie <b>${esc(v.kategorie_name)}</b>`);
     suggBox.hidden = false;
-    suggBox.innerHTML = `Vorschlag: ${teile.join(' · ')}`;
+    const chips = M.treffer.map((t, i) => {
+      const herkunft = t.quelle === 'regel'
+        ? `Regel „${esc(t.regel_name || '')}“`
+        : 'Name';
+      const label = [t.sparte_name, t.kategorie_name].filter(Boolean).map(esc).join(' · ');
+      const aktiv = i === M.trefferIndex ? ' active' : '';
+      return `<button type="button" class="ef-chip${aktiv}" data-idx="${i}">${label} (${herkunft})</button>`;
+    }).join(' ');
+    suggBox.innerHTML = `Vorschlag: ${chips}`;
+    suggBox.querySelectorAll('.ef-chip').forEach(btn => {
+      btn.addEventListener('click', () => {
+        M.trefferIndex = Number(btn.dataset.idx);
+        renderTrefferChips();
+        uebernehmeTreffer();
+      });
+    });
+  }
+
+  function zeigeVorschlag(v){
+    M.treffer = (v && Array.isArray(v.treffer)) ? v.treffer : [];
+    M.trefferIndex = 0;
+    renderTrefferChips();
+  }
+
+  // Wendet den aktuell markierten Treffer (M.trefferIndex) auf Sparte/Kategorie
+  // an, sofern der Nutzer sie nicht schon manuell veraendert hat.
+  async function uebernehmeTreffer(){
+    const t = M.treffer[M.trefferIndex];
+    if(!t) return;
+    if(t.sparte_id && !M.manuellSparte){
+      sparteSelect.value = String(t.sparte_id);
+      await ladeKategorieOptionen();
+      await aktualisiereKontoFeld();
+      aktualisiereAuslageSichtbarkeit();
+      aktualisiereVonOptionen();
+      await ladeZuletztErfasst();
+    }
+    if(t.kategorie_id && !M.manuellKategorie){
+      const liste = await ladeKategorien(gewaehlteSparte()).catch(() => []);
+      if(liste.some(k => k.id === t.kategorie_id)){
+        kategorieSelect.value = String(t.kategorie_id);
+      }
+    }
   }
 
   async function parseText(){
@@ -323,6 +369,8 @@ export async function render(root, state){
     if(!text){
       suggBox.hidden = true;
       suggBox.innerHTML = '';
+      M.treffer = [];
+      M.trefferIndex = 0;
       return;
     }
     let vorschlag;
@@ -333,20 +381,9 @@ export async function render(root, state){
     }
     M.letzterVorschlag = vorschlag;
     zeigeVorschlag(vorschlag);
-    if(vorschlag.sparte_id && !M.manuellSparte){
-      sparteSelect.value = String(vorschlag.sparte_id);
-      await ladeKategorieOptionen();
-      await aktualisiereKontoFeld();
-      aktualisiereAuslageSichtbarkeit();
-      aktualisiereVonOptionen();
-      await ladeZuletztErfasst();
-    }
-    if(vorschlag.kategorie_id && !M.manuellKategorie){
-      const liste = await ladeKategorien(gewaehlteSparte()).catch(() => []);
-      if(liste.some(k => k.id === vorschlag.kategorie_id)){
-        kategorieSelect.value = String(vorschlag.kategorie_id);
-      }
-    }
+    // Vorgabe (erster Treffer) wie bisher automatisch uebernehmen (QA2-01/P70
+    // duerfen dadurch nicht brechen: Enter speichert weiterhin sofort).
+    await uebernehmeTreffer();
     if(vorschlag.betrag_cent && !betragInput.value.trim()){
       betragInput.value = (vorschlag.betrag_cent / 100).toFixed(2).replace('.', ',');
     }
@@ -427,10 +464,23 @@ export async function render(root, state){
   // QA2-01: Enter im Textfeld speichert direkt (P40-Vorgabe), Shift+Enter bleibt ein
   // normaler Zeilenumbruch. Der submit-Handler validiert Sparte/Kategorie/Betrag ohnehin
   // schon und zeigt per Toast, was noch fehlt -- kein Zwischenschritt noetig.
+  // P40c: bei mehreren Treffern wechseln ↑/↓ nur die Markierung (Enter speichert
+  // weiterhin unveraendert, QA2-01 darf nicht brechen); Tab uebernimmt den
+  // markierten Treffer in Sparte/Kategorie, bevor der Fokus das Feld verlaesst.
   textArea.addEventListener('keydown', e => {
     if(e.key === 'Enter' && !e.shiftKey){
       e.preventDefault();
       form.requestSubmit();
+      return;
+    }
+    if(!M.treffer.length) return;
+    if(e.key === 'ArrowDown' || e.key === 'ArrowUp'){
+      e.preventDefault();
+      const delta = e.key === 'ArrowDown' ? 1 : -1;
+      M.trefferIndex = (M.trefferIndex + delta + M.treffer.length) % M.treffer.length;
+      renderTrefferChips();
+    }else if(e.key === 'Tab'){
+      uebernehmeTreffer();
     }
   });
 
@@ -533,6 +583,8 @@ export async function render(root, state){
     datumInput.value = heute();
     M.manuellKategorie = false;
     M.letzterVorschlag = null;
+    M.treffer = [];
+    M.trefferIndex = 0;
     clearTimeout(M.kiTimer);
     M.kiLetzterText = null;
     zeigeKiVorschlag(null);
