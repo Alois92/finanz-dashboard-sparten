@@ -133,7 +133,7 @@ async function drillBuchungen(filterParams, title) {
         <div class="${b.typ === 'einnahme' ? 'ein' : 'aus'}">${fmtEur(b.betrag_cent)}</div>
       </div>`).join('') : '<p class="muted">Keine Buchungen im Zeitraum.</p>';
     const summe = data.summen || {};
-    const fuss = `<p class="muted" style="font-size:12px;margin-top:10px">${summe.anzahl ?? rows.length} Buchung(en) insgesamt${rows.length < (summe.anzahl ?? rows.length) ? `, ${rows.length} angezeigt` : ''} · Saldo ${fmtEur(summe.saldo_cent || 0, true)}</p>`;
+    const fuss = `<p class="muted" style="font-size:12px;margin-top:10px">${summe.anzahl ?? rows.length} Buchung(en) insgesamt${rows.length < (summe.anzahl ?? rows.length) ? `, ${rows.length} angezeigt` : ''} · Saldo ${fmtEur(summe.saldo_cent, true)}</p>`;
     drill(title, list + fuss);
   } catch (error) {
     toast(error.detail || error.message || 'Buchungen konnten nicht geladen werden.');
@@ -157,7 +157,9 @@ function goSparte(state, sparteId) {
   state.sparteId = String(sparteId);
   if (state.filter) state.filter.sparteId = state.sparteId;
   localStorage.setItem('neu-sparte', state.sparteId);
-  location.hash = '#/sparte';
+  // QA1-01: Sparte im Hash abbilden, damit die URL teilbar/bookmarkbar bleibt und
+  // die Zurueck-Taste zwischen Sparten wechseln kann (sparte.js liest die ID zurueck).
+  location.hash = '#/sparte/' + state.sparteId;
 }
 
 function renderHints(root, state, data, load) {

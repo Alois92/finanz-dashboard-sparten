@@ -162,6 +162,11 @@ export async function render(root, state) {
 
   function startRename(tr, k) {
     const span = tr.querySelector('.kname');
+    // QA1-05: bei schneller Doppel-Interaktion (z.B. Klick auf "umbenennen"
+    // waehrend ein Blur-Speichervorgang die Zeile bereits neu rendert) kann
+    // die Zelle bereits im Bearbeiten-Zustand sein oder gerade neu aufgebaut
+    // werden -- dann existiert kein .kname-Element mehr.
+    if (!span) return;
     const input = document.createElement('input');
     input.className = 'name-edit';
     input.value = k.name;
@@ -173,7 +178,13 @@ export async function render(root, state) {
       if (erledigt) return;
       erledigt = true;
       const neu = input.value.trim();
-      if (!neu || neu === k.name) { renderTable(); return; }
+      if (!neu) {
+        // QA1-04: bisher verpuffte ein leeres Feld ohne jede Rueckmeldung.
+        toast('Name darf nicht leer sein.');
+        renderTable();
+        return;
+      }
+      if (neu === k.name) { renderTable(); return; }
       try {
         const aktualisiert = await api(`/kategorien/${k.id}`, {
           method: 'PATCH', headers: {'Content-Type': 'application/json'},

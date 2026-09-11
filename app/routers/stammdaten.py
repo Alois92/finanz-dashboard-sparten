@@ -47,6 +47,22 @@ def list_kategorien(sparte_id: int | None = None,
     return [dict(r) for r in rows]
 
 
+def _pruefe_kategorie_duplikat(con: sqlite3.Connection, sparte_id: int, parent_id: int | None,
+                               name: str, ausser_id: int | None = None) -> None:
+    """QA1-03: verhindert zwei nicht unterscheidbare aktive Kategorien mit
+    gleichem (getrimmten, case-insensitiven) Namen in derselben Sparte und
+    demselben Parent."""
+    sql = ("SELECT id FROM kategorie WHERE sparte_id = ? AND aktiv = 1 "
+           "AND trim(lower(name)) = trim(lower(?)) AND parent_id IS ?")
+    params: list = [sparte_id, name, parent_id]
+    if ausser_id is not None:
+        sql += " AND id <> ?"
+        params.append(ausser_id)
+    treffer = con.execute(sql, params).fetchone()
+    if treffer is not None:
+        raise HTTPException(409, f'Eine Kategorie mit dem Namen "{name}" existiert in dieser Sparte bereits.')
+
+
 @router.patch("/kategorien/{kategorie_id}")
 def patch_kategorie(kategorie_id: int, body: KategoriePatchIn | dict,
                     con: sqlite3.Connection = Depends(db_dep), bereich: BereichDep = Bereich(1)):
@@ -59,6 +75,11 @@ def patch_kategorie(kategorie_id: int, body: KategoriePatchIn | dict,
         daten["name"] = str(daten["name"]).strip()
         if not daten["name"]:
             raise HTTPException(400, "Name darf nicht leer sein")
+        vorhanden = con.execute(
+            "SELECT sparte_id, parent_id FROM kategorie WHERE id = ?", (kategorie_id,)
+        ).fetchone()
+        _pruefe_kategorie_duplikat(con, vorhanden["sparte_id"], vorhanden["parent_id"],
+                                   daten["name"], ausser_id=kategorie_id)
     if "aktiv" in daten and daten["aktiv"] not in (0, 1, False, True):
         raise HTTPException(422, "aktiv muss 0 oder 1 sein")
     if "richtung" in daten and daten["richtung"] not in ("einnahme", "ausgabe", "beides"):
@@ -79,9 +100,11 @@ def create_kategorie(k: KategorieIn, con: sqlite3.Connection = Depends(db_dep), 
     pruefe_sparte(con, k.sparte_id, bereich)
     if k.parent_id is not None:
         pruefe_kategorie(con, k.parent_id, bereich)
+    name = k.name.strip()
+    _pruefe_kategorie_duplikat(con, k.sparte_id, k.parent_id, name)
     cur = con.execute(
         "INSERT INTO kategorie(sparte_id, parent_id, name, richtung) VALUES(?,?,?,?)",
-        (k.sparte_id, k.parent_id, k.name.strip(), k.richtung),
+        (k.sparte_id, k.parent_id, name, k.richtung),
     )
     con.commit()
     row = con.execute(

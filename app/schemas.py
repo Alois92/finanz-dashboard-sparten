@@ -8,6 +8,11 @@ TYPEN = {"einnahme", "ausgabe", "umbuchung"}
 RICHTUNGEN = {"einnahme", "ausgabe", "beides"}
 ZAHLUNGSARTEN = {"bar", "bank", "karte", "sonstiges"}
 
+# QA2-05: Plausibilitaets-Obergrenze fuer Buchungsbetraege (100 Mio. Euro in Cent).
+# Ohne Obergrenze wurden absurde Tippfehler-Betraege (z.B. 10 Mrd. Euro) anstandslos
+# gespeichert und verzerrten sofort alle Summen in Uebersicht/Buchungsliste.
+BETRAG_CENT_MAX = 10_000_000_000
+
 
 class KategorieIn(BaseModel):
     sparte_id: int
@@ -38,7 +43,7 @@ class AuswertungsgruppeIn(BaseModel):
 class ZeileIn(BaseModel):
     id: Optional[int] = None
     kategorie_id: int
-    betrag_cent: int = Field(ge=0)
+    betrag_cent: int = Field(ge=0, le=BETRAG_CENT_MAX)
     notiz: Optional[str] = None
 
 

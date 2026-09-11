@@ -37,7 +37,17 @@ function setTheme(theme){state.theme=theme;document.documentElement.dataset.them
 function setFilter(patch){
   Object.assign(state.filter,patch);
   if('jahr' in patch){state.year=patch.jahr||'';localStorage.setItem('neu-jahr',state.year)}
-  if('sparteId' in patch){state.sparteId=patch.sparteId||'';localStorage.setItem('neu-sparte',state.sparteId)}
+  if('sparteId' in patch){
+    state.sparteId=patch.sparteId||'';
+    localStorage.setItem('neu-sparte',state.sparteId);
+    // QA1-01: auf der Sparte-Seite die Wahl im Hash abbilden (Kopf-Dropdown/Sidebar setzten
+    // bisher nie eine ID in die URL), damit sie teilbar bleibt und die Zurueck-Taste zwischen
+    // Sparten wechseln kann. sparte.js liest die ID beim naechsten Render zurueck.
+    if(state.route==='sparte'){
+      const neuerHash=state.sparteId?`#/sparte/${state.sparteId}`:'#/sparte';
+      if(location.hash!==neuerHash){location.hash=neuerHash;return}
+    }
+  }
   if('kategorieId' in patch){localStorage.setItem('neu-kategorie',state.filter.kategorieId||'')}
   render();
 }
@@ -90,7 +100,18 @@ async function drawKategorieFilter(){
     // nur_aktive wie zuvor lokal in buchungen.js (P50): stillgelegte Kategorien gehören nicht in den Filter.
     const params=state.sparteId?{sparte_id:state.sparteId,nur_aktive:'true'}:{nur_aktive:'true'};
     const kategorien=await api('/kategorien',{params});
-    sel.innerHTML=`<option value="">alle</option>${kategorien.map(k=>`<option value="${k.id}">${esc(k.name)}</option>`).join('')}`;
+    // QA2-07: bei "Alle Sparten" sind gleichnamige Kategorien verschiedener Sparten sonst
+    // nicht unterscheidbar -- Dubletten bekommen das Sparten-Kuerzel angehaengt.
+    const anzahlProName=new Map();
+    if(!state.sparteId){
+      for(const k of kategorien){const key=k.name.toLowerCase();anzahlProName.set(key,(anzahlProName.get(key)||0)+1)}
+    }
+    const beschriftung=k=>{
+      if(state.sparteId||(anzahlProName.get(k.name.toLowerCase())||0)<2)return esc(k.name);
+      const kuerzel=state.sparten.find(s=>s.id===k.sparte_id)?.kuerzel||'';
+      return kuerzel?`${esc(k.name)} (${esc(kuerzel)})`:esc(k.name);
+    };
+    sel.innerHTML=`<option value="">alle</option>${kategorien.map(k=>`<option value="${k.id}">${beschriftung(k)}</option>`).join('')}`;
     const gueltig=kategorien.some(k=>String(k.id)===behalten);
     sel.value=gueltig?behalten:'';
     if(!gueltig&&behalten){state.filter.kategorieId='';localStorage.setItem('neu-kategorie','')}
