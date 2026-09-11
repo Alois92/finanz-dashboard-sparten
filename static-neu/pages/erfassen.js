@@ -348,6 +348,16 @@ export async function render(root, state){
     M.parseTimer = setTimeout(parseText, 300);
   });
 
+  // QA2-01: Enter im Textfeld speichert direkt (P40-Vorgabe), Shift+Enter bleibt ein
+  // normaler Zeilenumbruch. Der submit-Handler validiert Sparte/Kategorie/Betrag ohnehin
+  // schon und zeigt per Toast, was noch fehlt -- kein Zwischenschritt noetig.
+  textArea.addEventListener('keydown', e => {
+    if(e.key === 'Enter' && !e.shiftKey){
+      e.preventDefault();
+      form.requestSubmit();
+    }
+  });
+
   root.querySelectorAll('.seg-btn').forEach(b => {
     b.addEventListener('click', () => setTyp(b.dataset.typ));
   });
