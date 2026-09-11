@@ -6,6 +6,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
 
+from ..schemas import BETRAG_CENT_MAX
 from ..db import db_dep
 from ..abgleich import offene_abgleiche
 from ..rechenbasis import cursor_encode, cursor_decode
@@ -57,7 +58,7 @@ class KontoPatch(BaseModel):
 class BewegungIn(BaseModel):
     konto_id: int
     datum: date
-    betrag_signed_cent: int = Field(ge=-10_000_000_000, le=10_000_000_000, strict=True)
+    betrag_signed_cent: int = Field(ge=-BETRAG_CENT_MAX, le=BETRAG_CENT_MAX, strict=True)
     text: str | None = None
     gegenpartei: str | None = None
     art: Literal['zahlung','transfer','gebuehr','zins','trade'] = 'zahlung'
@@ -68,13 +69,13 @@ class TransferIn(BaseModel):
     von_konto_id: int
     nach_konto_id: int
     datum: date
-    betrag_cent: int = Field(gt=0, le=10_000_000_000, strict=True)
+    betrag_cent: int = Field(gt=0, le=BETRAG_CENT_MAX, strict=True)
     notiz: str | None = None
 
 
 class AnkerIn(BaseModel):
     stichtag: date
-    saldo_cent: int = Field(ge=-10_000_000_000, le=10_000_000_000, strict=True)
+    saldo_cent: int = Field(ge=-BETRAG_CENT_MAX, le=BETRAG_CENT_MAX, strict=True)
     quelle: Literal['auszug', 'manuell', 'import']
     beleg_id: int | None = None
     notiz: str | None = None
@@ -82,7 +83,7 @@ class AnkerIn(BaseModel):
 
 class ZaehlungIn(BaseModel):
     datum: date
-    gezaehlt_cent: int = Field(ge=-10_000_000_000, le=10_000_000_000, strict=True)
+    gezaehlt_cent: int = Field(ge=-BETRAG_CENT_MAX, le=BETRAG_CENT_MAX, strict=True)
     notiz: str | None = None
 
 

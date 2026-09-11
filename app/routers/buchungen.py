@@ -15,7 +15,7 @@ from ..db import db_dep
 from ..bereiche import (Bereich, BereichDep, pruefe_sparte, pruefe_kategorie,
                         pruefe_konto, pruefe_buchung, pruefe_beleg, pruefe_umsatz)
 from ..regeln import normalisiere_regeltext
-from ..schemas import BuchungIn, ZeileIn
+from ..schemas import BETRAG_CENT_MAX, BuchungIn, ZeileIn
 from ..auslagen import (ergaenze_auslage, pruefe_zahler, synchronisiere_auslage,
                        zuordnungskonflikt)
 from ..wiederholung import wiederhole, speichere_antwort
@@ -48,7 +48,7 @@ class UmbuchungIn(BaseModel):
     von_sparte_id: int
     nach_sparte_id: int
     datum: str
-    betrag_cent: int = Field(gt=0, le=10_000_000_000)
+    betrag_cent: int = Field(gt=0, le=BETRAG_CENT_MAX)
     text: str | None = None
     zahlungsart: Literal['bank', 'bar'] = 'bank'
     von_konto_id: int | None = None
@@ -594,7 +594,7 @@ class StornoIn(BaseModel):
 
 class ErstattenZeileIn(BaseModel):
     original_zeile_id: int
-    betrag_cent: int = Field(gt=0, le=10_000_000_000)
+    betrag_cent: int = Field(gt=0, le=BETRAG_CENT_MAX)
     kategorie_id: int | None = None
 
 

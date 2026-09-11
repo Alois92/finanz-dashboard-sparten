@@ -23,7 +23,7 @@ from pydantic import BaseModel, Field, field_validator
 from ..auswertung import OLLAMA_MODEL, OLLAMA_URL
 from ..db import db_dep
 from ..bereiche import Bereich, BereichDep, pruefe_beleg, pruefe_auswertung, pruefe_sparte, pruefe_kategorie
-from ..schemas import ZAHLUNGSARTEN, ZeileIn
+from ..schemas import BETRAG_CENT_MAX, ZAHLUNGSARTEN, ZeileIn
 from ..wiederholung import speichere_antwort, wiederhole
 from .belege import _aktualisiere_belegstatus
 from .buchungen import erstelle_buchung
@@ -43,7 +43,7 @@ class AuswertungStatusIn(BaseModel):
 
 class UebernehmenPosition(BaseModel):
     text: str
-    betrag_cent: int = Field(gt=0, le=10_000_000_000)
+    betrag_cent: int = Field(gt=0, le=BETRAG_CENT_MAX)
     kategorie_id: int
     typ: Literal["einnahme", "ausgabe"] = "ausgabe"
 
