@@ -291,8 +291,8 @@ Der Nutzer öffnet `https://192.168.1.254:8006`, meldet sich an und öffnet die
    Drop-in aktivieren:
 
    ```sh
-   pct exec 101 -- bash -lc "ollama pull <modell> && ollama list"
-   pct exec 101 -- bash -lc "printf '[Service]\nEnvironment=FINANZ_OLLAMA_MODEL=<modell>\n' > /etc/systemd/system/finanz.service.d/ollama-modell.conf && systemctl daemon-reload && systemctl restart finanz"
+   pct exec 101 -- bash -lc "ollama pull qwen3.5:4b && ollama list"
+   pct exec 101 -- bash -lc "printf '[Service]\nEnvironment=FINANZ_OLLAMA_MODEL=qwen3.5:4b\n' > /etc/systemd/system/finanz.service.d/ollama-modell.conf && systemctl daemon-reload && systemctl restart finanz"
    ```
 
    `FINANZ_OLLAMA_TIMEOUT=2400` bleibt unverändert; `think: false` steckt bereits

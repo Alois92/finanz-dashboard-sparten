@@ -100,6 +100,8 @@ def _ollama_aufruf(url: str, body: dict) -> dict:
 # der Pixelzahl: ein 12-MP-Handyfoto braucht auf 2 CPU-Kernen >10 min, auf
 # ~1280 px verkleinert nur einen Bruchteil davon - fuer Kassenbons reicht das.
 BILD_MAX_PX = int(os.environ.get("FINANZ_BILD_MAX_PX", "1280"))
+# Quer liegende Bilder vor dem Modellaufruf auf Hochformat drehen (FINANZ_BILD_QUER_DREHEN=0 schaltet ab).
+QUER_DREHEN = os.environ.get("FINANZ_BILD_QUER_DREHEN", "1") != "0"
 
 
 def _lade_bild_base64(pfad: pathlib.Path) -> str:
@@ -118,6 +120,12 @@ def _lade_bild_base64(pfad: pathlib.Path) -> str:
         bild = Image.open(io.BytesIO(roh))
         # Handyfotos tragen die Drehung oft nur im EXIF - vor dem Skalieren anwenden.
         bild = ImageOps.exif_transpose(bild)
+        # Quer liegende Bilder ohne EXIF-Drehung (typisch nach Messenger-Versand) auf
+        # Hochformat drehen: Belege und Rechnungen sind praktisch immer hochkant, und
+        # der Modellvergleich vom 11.09.2026 zeigte, dass die Ausrichtung mehr
+        # ausmacht als die Modellwahl (outputs/modelltest/ERGEBNIS.md).
+        if QUER_DREHEN and bild.width > bild.height:
+            bild = bild.transpose(Image.Transpose.ROTATE_270)
         if max(bild.size) > BILD_MAX_PX:
             bild.thumbnail((BILD_MAX_PX, BILD_MAX_PX))
         if bild.mode not in ("RGB", "L"):

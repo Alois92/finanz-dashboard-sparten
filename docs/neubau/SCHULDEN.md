@@ -110,7 +110,7 @@ Prüf-Dialog ohne Vorbelegung, Qwen-3-Denkmodus (`think: false`).
 | Nr. | Befund | Fällig |
 |---|---|---|
 | ~~P43b~~ | erledigt 11.09. (Migration 016, eigener Wert `beleg_uebernahme`, Abnahme P51.md). | — |
-| P43c | Modellwechsel in Produktion: `FINANZ_OLLAMA_MODEL` auf das Gewinnermodell des Vergleichs (`outputs/modelltest/`) umstellen, Modell in CT 101 laden, Laufzeit auf der CPU messen. `think: false` ist seit `fa6409b` im Code. | vor P62 |
+| P43c | **Entschieden 11.09.: `qwen3.5:4b`** (6 von 7 Testbildern richtig, Vergleich in `outputs/modelltest/ERGEBNIS.md`). Quer liegende Bilder dreht die App jetzt vor dem Aufruf (`FINANZ_BILD_QUER_DREHEN`). Offen: Modell in CT 101 laden, Drop-In setzen, CPU-Laufzeit messen; Schritt im Umstellungsablauf (Betriebsdoku 11.4). | bei der Umstellung |
 | ~~P32b~~ | erledigt 11.09. (Abnahme P60b-P31b-P32b.md): Gruppen-Hash gewinnt, Kopf-Wahl verlässt die Gruppe. | — |
 | P52b | Bei „Alle Sparten“ listet die Kreditseite alle Kredite des Bereichs; kein Beleg-Upload im Dialog „Jahr bestätigen“, nur Verknüpfung vorhandener Belege. | klein |
 | — | Handy-Ansicht: Kredit bei 375 px geprüft; Sparte, Kategorien, Belege nur durch die Agenten (Viewport-Emulation des Werkzeugs sprang). | vor CT 102 |
