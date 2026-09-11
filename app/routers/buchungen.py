@@ -261,6 +261,9 @@ def _buchungsseite(con, f, q='', limit=100, cursor=None, typ=None):
     w, p = rb.where_zeilen(con, f)
     totals = dict(con.execute('SELECT ' + rb.SUMMEN_SQL + ' FROM v_einnahmen_ausgaben v' + w +
                              ' AND v.buchung_id IN (SELECT b.id' + source + selection + ')', [*p, *params]).fetchone())
+    # QA1-02: saldo_cent fehlte hier, obwohl das Frontend (Drilldown-Fusszeile)
+    # ihn erwartet -- gleiches Muster wie rechenbasis._summen()/_kategorien().
+    totals['saldo_cent'] = totals['einnahmen_cent'] - totals['ausgaben_cent']
     totals['anzahl'] = count
     page_where, page_params = selection, list(params)
     if cursor:
