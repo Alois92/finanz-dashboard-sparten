@@ -135,3 +135,29 @@ kein Nutzertest. Zuschnitt: vier Tester mit je eigener Instanz auf der migrierte
 | ~~P51c~~ | erledigt 11.09. nachmittags (Kopf): 422-Text nennt den Kategorienamen. | — |
 | ~~P61b~~ | erledigt 11.09. nachmittags (Kopf): `summen_neu` und `kostenstorno_spalten` prüfen nur noch `buchungszeile`. Suite 454 grün. | — |
 | — | Testsuite: zweiter Lauf auf derselben `FINANZ_DB`-Datei verfälscht `test_auto_kategorien`; Wegwerfdatei immer vorher löschen (Kopf-Läufe tun das). | Prozess |
+
+---
+
+## QA-Durchlauf und Nachträge vom 11. September 2026, abends (Fable)
+
+**QA-Durchlauf abgeschlossen:** vier Sonnet-Tester auf eigenen Instanzen (Prod-Kopie Schema 17), rund 200 Prüfpunkte,
+Berichte `berichte/QA-1…4-*.md`, 27 Befunde plus QA4-08. Behoben durch zwei Sonnet-Fixer (`berichte/QA-fix-A.md`,
+`QA-fix-B.md`, je ein Commit je Befund, gemergt `06c362f`/`f0aa80a`): kritisch QA2-02 (Betrag „12.50“ → 1250) und
+QA1-02 (Drilldown-Saldo 0), hoch QA2-04 (Client-Request-Id je Klick) und QA3-02 (Bankimport riet die Sparte), mittel
+QA1-01/03, QA2-01, QA3-03/04, QA4-05 (fehlendes Commit im Wiederholungs-Topf), niedrig QA1-04/05/06, QA2-05/06/07,
+QA3-01/05/06/07. Foto-Auswertung sendet jetzt `temperature 0` (`FINANZ_OLLAMA_TEMPERATUR`). Login-Fluss ohne Bypass
+live bestätigt (QA-4 Nachtrag). Gesamtsuite danach **561 Tests grün**.
+
+**Neue Pakete (Nutzerwunsch 11.09.):** **P70** KI-Kategorievorschlag als Rückfallebene (Abnahme `P70.md`, Merge
+`346d633`), **P71** Rechnungen als Text-PDF (`pypdf==6.18.1`, Abnahme `P71.md`, Merge `f830696`). Kern von P40b
+damit erledigt (`/api/parse` liefert `quelle`/`regel_name`).
+
+| Nr. | Befund | Fällig |
+|---|---|---|
+| QA2-03 | Erfassen zeigt weiterhin nur einen Kategorietreffer (P40 wollte bis zu drei mit Pfeiltasten); Herkunft ist jetzt im `quelle`-Feld vorhanden, Anzeige fehlt. | klein |
+| QA2-05b | Betrags-Obergrenze nur bei `ZeileIn.betrag_cent`; `UmbuchungIn`, `ErstattenZeileIn`, Auslagen/Konten/Kredite/Beleg-Übernahme ohne Limit. | klein |
+| QA4-06 | Kein manueller Sicherungs-Auslöser und keine Betriebsseite im neuen Frontend; Entscheidung des Nutzers, ob gewünscht. | Entscheidung |
+| ~~QA4-08~~ | erledigt: Betriebsdoku nennt Neustartpflicht nach Änderung der Auth-Datei. | — |
+| P43c | Modellwechsel in CT 101 auf `qwen3.5:4b` und CPU-Laufzeit messen — Teil der Umstellung (Abschnitt 11). | Umstellung |
+| — | Handy-Ansicht 375 px: alle vier Tester meldeten eine springende Viewport-Emulation des Werkzeugs; nur Kredit, Belege, Export verlässlich geprüft. | vor CT 102 |
+| — | P70: Laufzeit des Textaufrufs auf der CPU von CT 101 offen (GPU: 2–3 s). | Umstellung |

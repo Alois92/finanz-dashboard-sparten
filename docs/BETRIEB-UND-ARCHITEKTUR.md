@@ -74,7 +74,7 @@ Schutzschichten (von außen nach innen):
 
 1. **Tailscale** — nur freigegebene Geräte erreichen den Server; keine öffentliche Exposition.
 2. **HTTPS** via Tailscale Serve (`tailnet only`).
-3. **App-Passwort** — scrypt-Hashes in `/var/lib/finanz/auth.json` (`600:finanz:finanz`), niemals Klartext. Sitzung max. **12 h**, Logout widerruft sofort, Fehlversuche werden rate-limitiert.
+3. **App-Passwort** — scrypt-Hashes in `/var/lib/finanz/auth.json` (`600:finanz:finanz`), niemals Klartext. Sitzung max. **12 h**, Logout widerruft sofort, Fehlversuche werden rate-limitiert (5 Fehlversuche → 15 min Sperre je IP, im Speicher; ein Dienst-Neustart hebt sie auf). **Die Auth-Datei wird nur beim Prozessstart gelesen:** nach jeder Änderung über `scripts/set_auth_password.py` (Startpasswort, Recovery-Code) ist `systemctl restart finanz` nötig, sonst meldet der Login weiter „Anmeldung ist noch nicht eingerichtet“ (QA4-08, 11.09.2026).
 4. **Selbstverwaltung** (Stand 2026-08-01, produktiver Commit `0c8ec836`): Ersteinrichtung mit erzwungenem Passwortwechsel, Passwort ändern, Passwort per **Wiederherstellungscode** zurücksetzen (Code wird genau einmal angezeigt).
 5. **systemd-Härtung** des Dienstes (siehe Abschnitt 2).
 
