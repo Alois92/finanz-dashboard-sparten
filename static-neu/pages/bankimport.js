@@ -201,8 +201,15 @@ function formularHtml(u, state, prefill) {
   const ersteSparte = prefill?.sparte_id ?? state.sparten[0]?.id;
   const kategorieOptionen = kategorienFuerSparte(ersteSparte).map(k => `<option value="${k.id}" ${prefill?.kategorie_id === k.id ? 'selected' : ''}>${esc(k.name)}</option>`).join('');
   const typ = prefill?.typ || (u.betrag_cent < 0 ? 'ausgabe' : 'einnahme');
+  // P70: ohne Regelvorschlag (u.vorschlag leer) bietet der Dialog einen
+  // Knopf, der die KI auf Anforderung nach einer Kategorie fragt.
+  const kiTeil = !u.vorschlag
+    ? `<div class="bi-ki"><button type="button" class="btn small" id="bi-ki-btn">KI-Vorschlag holen</button>` +
+      `<span class="muted" id="bi-ki-status"></span></div>`
+    : '';
   return `<form class="bi-form" id="bi-verbuchen-form" data-umsatz="${u.id}">` +
     `<p class="muted">${fmtDate(u.datum)} · ${esc(u.text || '(ohne Text)')} · <b class="${u.betrag_cent < 0 ? 'aus' : 'ein'}">${fmtEur(u.betrag_cent)}</b></p>` +
+    kiTeil +
     `<label>Sparte<select name="sparte_id" required>${sparteOptionen}</select></label>` +
     `<label>Kategorie<select name="kategorie_id" required>${kategorieOptionen}</select></label>` +
     `<label>Typ<select name="typ"><option value="ausgabe" ${typ === 'ausgabe' ? 'selected' : ''}>Ausgabe</option>` +
@@ -221,6 +228,40 @@ function oeffneFormular(u, state, prefill) {
   sparteSel.onchange = () => {
     katSel.innerHTML = kategorienFuerSparte(sparteSel.value).map(k => `<option value="${k.id}">${esc(k.name)}</option>`).join('');
   };
+  const kiBtn = form.querySelector('#bi-ki-btn');
+  if (kiBtn) {
+    kiBtn.onclick = async () => {
+      const statusEl = form.querySelector('#bi-ki-status');
+      kiBtn.disabled = true;
+      statusEl.textContent = 'KI fragt …';
+      // Haystack aus Verwendungszweck + Auftraggeber/Empfänger bauen - beide
+      // Felder liefert GET /api/bankumsaetze bereits, ein eigenes Feld ist
+      // dafuer nicht noetig (siehe Bericht: Abweichung von der Karte).
+      const text = `${u.gegenpartei || ''} ${u.text || ''}`.trim();
+      const kiTyp = u.betrag_cent < 0 ? 'ausgabe' : 'einnahme';
+      try {
+        const antwort = await api('/kategorie-vorschlag/ki', {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({text, typ: kiTyp, betrag_cent: Math.abs(u.betrag_cent)}),
+        });
+        const v = antwort.vorschlag;
+        if (!v) {
+          statusEl.textContent = 'Kein KI-Vorschlag verfügbar.';
+          return;
+        }
+        sparteSel.value = String(v.sparte_id);
+        katSel.innerHTML = kategorienFuerSparte(v.sparte_id).map(k => `<option value="${k.id}">${esc(k.name)}</option>`).join('');
+        katSel.value = String(v.kategorie_id);
+        // Haekchen "regel_merken" bewusst NICHT automatisch gesetzt - der
+        // Nutzer entscheidet nach Pruefung des Vorschlags selbst.
+        statusEl.textContent = `Vorschlag der KI (Modell ${v.modell}): ${v.sparte_name} · ${v.kategorie_name} (${v.sicherheit}). Bitte prüfen.`;
+      } catch (error) {
+        statusEl.textContent = error.detail || error.message || 'KI-Vorschlag fehlgeschlagen.';
+      } finally {
+        kiBtn.disabled = false;
+      }
+    };
+  }
   form.onsubmit = async (e) => {
     e.preventDefault();
     const daten = new FormData(form);
