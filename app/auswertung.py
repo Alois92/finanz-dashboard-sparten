@@ -71,6 +71,16 @@ PROMPT = (
 # Ollama-Aufruf (eigene Funktion, damit Tests sie monkeypatchen koennen)
 # ---------------------------------------------------------------------------
 
+def _denkmodus_abschalten(modell: str) -> bool:
+    """True fuer Modellfamilien mit Denk-Modus (Qwen 3.x), bei denen Ollama ohne
+    `think: false` den Inhalt ins thinking-Feld schreibt. Steuerbar ueber
+    FINANZ_OLLAMA_THINK=0|1; ohne Angabe entscheidet der Modellname."""
+    vorgabe = os.environ.get("FINANZ_OLLAMA_THINK")
+    if vorgabe in ("0", "1"):
+        return vorgabe == "0"
+    return modell.lower().startswith("qwen3")
+
+
 def _ollama_aufruf(url: str, body: dict) -> dict:
     """POST gegen die Ollama-API, synchron (im Async-Kontext ueber
     asyncio.to_thread aufrufen). Wirft urllib.error.URLError/OSError bei
@@ -333,6 +343,10 @@ def _auswerten(con: sqlite3.Connection, beleg_id: int) -> dict:
             "images": [_lade_bild_base64(pfad)],
         }],
     }
+    if _denkmodus_abschalten(OLLAMA_MODEL):
+        # Qwen-3-Modelle antworten sonst nur im "thinking"-Feld und liefern leeren Inhalt
+        # (auf CPU ausserdem minutenlanges Denken vor der eigentlichen Antwort).
+        body["think"] = False
     antwort = _ollama_aufruf(OLLAMA_URL + "/api/chat", body)
     rohtext = (antwort.get("message") or {}).get("content")
     if not rohtext:
