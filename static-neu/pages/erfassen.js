@@ -373,7 +373,7 @@ export async function render(root, state){
   el('#ef-photo-btn').addEventListener('click', async () => {
     const status = await pruefeErreichbarkeit();
     if(!status || !status.erreichbar || !status.modell_vorhanden){
-      toast(erreichbarkeitsHinweis());
+      toast(erreichbarkeitsHinweis(status));
       return;
     }
     photoInput.click();

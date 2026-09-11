@@ -61,7 +61,9 @@ function waehleSparte(root, state, id) {
   if (state.filter) state.filter.sparteId = state.sparteId;
   localStorage.setItem('neu-sparte', state.sparteId);
   if (location.hash !== '#/sparte') { location.hash = '#/sparte'; return; }
-  render(root, state);
+  // Kopf-Nachzug: nicht nur die Seite, sondern ueber app.js auch Kopf-Select und Sidebar
+  // neu zeichnen (gleiches Muster wie refresh() in uebersicht.js).
+  window.dispatchEvent(new Event('hashchange'));
 }
 
 function sparteName(state, id) {

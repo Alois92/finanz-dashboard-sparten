@@ -75,7 +75,12 @@ export async function ladeBelegUndAuswerten(datei, sparteId){
   return {beleg, auftrag};
 }
 
-export function erreichbarkeitsHinweis(){
+// Kopf-Nachzug: „nicht erreichbar“ und „Modell fehlt“ unterscheiden, sonst sucht der Nutzer
+// am falschen Ende (Ollama lief, nur das konfigurierte Modell war nicht installiert).
+export function erreichbarkeitsHinweis(statusInfo){
+  if(statusInfo && statusInfo.erreichbar && !statusInfo.modell_vorhanden){
+    return `Foto-Auswertung: Modell „${statusInfo.modell || '?'}“ ist auf dem Ollama-Server nicht installiert`;
+  }
   return 'Foto-Auswertung gerade nicht erreichbar';
 }
 
@@ -107,7 +112,7 @@ function draw(root, state, data, reload){
               <p class="muted">Foto wird lokal ausgewertet, ohne Cloud.</p>
             </div>
             <div class="blg-warte" id="blg-warte" hidden></div>
-          ` : `<p class="blg-nichterreichbar">${esc(erreichbarkeitsHinweis())}</p>`}
+          ` : `<p class="blg-nichterreichbar">${esc(erreichbarkeitsHinweis(data.statusInfo))}</p>`}
         </div>
         <div class="card" id="blg-pruefen-card">
           <div class="card-head"><h2>Belege zur Prüfung</h2></div>
