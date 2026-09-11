@@ -45,6 +45,10 @@ PRUEF_INTERVALL_SEKUNDEN = 15
 # Auf langsamer CPU (Token-Generierung teils <1 Token/s) braucht ein Bon mit
 # vielen Positionen laenger als 10 min - Timeout deshalb per ENV anpassbar.
 OLLAMA_TIMEOUT_SEKUNDEN = int(os.environ.get("FINANZ_OLLAMA_TIMEOUT", "600"))
+# Deterministische Auswertung: der Modellvergleich im Gewinnermodell-Umstieg
+# lief mit temperature=0 und lieferte spuerbar bessere Datumswerte als der
+# Ollama-Standard (temperature=0.8) - siehe SCHULDEN.md/QA4-01..04.
+OLLAMA_TEMPERATUR = float(os.environ.get("FINANZ_OLLAMA_TEMPERATUR", "0"))
 
 PROMPT = (
     "Analysiere den abgebildeten Kassenbon oder die Rechnung. "
@@ -350,6 +354,7 @@ def _auswerten(con: sqlite3.Connection, beleg_id: int) -> dict:
             "content": PROMPT,
             "images": [_lade_bild_base64(pfad)],
         }],
+        "options": {"temperature": OLLAMA_TEMPERATUR},
     }
     if _denkmodus_abschalten(OLLAMA_MODEL):
         # Qwen-3-Modelle antworten sonst nur im "thinking"-Feld und liefern leeren Inhalt
