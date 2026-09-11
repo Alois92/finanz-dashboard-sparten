@@ -93,3 +93,24 @@ Gemergt: P31, P40, P41, P42, P50, P60 (Umsetzung durch Claude Sonnet, Codex war 
 | P42b | `GET /api/bankumsaetze` liefert für verbuchte Umsätze weder Buchungstyp noch Regel-Herkunft. | M4 |
 | P60b | `GET /export/bericht` verlangt `jahr` auch bei `profil_id`; Ausschluss-Dialog holt Buchungen mit Limit 1000. | vor M6 |
 | — | Handy-Ansicht von Übersicht, Konten, Bankimport, Export im Browser noch nicht geprüft (nur Erfassen und Buchungsliste). | vor CT 102 |
+
+---
+
+## Ergänzungen aus den Abnahmen vom 11. September 2026 (Fable, nachts)
+
+Gemergt: **P32 Sparte, P33 Kategorien, P43 Foto-Übernahme, P52 Kredit** (Umsetzung Claude Sonnet, Abnahme mit
+gebündelter Browserprüfung auf einer Testinstanz aus `neubau`). Protokolle `abnahme/P32.md`, `P33.md`, `P43.md`, `P52.md`.
+B7 aus der Tabelle oben ist erledigt (siehe „Erledigt“). M3 ist damit vollständig, M4 vollständig, M5 fehlt P51/P50b, M6 fehlt P62.
+
+Vom Kopf während der Abnahmen behoben (kein Eintrag nötig): `GET /api/kennzahlen` war seit P15 defekt (ambiguous
+column), Kategoriefilter-Cache nach Umbenennung, Kreditliste ohne Kategorie-IDs, Übernahme ohne gemeinsame
+Transaktion, Sparten-Kachel ohne Kopf-/Sidebar-Render, Belege-Hinweis „nicht erreichbar“ bei fehlendem Modell,
+Prüf-Dialog ohne Vorbelegung, Qwen-3-Denkmodus (`think: false`).
+
+| Nr. | Befund | Fällig |
+|---|---|---|
+| P43b | `request_wiederholung.art` kennt nur `buchung`/`ausgleich`; die Foto-Übernahme nutzt den `buchung`-Topf mit. Eigener Wert per Migration, zusammen mit der nächsten Migration (P51 oder P50b). | nächste Migration |
+| P43c | Modellwechsel in Produktion: `FINANZ_OLLAMA_MODEL` auf das Gewinnermodell des Vergleichs (`outputs/modelltest/`) umstellen, Modell in CT 101 laden, Laufzeit auf der CPU messen. `think: false` ist seit `fa6409b` im Code. | vor P62 |
+| P32b | Gruppen-Hash `#/sparte/gruppe-<id>` greift nur bei „Alle Sparten“ im Kopf; mit gewählter Sparte bleibt die Sparte. Entweder Hash gewinnt oder Gruppenwahl in den Kopf-Select aufnehmen. | klein |
+| P52b | Bei „Alle Sparten“ listet die Kreditseite alle Kredite des Bereichs; kein Beleg-Upload im Dialog „Jahr bestätigen“, nur Verknüpfung vorhandener Belege. | klein |
+| — | Handy-Ansicht: Kredit bei 375 px geprüft; Sparte, Kategorien, Belege nur durch die Agenten (Viewport-Emulation des Werkzeugs sprang). | vor CT 102 |
