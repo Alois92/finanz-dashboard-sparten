@@ -55,6 +55,9 @@ class UebernehmenIn(BaseModel):
     zahlungsart: str = "bar"
     positionen: List[UebernehmenPosition]
     client_request_id: Optional[str] = Field(default=None, min_length=1)
+    # Kopf-Nachzug: Buchungstext (Vorgabe: erkannter Haendler), damit Suche und
+    # Merkregeln die Uebernahme genauso behandeln wie eine Handeingabe.
+    text: Optional[str] = None
 
     @field_validator("zahlungsart")
     @classmethod
@@ -229,10 +232,11 @@ def auswertung_uebernehmen(
         raise HTTPException(422, "Alle Positionen einer Uebernahme muessen denselben Typ haben")
     typ = next(iter(typen))
 
+    ergebnis = json.loads(auftrag["ergebnis_json"]) if auftrag["ergebnis_json"] else {}
     datum = body.datum
     if datum is None:
-        ergebnis = json.loads(auftrag["ergebnis_json"]) if auftrag["ergebnis_json"] else {}
         datum = ergebnis.get("datum") or dt.date.today().isoformat()
+    text = (body.text or ergebnis.get("haendler") or "").strip() or None
 
     zeilen = [
         ZeileIn(kategorie_id=p.kategorie_id, betrag_cent=p.betrag_cent, notiz=p.text)
@@ -259,7 +263,7 @@ def auswertung_uebernehmen(
     buchung_antwort, buchung_id = erstelle_buchung(
         con, bereich, sparte_id=body.sparte_id, datum=datum, typ=typ,
         zahlungsart=body.zahlungsart, bezahlt_von_sparte_id=body.bezahlt_von_sparte_id,
-        positionen=zeilen, client_request_id=None,
+        positionen=zeilen, client_request_id=None, text=text,
         nach_anlage=beleg_verknuepfen_und_abschliessen,
     )
 

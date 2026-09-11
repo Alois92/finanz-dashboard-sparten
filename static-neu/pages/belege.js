@@ -316,8 +316,13 @@ function openPruefDialog(auftrag, state, reload){
       const select = row.querySelector('.prf-kategorie');
       select.innerHTML = '<option value="">Bitte wählen</option>' +
         kategorienCache.map(k => `<option value="${k.id}">${esc(k.name)}</option>`).join('');
-      const vorschlag = matchKategorie(positionen[i]?.text, kategorienCache);
-      if(vorschlag) select.value = String(vorschlag.id);
+      // Kopf-Nachzug: zuerst die vom Server je Position gelieferte Kategorie (Regeln aus
+      // app/auswertung.py), erst dann der lokale Textabgleich als Rueckfall.
+      const serverKat = positionen[i]?.kategorie_id;
+      const serverTreffer = serverKat != null && kategorienCache.some(k => String(k.id) === String(serverKat));
+      const vorschlag = serverTreffer ? null : matchKategorie(positionen[i]?.text, kategorienCache);
+      if(serverTreffer) select.value = String(serverKat);
+      else if(vorschlag) select.value = String(vorschlag.id);
     });
   }
 
@@ -328,6 +333,13 @@ function openPruefDialog(auftrag, state, reload){
   auslageToggle.addEventListener('change', () => {
     vonFeld.hidden = !auslageToggle.checked;
   });
+  // Kopf-Nachzug: Sparte aus dem Beleg vorbelegen (beim Upload gewaehlt), damit die
+  // Kategorien sofort geladen und die Server-Vorschlaege gesetzt sind.
+  if(auftrag.sparte_id != null && state.sparten.some(s => String(s.id) === String(auftrag.sparte_id))){
+    sparteSelect.value = String(auftrag.sparte_id);
+    aktualisiereAuslageSichtbarkeit();
+    ladeKategorienFuerSparte();
+  }
 
   document.querySelector('#prf-verwerfen').onclick = async () => {
     try{
