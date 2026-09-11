@@ -114,7 +114,9 @@
       "belege": [],
       "zahlungsstatus": "Zahlung unbekannt",
       "bezahlt_von_sparte_id": null,
-      "kredit_id": null
+      "kredit_id": null,
+      "original_id": null,
+      "storniert_am": null
     },
     {
       "id": 3,
@@ -147,7 +149,9 @@
       "belege": [],
       "zahlungsstatus": "Zahlung unbekannt",
       "bezahlt_von_sparte_id": null,
-      "kredit_id": null
+      "kredit_id": null,
+      "original_id": null,
+      "storniert_am": null
     }
   ],
   "/api/dashboard?bereich_id=2": {

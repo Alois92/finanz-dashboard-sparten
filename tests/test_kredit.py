@@ -247,7 +247,7 @@ class KreditMigrationTest(unittest.TestCase):
                  (3, "bereiche"), (4, "konten_bewegungen")],
             )
             con.commit()
-            self.assertEqual([5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], migrate.anwenden(con, None))
+            self.assertEqual([5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17], migrate.anwenden(con, None))
             snapshot = "\n".join(con.iterdump())
             self.assertEqual([], migrate.anwenden(con, None))
             self.assertEqual(snapshot, "\n".join(con.iterdump()))
@@ -289,7 +289,7 @@ class KreditMigrationTest(unittest.TestCase):
                     )
                 con.commit()
 
-                self.assertEqual([15], migrate.anwenden(con, None))
+                self.assertEqual([15, 16, 17], migrate.anwenden(con, None))
                 self.assertEqual([], migrate.anwenden(con, None))
                 migrated = con.execute(
                     "SELECT kredit_id,notiz FROM buchung ORDER BY id"

@@ -32,8 +32,38 @@ class BereicheMigrationTest(unittest.TestCase):
             self.con.execute(f'DROP TABLE {table}')
         self.con.execute('DROP INDEX idx_buchung_client_request')
         self.con.execute('DROP INDEX idx_buchung_kredit')
-        for column in ('kredit_id', 'version', 'client_request_id'):
+        # Auch die P51-Spalten (Migration 017) entfernen: sonst haengen sie nach dem
+        # Nachzug hinter statt vor den hier neu angehaengten version/client_request_id/
+        # kredit_id-Spalten und die Spaltenreihenfolge weicht von einem frischen
+        # schema.sql ab (gleiches Prinzip wie bei kredit_id oben). Die Views haengen an
+        # buchung.storniert_am (siehe db/migrations/017_storno_erstattung.sql) und
+        # muessen vor dem Spaltenwegfall auf den Vor-017-Stand (Migration 007) zurueck,
+        # sonst scheitert schon das DROP COLUMN selbst.
+        self.con.execute('DROP VIEW v_einnahmen_ausgaben')
+        self.con.execute('DROP VIEW v_zeile')
+        self.con.execute("""
+            CREATE VIEW v_zeile AS
+            SELECT
+                bz.id AS zeile_id,
+                b.id AS buchung_id,
+                b.sparte_id AS sparte_id,
+                b.datum AS datum,
+                b.typ AS typ,
+                CASE b.typ WHEN 'ausgabe' THEN -bz.betrag_cent ELSE bz.betrag_cent END AS betrag_signed_cent,
+                bz.betrag_cent AS betrag_cent,
+                bz.kategorie_id AS kategorie_id,
+                bz.neutral AS neutral,
+                CASE WHEN b.typ = 'umbuchung' THEN 1 ELSE 0 END AS ist_transfer
+            FROM buchungszeile bz
+            JOIN buchung b ON b.id = bz.buchung_id
+        """)
+        self.con.execute("""
+            CREATE VIEW v_einnahmen_ausgaben AS
+            SELECT * FROM v_zeile WHERE ist_transfer = 0 AND neutral = 0
+        """)
+        for column in ('original_id', 'storniert_am', 'kredit_id', 'version', 'client_request_id'):
             self.con.execute(f'ALTER TABLE buchung DROP COLUMN {column}')
+        self.con.execute('ALTER TABLE buchungszeile DROP COLUMN original_zeile_id')
         for column in ('art','waehrung','kartenendnummer','sortierung'):
             self.con.execute(f'ALTER TABLE bankkonto DROP COLUMN {column}')
         for table in TABLES:
@@ -58,7 +88,7 @@ class BereicheMigrationTest(unittest.TestCase):
             INSERT INTO kategorie_globalgruppe VALUES(2,1),(1,1);
         """)
         with self.assertLogs('finanz.migrate', level='INFO') as logs:
-            self.assertEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], migrate.anwenden(self.con, None))
+            self.assertEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17], migrate.anwenden(self.con, None))
         for table in ('bankkonto','beleg','regel'):
             self.assertEqual([(1,2),(2,1)], self.con.execute(f'SELECT id,bereich_id FROM {table} WHERE id IN (1,2) ORDER BY id').fetchall())
         self.assertEqual([(10,1),(20,2)],self.con.execute("SELECT sparte_id,bereich_id FROM bankkonto WHERE art='kassa' ORDER BY sparte_id").fetchall())
@@ -84,7 +114,7 @@ class BereicheMigrationTest(unittest.TestCase):
         self.assertEqual([(2,)], self.con.execute("SELECT DISTINCT bereich_id FROM sparte WHERE typ='verein'").fetchall())
         self.assertEqual(0, self.con.execute('SELECT COUNT(*) FROM auswertungsgruppe_sparte x JOIN sparte s ON s.id=x.sparte_id JOIN auswertungsgruppe g ON g.id=x.auswertungsgruppe_id WHERE s.bereich_id<>g.bereich_id').fetchone()[0])
         self.assertIn((3,'bereiche'), migrate.status(self.con)['anstehend'])
-        self.assertEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], migrate.anwenden(self.con, None))
+        self.assertEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17], migrate.anwenden(self.con, None))
         self.assertEqual([], migrate.anwenden(self.con, None))
         self.assertEqual([(2,)], self.con.execute("SELECT DISTINCT bereich_id FROM sparte WHERE typ='verein'").fetchall())
         self.assertEqual(0, self.con.execute('SELECT COUNT(*) FROM auswertungsgruppe_sparte x JOIN sparte s ON s.id=x.sparte_id JOIN auswertungsgruppe g ON g.id=x.auswertungsgruppe_id WHERE s.bereich_id<>g.bereich_id').fetchone()[0])
@@ -106,7 +136,7 @@ class BereicheMigrationTest(unittest.TestCase):
             return result
         expected = structure(self.con)
         self.old_schema()
-        self.assertEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], migrate.anwenden(self.con, None))
+        self.assertEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17], migrate.anwenden(self.con, None))
         self.assertEqual(expected, structure(self.con))
 
     def test_sql_runner_rolls_back_fk_failure_and_restores_enforcement(self):
