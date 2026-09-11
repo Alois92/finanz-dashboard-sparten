@@ -348,32 +348,6 @@ CREATE INDEX idx_bankumsatz_konto_datum ON bankumsatz (bankkonto_id, datum);
 CREATE INDEX idx_kategorie_sparte       ON kategorie (sparte_id);
 
 -- ---------------------------------------------------------------------------
--- Views: Auswertungsbasis (Umbuchungen ausgeblendet)
--- ---------------------------------------------------------------------------
-
--- Eine Zeile je Buchungszeile mit vorzeichenbehaftetem Betrag.
--- Umbuchungen sind ENTHALTEN, aber ueber ist_transfer=1 erkennbar und
--- werden in v_einnahmen_ausgaben herausgefiltert.
-CREATE VIEW v_zeile AS
-SELECT
-    bz.id            AS zeile_id,
-    b.id             AS buchung_id,
-    b.sparte_id      AS sparte_id,
-    b.datum          AS datum,
-    b.typ            AS typ,
-    CASE b.typ WHEN 'ausgabe' THEN -bz.betrag_cent ELSE bz.betrag_cent END AS betrag_signed_cent,
-    bz.betrag_cent   AS betrag_cent,
-    bz.kategorie_id  AS kategorie_id,
-    bz.neutral       AS neutral,
-    CASE WHEN b.typ = 'umbuchung' THEN 1 ELSE 0 END AS ist_transfer
-FROM buchungszeile bz
-JOIN buchung b ON b.id = bz.buchung_id;
-
--- Nur echte Einnahmen/Ausgaben (Transfers raus) - Basis fuer Dashboards.
-CREATE VIEW v_einnahmen_ausgaben AS
-SELECT * FROM v_zeile WHERE ist_transfer = 0 AND neutral = 0;
-
--- ---------------------------------------------------------------------------
 -- Trigger: geaendert_am pflegen; Kopfbetrag aus Zeilen aktuell halten
 -- ---------------------------------------------------------------------------
 
@@ -512,13 +486,59 @@ CREATE INDEX IF NOT EXISTS idx_auslage_zahler ON auslage (zahler_sparte_id);
 
 -- Technische Wiederholungsdaten bleiben auch nach Änderung/Rücknahme erhalten.
 CREATE TABLE IF NOT EXISTS request_wiederholung (
-    art TEXT NOT NULL CHECK (art IN ('buchung','ausgleich')),
+    art TEXT NOT NULL CHECK (art IN ('buchung','ausgleich','beleg_uebernahme')),
     client_request_id TEXT NOT NULL,
     bereich_id INTEGER NOT NULL REFERENCES bereich(id),
     nutzdaten_hash TEXT NOT NULL,
     antwort_json TEXT NOT NULL,
     PRIMARY KEY (art, client_request_id)
 );
+
+-- P50b: Historie je Buchung (Migration 016).
+CREATE TABLE IF NOT EXISTS buchung_aenderung (
+    id          INTEGER PRIMARY KEY,
+    buchung_id  INTEGER NOT NULL REFERENCES buchung(id) ON DELETE CASCADE,
+    zeitpunkt   TEXT NOT NULL DEFAULT (datetime('now')),
+    feld        TEXT NOT NULL,
+    alt         TEXT,
+    neu         TEXT,
+    grund       TEXT,
+    quelle      TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_buchung_aenderung_buchung ON buchung_aenderung (buchung_id, zeitpunkt);
+
+-- P51: Storno (beidseitig) und Erstattung als verknuepfte Gegenbuchung (Migration 017).
+-- ADD COLUMN statt Inline-Deklaration in CREATE TABLE buchung/buchungszeile, damit die
+-- Spaltenreihenfolge nach einem Nachzug exakt der eines frischen schema.sql entspricht
+-- (gleiches Muster wie bei kredit_id, siehe "Migration 015" unten).
+ALTER TABLE buchung ADD COLUMN original_id INTEGER REFERENCES buchung(id);
+ALTER TABLE buchung ADD COLUMN storniert_am TEXT;
+ALTER TABLE buchungszeile ADD COLUMN original_zeile_id INTEGER REFERENCES buchungszeile(id);
+
+-- Views: Auswertungsbasis (Umbuchungen, Neutrales und Storniertes ausgeblendet).
+-- Eine Zeile je Buchungszeile mit vorzeichenbehaftetem Betrag. Umbuchungen sind
+-- ENTHALTEN, aber ueber ist_transfer=1 erkennbar und werden in
+-- v_einnahmen_ausgaben herausgefiltert.
+CREATE VIEW v_zeile AS
+SELECT
+    bz.id            AS zeile_id,
+    b.id             AS buchung_id,
+    b.sparte_id      AS sparte_id,
+    b.datum          AS datum,
+    b.typ            AS typ,
+    CASE b.typ WHEN 'ausgabe' THEN -bz.betrag_cent ELSE bz.betrag_cent END AS betrag_signed_cent,
+    bz.betrag_cent   AS betrag_cent,
+    bz.kategorie_id  AS kategorie_id,
+    bz.neutral       AS neutral,
+    b.storniert_am   AS storniert_am,
+    CASE WHEN b.typ = 'umbuchung' THEN 1 ELSE 0 END AS ist_transfer
+FROM buchungszeile bz
+JOIN buchung b ON b.id = bz.buchung_id;
+
+-- Nur echte Einnahmen/Ausgaben (Transfers, Neutrales und Storniertes raus) - Basis fuer Dashboards.
+CREATE VIEW v_einnahmen_ausgaben AS
+SELECT * FROM v_zeile WHERE ist_transfer = 0 AND neutral = 0 AND storniert_am IS NULL;
+
 -- P14: Kredite mit getrennten Zins- und neutralen Tilgungszeilen.
 CREATE TABLE kredit (
     id                 INTEGER PRIMARY KEY,

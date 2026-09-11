@@ -1,8 +1,6 @@
 // P50: Buchungsliste mit Suche/Filtern, Bearbeiten-Dialog mit Zeilen und Versionssperre.
-// Historie (GET /api/buchungen/{id}/verlauf) gibt es im Backend noch nicht (siehe Bericht
-// P50-runde1.md, "Wunsch an das Gerüst") - die Karte verlangt dafür Migration 011 und einen
-// neuen Router-Endpunkt, beides außerhalb des Scopes dieses Pakets (nur static-neu/pages/buchungen*
-// darf dieses Paket ändern). Der Dialog probiert den Endpunkt und zeigt einen Hinweis, wenn er fehlt.
+// P50b: Historie (GET /api/buchungen/{id}/verlauf) ist seit Migration 016 im Backend vorhanden.
+// P51: Stornieren/Entstornieren und Erstattungen (Migration 017).
 import {api} from '../api.js';
 import {esc, fmtEur, fmtDate, parseBetrag} from '../format.js';
 import {toast, drill} from '../ui.js';
@@ -97,18 +95,48 @@ export function render(root, state) {
       const zahlung = {bank: 'Bank', bar: 'Bar', karte: 'Karte', sonstiges: 'Sonstiges'}[b.zahlungsart] || b.zahlungsart;
       const belegAn = (b.belege || []).length > 0;
       const kats = b.zeilen.map(z => esc(z.kategorie_name)).join(', ');
+      const storniert = !!b.storniert_am;
       const bearbeiten = b.typ === 'umbuchung'
         ? ''
         : `<button class="lnk" data-edit="${b.id}">bearbeiten</button>`;
-      return `<tr><td class="muted">${fmtDate(b.datum)}</td><td class="t">${esc(b.text || '')}</td>`
+      // P51: Stornieren/Entstornieren als Zeilenaktion; Umbuchungen bleiben unveraendert
+      // (nur über DELETE entfernbar, siehe Backend-Karte P51 Regeln).
+      const storno = b.typ === 'umbuchung'
+        ? ''
+        : `<button class="lnk" data-storno="${b.id}">${storniert ? 'Storno zurücknehmen' : 'stornieren'}</button>`;
+      return `<tr class="${storniert ? 'storniert' : ''}"><td class="muted">${fmtDate(b.datum)}</td><td class="t">${esc(b.text || '')}${storniert ? ' <span class="pill">storniert</span>' : ''}</td>`
         + `<td>${kats}</td><td class="muted">${esc(zahlung)}</td>`
         + `<td class="belegic ${belegAn ? 'has' : ''}" title="${belegAn ? 'Beleg vorhanden' : 'kein Beleg'}">${belegAn ? '▣' : '·'}</td>`
-        + `<td class="${cls}">${sign} ${fmtEur(b.betrag_cent)}</td><td>${bearbeiten}</td></tr>`;
+        + `<td class="${cls}">${sign} ${fmtEur(b.betrag_cent)}</td><td>${bearbeiten} ${storno}</td></tr>`;
     }).join('');
     elTable.innerHTML = kopf + '<tbody>' + (body || '<tr><td colspan="7" class="muted">Keine Buchungen gefunden.</td></tr>') + '</tbody>';
     elTable.querySelectorAll('[data-edit]').forEach(btn => {
       btn.onclick = () => openEditDialog(Number(btn.dataset.edit));
     });
+    elTable.querySelectorAll('[data-storno]').forEach(btn => {
+      btn.onclick = () => stornoAktion(local.rows.find(r => r.id === Number(btn.dataset.storno)));
+    });
+  }
+
+  async function stornoAktion(b) {
+    if (!b) return;
+    const zuruecknehmen = !!b.storniert_am;
+    const frage = zuruecknehmen ? 'Storno dieser Buchung wirklich zurücknehmen?' : 'Buchung wirklich stornieren?';
+    if (!window.confirm(frage)) return;
+    const grund = window.prompt('Grund (optional):', '');
+    if (grund === null) return; // Abbrechen im Grund-Dialog bricht die ganze Aktion ab
+    try {
+      await api(`/buchungen/${b.id}/${zuruecknehmen ? 'entstornieren' : 'stornieren'}`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({grund: grund || null}),
+        bereichId: state.bereichId,
+      });
+      toast(zuruecknehmen ? 'Storno zurückgenommen.' : 'Buchung storniert.');
+      ladeSeite(true);
+    } catch (error) {
+      toast(error.detail || error.message || 'Aktion fehlgeschlagen.');
+    }
   }
 
   function zeichneAktiveFilter() {
@@ -213,8 +241,17 @@ export function render(root, state) {
   }
 
   async function openEditDialog(id) {
-    const buchung = local.rows.find(r => r.id === id);
-    if (!buchung) { toast('Buchung nicht mehr in der Liste.'); return; }
+    const listRow = local.rows.find(r => r.id === id);
+    if (!listRow) { toast('Buchung nicht mehr in der Liste.'); return; }
+    // P51: original_id/storniert_am/erstattungen/netto_cent liefert nur der Einzel-Endpunkt
+    // (GET /api/buchungen/{id}), die Liste (_lade_buchungen) berechnet das nicht mit.
+    let buchung;
+    try {
+      buchung = await api(`/buchungen/${id}`, {bereichId: state.bereichId});
+    } catch (error) {
+      toast(error.detail || error.message || 'Buchung konnte nicht geladen werden.');
+      return;
+    }
     const sparten = state.sparten || [];
     let zeilen = buchung.zeilen.map(z => ({...z}));
     let kats = await ladeKategorienFuerSparte(buchung.sparte_id);
@@ -239,6 +276,12 @@ export function render(root, state) {
           <button type="button" class="btn danger" id="bu-delete">Buchung löschen</button>
         </div>
       </form>
+      ${buchung.typ !== 'umbuchung' ? `
+      <section class="bu-erstattungen">
+        <h3>Erstattungen${buchung.netto_cent != null ? ' · netto ' + fmtEur(buchung.netto_cent) : ''}</h3>
+        <div id="bu-erstattungen-liste"></div>
+        <div id="bu-erstattungen-formulare"></div>
+      </section>` : ''}
       <section class="bu-historie">
         <h3>Historie</h3>
         <div id="bu-historie-content" class="muted">Lädt …</div>
@@ -313,6 +356,7 @@ export function render(root, state) {
         notiz: fd.get('notiz') || null,
         zeilen: readZeilenFromForm(),
         version: buchung.version,
+        grund: fd.get('grund') || null,
       };
       const hint = dialogRoot.querySelector('#bu-edit-hint');
       hint.textContent = '';
@@ -336,8 +380,75 @@ export function render(root, state) {
       }
     };
 
-    // Historie: der Endpunkt existiert derzeit nicht (siehe Kopfkommentar); wird er ergänzt,
-    // zeigt dieser Code ihn ohne weitere Anpassung an.
+    // P51: Erstattungen-Abschnitt - Liste bestehender Erstattungen, je Zeile ein
+    // Formular mit dem offenen Rest vorbelegt (Server liefert rest_cent je Zeile).
+    if (buchung.typ !== 'umbuchung') {
+      const listeBox = dialogRoot.querySelector('#bu-erstattungen-liste');
+      const formulareBox = dialogRoot.querySelector('#bu-erstattungen-formulare');
+      const beidesKats = kats.filter(k => k.richtung === 'beides');
+
+      const eintraege = buchung.erstattungen || [];
+      listeBox.innerHTML = eintraege.length
+        ? '<ul class="bu-erst-list">' + eintraege.map(e =>
+            `<li>${fmtDate(e.datum)} · ${fmtEur(e.betrag_cent)}${e.storniert_am ? ' <span class="pill">storniert</span>' : ''}</li>`).join('') + '</ul>'
+        : '<p class="muted">Noch keine Erstattung erfasst.</p>';
+
+      formulareBox.innerHTML = zeilen.filter(z => z.id != null).map(z => {
+        const restCent = z.rest_cent != null ? z.rest_cent : z.betrag_cent;
+        const katOpts = beidesKats.map(k => `<option value="${k.id}">${esc(k.name)}</option>`).join('');
+        return `<div class="bu-erst-zeile">
+          <button type="button" class="lnk" data-erfassen="${z.id}">Erstattung erfassen für „${esc(z.kategorie_name || '')}" (Rest ${fmtEur(restCent)})</button>
+          <form class="bu-erst-form" data-form="${z.id}" hidden>
+            <label class="field">Betrag (€)<input data-ef="betrag_cent" inputmode="decimal" value="${(restCent / 100).toFixed(2).replace('.', ',')}"></label>
+            <label class="field">Datum<input data-ef="datum" type="date" value="${new Date().toISOString().slice(0, 10)}"></label>
+            <label class="field">Kategorie<select data-ef="kategorie_id"><option value="">wie Original</option>${katOpts}</select></label>
+            <button type="submit" class="btn primary">Erstattung speichern</button>
+            <button type="button" class="btn" data-abbrechen="${z.id}">Abbrechen</button>
+          </form>
+        </div>`;
+      }).join('') || '<p class="muted">Zeile erst speichern, bevor eine Erstattung erfasst werden kann.</p>';
+
+      formulareBox.querySelectorAll('[data-erfassen]').forEach(btn => {
+        btn.onclick = () => {
+          formulareBox.querySelectorAll('.bu-erst-form').forEach(f => { f.hidden = true; });
+          formulareBox.querySelector(`[data-form="${btn.dataset.erfassen}"]`).hidden = false;
+        };
+      });
+      formulareBox.querySelectorAll('[data-abbrechen]').forEach(btn => {
+        btn.onclick = () => { formulareBox.querySelector(`[data-form="${btn.dataset.abbrechen}"]`).hidden = true; };
+      });
+      formulareBox.querySelectorAll('.bu-erst-form').forEach(erstForm => {
+        erstForm.onsubmit = async (ev) => {
+          ev.preventDefault();
+          const zeileId = Number(erstForm.dataset.form);
+          const betragCent = Math.round((parseBetrag(erstForm.querySelector('[data-ef="betrag_cent"]').value) || 0) * 100);
+          const datum = erstForm.querySelector('[data-ef="datum"]').value;
+          const kategorieVal = erstForm.querySelector('[data-ef="kategorie_id"]').value;
+          try {
+            await api(`/buchungen/${buchung.id}/erstatten`, {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({
+                datum,
+                zeilen: [{
+                  original_zeile_id: zeileId,
+                  betrag_cent: betragCent,
+                  kategorie_id: kategorieVal ? Number(kategorieVal) : null,
+                }],
+              }),
+              bereichId: state.bereichId,
+            });
+            toast('Erstattung erfasst.');
+            document.querySelector('#drill').close();
+            ladeSeite(true);
+          } catch (error) {
+            toast(error.detail || error.message || 'Erstattung fehlgeschlagen.');
+          }
+        };
+      });
+    }
+
+    // Historie: seit Migration 016 / P50b im Backend vorhanden.
     const histBox = dialogRoot.querySelector('#bu-historie-content');
     try {
       const eintraege = await api(`/buchungen/${buchung.id}/verlauf`, {bereichId: state.bereichId});
@@ -347,7 +458,7 @@ export function render(root, state) {
             + `<span class="muted"> · ${esc(e.zeitpunkt)}${e.grund ? ' · ' + esc(e.grund) : ''}</span></li>`).join('') + '</ul>'
         : '<p class="muted">Noch keine Änderungen protokolliert.</p>';
     } catch (error) {
-      histBox.innerHTML = '<p class="muted">Historie ist im Backend noch nicht verfügbar (Migration/Endpunkt aus P50 nicht Teil dieses Frontend-Pakets).</p>';
+      histBox.innerHTML = '<p class="muted">Historie konnte nicht geladen werden.</p>';
     }
   }
 

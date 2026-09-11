@@ -57,6 +57,7 @@ class BuchungIn(BaseModel):
     bezahlt_von_sparte_id: Optional[int] = None
     client_request_id: Optional[str] = Field(default=None, min_length=1)
     version: Optional[int] = Field(default=None, ge=1, strict=True)
+    grund: Optional[str] = None  # P50b: Grund der Aenderung, nur bei PUT ausgewertet
 
     @field_validator('datum')
     @classmethod

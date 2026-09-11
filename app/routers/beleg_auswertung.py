@@ -198,12 +198,10 @@ def auswertung_uebernehmen(
     """
     pruefe_auswertung(con, auswertung_id, bereich)
 
-    # request_wiederholung.art laesst laut Schema nur 'buchung'/'ausgleich' zu
-    # (keine Migration in diesem Paket) - die Uebernahme erzeugt am Ende genau
-    # eine Buchung, daher wird derselbe 'buchung'-Topf wie bei POST /api/buchungen
-    # mitbenutzt. client_request_id ist ein pro Aktion vom Client erzeugter UUID,
-    # eine Kollision mit einer echten Buchungserfassung ist praktisch ausgeschlossen.
-    antwort = wiederhole(con, 'buchung', body, bereich)
+    # P43b (Migration 016): eigener Wiederholungs-Topf 'beleg_uebernahme', getrennt von
+    # der normalen Buchungserfassung ('buchung') - vorher teilten sich beide Aktionen
+    # denselben Topf, siehe SCHULDEN.md.
+    antwort = wiederhole(con, 'beleg_uebernahme', body, bereich)
     if antwort is not None:
         return antwort
 
@@ -268,5 +266,5 @@ def auswertung_uebernehmen(
     )
 
     ergebnis_antwort = {"buchung_id": buchung_id, "version": buchung_antwort["version"]}
-    speichere_antwort(con, 'buchung', body, bereich, ergebnis_antwort)
+    speichere_antwort(con, 'beleg_uebernahme', body, bereich, ergebnis_antwort)
     return ergebnis_antwort
