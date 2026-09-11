@@ -267,4 +267,10 @@ def auswertung_uebernehmen(
 
     ergebnis_antwort = {"buchung_id": buchung_id, "version": buchung_antwort["version"]}
     speichere_antwort(con, 'beleg_uebernahme', body, bereich, ergebnis_antwort)
+    # QA4-05: erstelle_buchung() committet seine eigene Transaktion bereits selbst
+    # (with con: ... BEGIN IMMEDIATE), der Wiederholungs-Eintrag oben laeuft aber
+    # erst danach auf derselben Verbindung und wurde ohne expliziten Commit beim
+    # Verbindungsschluss verworfen - ein wiederholter Aufruf mit derselben
+    # client_request_id bekam dadurch faelschlich 409 statt der gecachten Antwort.
+    con.commit()
     return ergebnis_antwort
