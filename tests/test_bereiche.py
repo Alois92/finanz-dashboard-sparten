@@ -238,10 +238,13 @@ class BereicheTest(unittest.TestCase):
             return dependant.call is bereich_dep or any(has_dependency(d) for d in dependant.dependencies)
         # Auth, Health und Betriebsdiagnose gelten anwendungsweit und muessen
         # auch nach fehlgeschlagenem Nachzug ohne Bereichstabelle erreichbar sein (P00).
+        # /api/betrieb/sicherung (P72) reiht sich hier ein: die Sicherung ist keine
+        # bereichsgebundene fachliche Aktion, sondern eine Betriebsdiagnose/-aktion
+        # wie /api/betrieb/status.
         ausnahmen = {
             "/api/auth/login", "/api/auth/logout", "/api/auth/state",
             "/api/auth/initial-password", "/api/auth/change-password", "/api/auth/recover",
-            "/api/health", "/api/schema", "/api/betrieb/status",
+            "/api/health", "/api/schema", "/api/betrieb/status", "/api/betrieb/sicherung",
         }
         for route in app.routes:
             if isinstance(route, APIRoute) and (route.path.startswith("/api/") or route.path == "/export/bericht"):

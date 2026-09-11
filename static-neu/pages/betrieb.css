@@ -1,0 +1,21 @@
+/* P72: Betriebsseite. Kachel-Raster wie andere Seiten (.grid/.g3-Muster aus
+   style.css), hier mit eigenem Namen (#bt-*/.bt-*), damit nichts mit den
+   Klassen anderer bereits geladener Seiten kollidiert (Konfliktregel Nachtrag,
+   siehe pages/kategorien.css). Farben nutzen dieselben Design-Tokens wie
+   Einnahmen/Ausgaben (--ein/--aus), damit „gut/schlecht“ optisch konsistent
+   zum Rest der Anwendung bleibt.
+*/
+.bt-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px}
+.bt-card{display:flex;flex-direction:column;gap:2px}
+.bt-row{display:flex;justify-content:space-between;gap:10px;margin:0;padding:6px 0;border-bottom:1px solid var(--line)}
+.bt-row:last-of-type{border-bottom:0}
+.bt-row span{color:var(--muted)}
+.bt-row b{font-weight:600;text-align:right}
+.bt-gut{color:var(--ein)}
+.bt-schlecht{color:var(--aus)}
+#bt-sichern-jetzt{margin-top:12px;align-self:flex-start}
+
+@media(max-width:760px){
+  .bt-grid{grid-template-columns:1fr}
+  #bt-sichern-jetzt{align-self:stretch;justify-content:center}
+}
