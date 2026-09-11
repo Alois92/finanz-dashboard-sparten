@@ -52,11 +52,13 @@ def summen_neu(con) -> dict:
 
     Version 14 kennt Stornos nur an Bewegung/Transfer. Diese betreffen die
     Zahlung, nicht die Kosten, und dürfen hier keine Kosten verschwinden lassen.
+    `buchung.storniert_am` ist seit Migration 017 regulär und wird bereits von
+    `v_einnahmen_ausgaben` ausgefiltert; nur eine Storno-Spalte an der
+    Buchungszeile ist noch ein Altbestandsmerkmal (P61b).
     """
     filter_sql = ['v.neutral=0', "v.typ <> 'umbuchung'"]
-    for tabelle, alias in (('buchung', 'b'), ('buchungszeile', 'z')):
-        if 'storniert_am' in _spalten(con, tabelle):
-            filter_sql.append(f'{alias}.storniert_am IS NULL')
+    if 'storniert_am' in _spalten(con, 'buchungszeile'):
+        filter_sql.append('z.storniert_am IS NULL')
     return _summen(con, f"""
         SELECT v.sparte_id, substr(v.datum,1,4),
                SUM(CASE WHEN v.typ='einnahme' THEN v.betrag_cent ELSE 0 END),
@@ -230,8 +232,7 @@ def lauf(quelle_db: Path, arbeitsordner: Path) -> dict:
             integrity_check=[r[0] for r in con.execute('PRAGMA integrity_check')],
             angewendet=angewendet, zweiter_anwenden_lauf=zweiter_lauf,
             status_vorher=status_alt, status_nachher=migrate.status(con),
-            kostenstorno_spalten={t: 'storniert_am' in _spalten(con, t)
-                                  for t in ('buchung', 'buchungszeile')},
+            kostenstorno_spalten={'buchungszeile': 'storniert_am' in _spalten(con, 'buchungszeile')},
         )
     bericht['quelle_sha256_vorher'] = vorher_hash
     bericht['quelle_sha256_nachher'] = _sha256(quelle)

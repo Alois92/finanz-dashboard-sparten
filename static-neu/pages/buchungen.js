@@ -118,25 +118,45 @@ export function render(root, state) {
     });
   }
 
-  async function stornoAktion(b) {
+  // P51b: Bestätigung und Grund im App-Dialog (#drill) statt nativer confirm/prompt-Popups.
+  function stornoAktion(b) {
     if (!b) return;
     const zuruecknehmen = !!b.storniert_am;
+    const titel = zuruecknehmen ? 'Storno zurücknehmen' : 'Buchung stornieren';
     const frage = zuruecknehmen ? 'Storno dieser Buchung wirklich zurücknehmen?' : 'Buchung wirklich stornieren?';
-    if (!window.confirm(frage)) return;
-    const grund = window.prompt('Grund (optional):', '');
-    if (grund === null) return; // Abbrechen im Grund-Dialog bricht die ganze Aktion ab
-    try {
-      await api(`/buchungen/${b.id}/${zuruecknehmen ? 'entstornieren' : 'stornieren'}`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({grund: grund || null}),
-        bereichId: state.bereichId,
-      });
-      toast(zuruecknehmen ? 'Storno zurückgenommen.' : 'Buchung storniert.');
-      ladeSeite(true);
-    } catch (error) {
-      toast(error.detail || error.message || 'Aktion fehlgeschlagen.');
-    }
+    drill(titel, `
+      <p>${frage}</p>
+      <p class="muted">${fmtDate(b.datum)} · ${esc(b.text || '')} · ${fmtEur(b.betrag_cent)}</p>
+      <label>Grund (optional)<br><input id="storno-grund" type="text" maxlength="200" style="width:100%"></label>
+      <div class="row" style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end">
+        <button class="lnk" id="storno-abbrechen" type="button">Abbrechen</button>
+        <button class="primary" id="storno-ok" type="button">${titel}</button>
+      </div>`);
+    const dialog = document.querySelector('#drill');
+    const grundFeld = dialog.querySelector('#storno-grund');
+    grundFeld.focus();
+    dialog.querySelector('#storno-abbrechen').onclick = () => dialog.close();
+    const ausfuehren = async () => {
+      const grund = grundFeld.value.trim();
+      const okBtn = dialog.querySelector('#storno-ok');
+      okBtn.disabled = true;
+      try {
+        await api(`/buchungen/${b.id}/${zuruecknehmen ? 'entstornieren' : 'stornieren'}`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({grund: grund || null}),
+          bereichId: state.bereichId,
+        });
+        dialog.close();
+        toast(zuruecknehmen ? 'Storno zurückgenommen.' : 'Buchung storniert.');
+        ladeSeite(true);
+      } catch (error) {
+        okBtn.disabled = false;
+        toast(error.detail || error.message || 'Aktion fehlgeschlagen.');
+      }
+    };
+    dialog.querySelector('#storno-ok').onclick = ausfuehren;
+    grundFeld.onkeydown = (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); ausfuehren(); } };
   }
 
   function zeichneAktiveFilter() {

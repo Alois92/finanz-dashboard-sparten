@@ -701,14 +701,14 @@ def erstatten_buchung(buchung_id: int, body: ErstattenIn,
         ziel_kategorie_id = z.kategorie_id if z.kategorie_id is not None else oz['kategorie_id']
         pruefe_kategorie(con, ziel_kategorie_id, bereich)
         krow = con.execute(
-            'SELECT richtung, sparte_id FROM kategorie WHERE id = ? AND aktiv = 1',
+            'SELECT name, richtung, sparte_id FROM kategorie WHERE id = ? AND aktiv = 1',
             (ziel_kategorie_id,),
         ).fetchone()
         if not krow:
             raise HTTPException(404, f'Kategorie {ziel_kategorie_id} nicht gefunden')
         if krow['richtung'] != 'beides':
             raise HTTPException(422, detail={
-                'detail': f'Kategorie {ziel_kategorie_id} erlaubt keine Erstattung (richtung muss "beides" sein)',
+                'detail': f'Kategorie "{krow["name"]}" erlaubt keine Erstattung (Richtung muss "beides" sein)',
                 'kategorie_id': ziel_kategorie_id,
             })
         if krow['sparte_id'] != original['sparte_id']:

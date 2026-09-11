@@ -131,7 +131,7 @@ kein Nutzertest. Zuschnitt: vier Tester mit je eigener Instanz auf der migrierte
 
 | Nr. | Befund | Fällig |
 |---|---|---|
-| P51b | Storno-Bestätigung und Grund laufen über native `confirm`/`prompt` (wie Löschen), nicht über den App-Dialog; funktional, uneinheitlich. | klein |
-| P51c | 422-Text „Kategorie 2 erlaubt keine Erstattung“ nennt die ID statt des Namens. | klein |
-| P61b | `scripts/migrationsprobe.py` meldet `buchung.storniert_am` als Kostenstorno-Altbestand, obwohl die Spalte seit 017 regulär ist; Prüfung auf `buchungszeile`-Spalten beschränken. | vor Umstellung |
+| ~~P51b~~ | erledigt 11.09. nachmittags (Kopf): Storno-Bestätigung und Grund im App-Dialog `#drill` (`static-neu/pages/buchungen.js`), Enter löst aus, Knopf während des Aufrufs gesperrt. Browserprüfung im QA-Durchlauf (QA-2). | — |
+| ~~P51c~~ | erledigt 11.09. nachmittags (Kopf): 422-Text nennt den Kategorienamen. | — |
+| ~~P61b~~ | erledigt 11.09. nachmittags (Kopf): `summen_neu` und `kostenstorno_spalten` prüfen nur noch `buchungszeile`. Suite 454 grün. | — |
 | — | Testsuite: zweiter Lauf auf derselben `FINANZ_DB`-Datei verfälscht `test_auto_kategorien`; Wegwerfdatei immer vorher löschen (Kopf-Läufe tun das). | Prozess |
