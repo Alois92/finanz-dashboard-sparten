@@ -94,6 +94,35 @@ Bewusste Nutzer-Entscheidung: **keine Cloud-KI** für Rechnungsfotos.
 - **Konfiguration (systemd-Drop-Ins unter `/etc/systemd/system/finanz.service.d/`):** `FINANZ_OLLAMA_MODEL=qwen2.5vl:3b`, `FINANZ_OLLAMA_TIMEOUT=2400`; Default-URL `http://127.0.0.1:11434`.
 - **Auto-Kategorien:** `app/regeln.py` lernt aus jeder gespeicherten Buchung eine Merkregel (Umbuchungen ausgenommen); der Parser nutzt diese Regeln.
 
+### Umgebungsvariablen der Auswertung
+
+Alle optionalen Variablen für Foto- und Text-Auswertung:
+
+- **`FINANZ_BILD_MAX_PX`** (Standard: `1280`)
+  Längste Bildkante in Pixel. Der Vision-Encoder skaliert mit der Pixelzahl; Kassenbons brauchen nicht mehr, größere Fotos werden verkleinert, um CPU-Zeit zu sparen.
+
+- **`FINANZ_BILD_QUER_DREHEN`** (Standard: `1`)
+  `1` = quer liegende Handyfotos vor dem Modellaufruf automatisch auf Hochformat drehen.
+  `0` = Drehaktion deaktivieren.
+
+- **`FINANZ_OLLAMA_TEMPERATUR`** (Standard: `0`)
+  Temperatur-Parameter für das Sprachmodell: `0` = deterministische (immer gleiche) Antworten.
+  Höhere Werte erhöhen die Kreativität, können aber Erkennungsfehler verursachen (Datumswerte).
+
+- **`FINANZ_OLLAMA_THINK`** (Standard: siehe Modellname)
+  Denk-Modus für Qwen-3-Modelle:
+  `0` = deaktivieren (schneller, weniger zuverlässig),
+  `1` = aktivieren (langsamer, kann bessere Ergebnisse liefern).
+  Ohne Angabe: entscheidet der Modellname.
+
+- **`FINANZ_KI_VORSCHLAG`** (Standard: `1`)
+  KI-Kategorievorschlag als Rückfallebene (Text, kein Bild):
+  `1` = aktiviert. Findet der regelbasierte Vorschlagsweg (Namensabgleich, Merkregeln) keine Kategorie, fragt die App das Sprachmodell.
+  `0` = komplett deaktiviert, Ollama wird nicht gerufen.
+
+- **`FINANZ_OLLAMA_TEXT_TIMEOUT`** (Standard: `60`)
+  Zeitsperre in Sekunden für den Textaufruf (KI-Vorschlag). Textantworten sind deutlich schneller als die Bild-Auswertung (bis zu 600 s).
+
 ---
 
 ## 6. Datenbank & Backups
