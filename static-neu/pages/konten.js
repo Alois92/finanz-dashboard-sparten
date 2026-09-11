@@ -117,10 +117,23 @@ function drawKonten(root, state, data, reload){
 }
 
 function kontoRowHtml(k, data){
-  const stand = k.stand_cent == null ? '<span class="muted">kein Anker</span>' : `${fmtEur(k.stand_cent)} <span class="muted">${esc(k.waehrung)}</span>`;
+  // QA3-01: fmtEur() liefert bereits das Waehrungssymbol (Intl.NumberFormat,
+  // style:'currency') - der Waehrungscode wurde bisher zusaetzlich angehaengt
+  // ("€ 1.600,00 EUR"). Nur noch anzeigen, wenn das Konto NICHT auf EUR
+  // lautet (fmtEur formatiert ohnehin immer als €, das waere dann sonst
+  // irrefuehrend und muss auffallen statt zu verschwinden).
+  const stand = k.stand_cent == null
+    ? '<span class="muted">kein Anker</span>'
+    : `${fmtEur(k.stand_cent)}${k.waehrung !== 'EUR' ? ` <span class="muted">${esc(k.waehrung)}</span>` : ''}`;
   const badgeCls = k.datenstand === 'aktuell' ? 'badge-ok' : k.datenstand === 'veraltet' ? 'badge-warn' : 'badge-muted';
   const titel = k.hinweis || DATENSTAND_TITEL[k.datenstand] || '';
-  const abgleich = data.abgleiche[k.id];
+  // QA3-05: ein Abgleich mit einem Bankumsatz kann nur bei Bank-/Kartenkonten
+  // vorkommen (CSV-Import ist fuer Kassakonten serverseitig ausgeschlossen,
+  // Depot/Wallet haben ohnehin keinen Import) - der Hinweis wuerde dort nie
+  // "abgleichbar" werden und nur verwirren, z. B. nach einer gebuchten
+  // Kassadifferenz (erzeugt eine manuelle Bewegung ohne Bankumsatz-Gegenstueck).
+  const abgleichFaehig = k.art === 'bank' || k.art === 'karte';
+  const abgleich = abgleichFaehig ? data.abgleiche[k.id] : null;
   const offeneAbgleiche = abgleich && (abgleich.manuelle_anzahl > 0 || abgleich.umsaetze_anzahl > 0);
   const hinweisAbgleich = offeneAbgleiche
     ? `<div class="kto-hint">${abgleich.manuelle_anzahl} offene manuelle Bewegung(en), ${abgleich.umsaetze_anzahl} offene(r) Bankumsatz/Bankumsätze zum Abgleichen.</div>`
