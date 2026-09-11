@@ -1,5 +1,6 @@
 """Buchungen: erfassen (Kopf + Zeilen), auflisten, bearbeiten, loeschen.
 Dazu Umbuchungen zwischen Sparten (zwei gekoppelte Buchungen)."""
+import json
 import logging
 import sqlite3
 import uuid
@@ -7,14 +8,14 @@ from typing import Literal
 from dataclasses import replace
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from .. import rechenbasis as rb
 from ..db import db_dep
 from ..bereiche import (Bereich, BereichDep, pruefe_sparte, pruefe_kategorie,
                         pruefe_konto, pruefe_buchung, pruefe_beleg, pruefe_umsatz)
 from ..regeln import normalisiere_regeltext
-from ..schemas import BuchungIn
+from ..schemas import BuchungIn, ZeileIn
 from ..auslagen import (ergaenze_auslage, pruefe_zahler, synchronisiere_auslage,
                        zuordnungskonflikt)
 from ..wiederholung import wiederhole, speichere_antwort
@@ -26,6 +27,21 @@ router = APIRouter(tags=["buchungen"])
 log = logging.getLogger("finanz.buchungen")
 
 UMBUCHUNG_KATEGORIE = "Umbuchung"
+
+# P50b: Historie je Buchung. Kopf-Felder, die bei PUT verglichen und protokolliert werden.
+KOPF_FELDER_HISTORIE = ('sparte_id', 'datum', 'typ', 'zahlungsart', 'kontakt_id', 'person_id', 'text', 'notiz')
+
+
+def _feldwert_text(value):
+    """Zahlen und Daten als String fuer buchung_aenderung.alt/neu, NULL bleibt None."""
+    return None if value is None else str(value)
+
+
+def _protokolliere(con: sqlite3.Connection, buchung_id: int, feld: str, alt, neu, grund, quelle) -> None:
+    con.execute(
+        "INSERT INTO buchung_aenderung(buchung_id, feld, alt, neu, grund, quelle) VALUES(?, ?, ?, ?, ?, ?)",
+        (buchung_id, feld, alt, neu, grund, quelle),
+    )
 
 
 class UmbuchungIn(BaseModel):
@@ -187,6 +203,7 @@ def _lade_buchungen(con, ids, bereich):
     buchungen = [dict(r) for r in con.execute(
         "SELECT b.id,b.sparte_id,s.name AS sparte_name,b.datum,b.typ,b.version,"
         "b.betrag_cent,b.zahlungsart,b.belegstatus,b.buchungsstatus,b.text,b.notiz,b.kredit_id,"
+        "b.original_id,b.storniert_am,"
         "b.transfer_gruppe_id,b.kontakt_id,k.name AS kontakt_name "
         "FROM buchung b JOIN sparte s ON s.id=b.sparte_id "
         "LEFT JOIN kontakt k ON k.id=b.kontakt_id "
@@ -390,7 +407,8 @@ def _update_buchung(buchung_id: int, b: BuchungIn, con: sqlite3.Connection, bere
     version = con.execute('SELECT version FROM buchung WHERE id = ?', (buchung_id,)).fetchone()[0]
     if b.version != version:
         raise HTTPException(409, 'Buchung wurde zwischenzeitlich geändert')
-    alt = con.execute("SELECT transfer_gruppe_id, bankkonto_id, bankumsatz_id, kontakt_id, person_id "
+    alt = con.execute("SELECT sparte_id, datum, typ, zahlungsart, kontakt_id, person_id, text, notiz, "
+                      "transfer_gruppe_id, bankkonto_id, bankumsatz_id "
                       "FROM buchung WHERE id = ?",
                       (buchung_id,)).fetchone()
     if not alt:
@@ -398,6 +416,13 @@ def _update_buchung(buchung_id: int, b: BuchungIn, con: sqlite3.Connection, bere
     if alt["transfer_gruppe_id"]:
         raise HTTPException(400, "Umbuchungen sind gekoppelt - bitte loeschen "
                                  "und neu anlegen statt bearbeiten")
+    # P50b: Zeilenstand vor der Aenderung fuer die Historie merken.
+    vorher_zeilen = {
+        row["id"]: dict(row) for row in con.execute(
+            "SELECT id, kategorie_id, betrag_cent, notiz FROM buchungszeile WHERE buchung_id = ?",
+            (buchung_id,),
+        )
+    }
     b = b.model_copy(update={
         feld: alt[feld] for feld in ('bankkonto_id', 'bankumsatz_id', 'kontakt_id', 'person_id')
         if feld not in b.model_fields_set
@@ -449,6 +474,38 @@ def _update_buchung(buchung_id: int, b: BuchungIn, con: sqlite3.Connection, bere
         synchronisiere_auslage(con, buchung_id, b, bereich)
         synchronisiere_buchung(con, buchung_id, bereich)
         con.execute('UPDATE buchung SET version = version + 1 WHERE id = ?', (buchung_id,))
+
+        # P50b: Kopf- und Zeilenaenderungen protokollieren. Unveraenderte Felder und
+        # inhaltlich gleiche Zeilen erzeugen keinen Eintrag.
+        grund = b.grund
+        for feld in KOPF_FELDER_HISTORIE:
+            altwert = _feldwert_text(alt[feld])
+            neuwert = _feldwert_text(getattr(b, feld))
+            if altwert != neuwert:
+                _protokolliere(con, buchung_id, feld, altwert, neuwert, grund, 'put')
+        neue_zeilen_by_id = {z.id: z for z in b.zeilen if z.id is not None}
+        for zid, altz in vorher_zeilen.items():
+            if zid not in neue_zeilen_by_id:
+                alt_json = json.dumps(
+                    {"kategorie_id": altz["kategorie_id"], "betrag_cent": altz["betrag_cent"], "notiz": altz["notiz"]},
+                    ensure_ascii=False,
+                )
+                _protokolliere(con, buchung_id, 'zeile_entfernt', alt_json, None, grund, 'put')
+            else:
+                neuz = neue_zeilen_by_id[zid]
+                for unterfeld in ('kategorie_id', 'betrag_cent', 'notiz'):
+                    altwert = _feldwert_text(altz[unterfeld])
+                    neuwert = _feldwert_text(getattr(neuz, unterfeld))
+                    if altwert != neuwert:
+                        _protokolliere(con, buchung_id, f'zeile_{zid}_{unterfeld}', altwert, neuwert, grund, 'put')
+        for z in b.zeilen:
+            if z.id is None:
+                neu_json = json.dumps(
+                    {"kategorie_id": z.kategorie_id, "betrag_cent": z.betrag_cent, "notiz": z.notiz},
+                    ensure_ascii=False,
+                )
+                _protokolliere(con, buchung_id, 'zeile_neu', None, neu_json, grund, 'put')
+
         if alt['bankumsatz_id'] is not None and alt['bankumsatz_id'] != b.bankumsatz_id:
             con.execute("UPDATE bankumsatz SET importstatus='offen' WHERE id=? AND NOT EXISTS (SELECT 1 FROM buchung WHERE bankumsatz_id=?)",(alt['bankumsatz_id'],alt['bankumsatz_id']))
     except sqlite3.IntegrityError as e:
@@ -502,10 +559,214 @@ def _delete_buchung(buchung_id: int, con: sqlite3.Connection, bereich: Bereich):
                         (b["bankumsatz_id"],b["bankumsatz_id"]))
 
 
+@router.get('/buchungen/{buchung_id}')
+def get_buchung(buchung_id: int, con: sqlite3.Connection = Depends(db_dep), bereich: BereichDep = Bereich(1)):
+    """P51: Einzelne Buchung inkl. original_id/storniert_am/erstattungen/netto_cent.
+
+    Von der Karte als 'bestehende Detail-Funktion _buchung_detail erweitern'
+    beschrieben; einen GET-Einzel-Endpunkt gab es vorher nicht (nur die Liste
+    und die interne Nutzung von _buchung_detail durch POST/PUT/DELETE) - hier
+    ergaenzt, klein und eindeutig (analog NACHTRAG Abschnitt 4).
+    """
+    pruefe_buchung(con, buchung_id, bereich)
+    return _buchung_detail(con, buchung_id)
+
+
+@router.get('/buchungen/{buchung_id}/verlauf')
+def get_verlauf(buchung_id: int, con: sqlite3.Connection = Depends(db_dep), bereich: BereichDep = Bereich(1)):
+    """P50b: Aenderungshistorie einer Buchung, neuester Eintrag zuerst."""
+    pruefe_buchung(con, buchung_id, bereich)
+    return [
+        dict(r) for r in con.execute(
+            "SELECT id, feld, alt, neu, grund, zeitpunkt FROM buchung_aenderung "
+            "WHERE buchung_id = ? ORDER BY zeitpunkt DESC, id DESC",
+            (buchung_id,),
+        ).fetchall()
+    ]
+
+
+class StornoIn(BaseModel):
+    grund: str | None = None
+
+
+class ErstattenZeileIn(BaseModel):
+    original_zeile_id: int
+    betrag_cent: int = Field(gt=0)
+    kategorie_id: int | None = None
+
+
+class ErstattenIn(BaseModel):
+    datum: str
+    zeilen: list[ErstattenZeileIn]
+    zahlungsart: Literal['bar', 'bank', 'karte', 'sonstiges'] | None = None
+    kontakt_id: int | None = None
+    text: str | None = None
+    grund: str | None = None
+
+    @field_validator('datum')
+    @classmethod
+    def _datum(cls, value: str) -> str:
+        import datetime as _dt
+        if _dt.date.fromisoformat(value).isoformat() != value:
+            raise ValueError('Datum muss YYYY-MM-DD entsprechen')
+        return value
+
+    @field_validator('zeilen')
+    @classmethod
+    def _zeilen(cls, v: list) -> list:
+        if not v:
+            raise ValueError('Erstattung braucht mindestens eine Zeile')
+        return v
+
+
+@router.post('/buchungen/{buchung_id}/stornieren')
+def stornieren_buchung(buchung_id: int, body: StornoIn = StornoIn(),
+                       con: sqlite3.Connection = Depends(db_dep), bereich: BereichDep = Bereich(1)):
+    """P51: Buchung stornieren, ohne sie zu loeschen. Wirkt sofort auf v_einnahmen_ausgaben."""
+    with con:
+        con.execute('BEGIN IMMEDIATE')
+        pruefe_buchung(con, buchung_id, bereich)
+        row = con.execute('SELECT typ, storniert_am FROM buchung WHERE id = ?', (buchung_id,)).fetchone()
+        if row is None:
+            raise HTTPException(404, 'Buchung nicht gefunden')
+        if row['typ'] == 'umbuchung':
+            raise HTTPException(422, 'Umbuchungen koennen nicht storniert werden')
+        if row['storniert_am'] is not None:
+            raise HTTPException(409, 'Buchung ist bereits storniert')
+        con.execute("UPDATE buchung SET storniert_am = datetime('now') WHERE id = ?", (buchung_id,))
+        neuwert = con.execute('SELECT storniert_am FROM buchung WHERE id = ?', (buchung_id,)).fetchone()[0]
+        _protokolliere(con, buchung_id, 'storniert_am', None, neuwert, body.grund, 'stornieren')
+        return _buchung_detail(con, buchung_id)
+
+
+@router.post('/buchungen/{buchung_id}/entstornieren')
+def entstornieren_buchung(buchung_id: int, body: StornoIn = StornoIn(),
+                          con: sqlite3.Connection = Depends(db_dep), bereich: BereichDep = Bereich(1)):
+    """P51: Storno zurücknehmen, falls er ein Versehen war."""
+    with con:
+        con.execute('BEGIN IMMEDIATE')
+        pruefe_buchung(con, buchung_id, bereich)
+        row = con.execute('SELECT typ, storniert_am FROM buchung WHERE id = ?', (buchung_id,)).fetchone()
+        if row is None:
+            raise HTTPException(404, 'Buchung nicht gefunden')
+        if row['typ'] == 'umbuchung':
+            raise HTTPException(422, 'Umbuchungen koennen nicht storniert werden')
+        if row['storniert_am'] is None:
+            raise HTTPException(409, 'Buchung ist nicht storniert')
+        altwert = row['storniert_am']
+        con.execute('UPDATE buchung SET storniert_am = NULL WHERE id = ?', (buchung_id,))
+        _protokolliere(con, buchung_id, 'storniert_am', altwert, None, body.grund, 'entstornieren')
+        return _buchung_detail(con, buchung_id)
+
+
+@router.post('/buchungen/{buchung_id}/erstatten', status_code=201)
+def erstatten_buchung(buchung_id: int, body: ErstattenIn,
+                      con: sqlite3.Connection = Depends(db_dep), bereich: BereichDep = Bereich(1)):
+    """P51: Rueckerstattung/Ruecküberweisung als eigene, verknuepfte Gegenbuchung.
+
+    Mindert die Nettosumme der Kategorie (netto_cent), ohne den urspruenglichen
+    Betrag zu veraendern. Erbt die Sparte des Originals; lernt keine Regel
+    (original_id ist gesetzt - _lerne_regel wird bewusst nicht aufgerufen).
+    """
+    pruefe_buchung(con, buchung_id, bereich)
+    original = con.execute(
+        'SELECT id, sparte_id, typ, storniert_am, original_id FROM buchung WHERE id = ?',
+        (buchung_id,),
+    ).fetchone()
+    if original is None:
+        raise HTTPException(404, 'Buchung nicht gefunden')
+    if original['typ'] not in ('einnahme', 'ausgabe'):
+        raise HTTPException(422, 'Nur Einnahmen/Ausgaben koennen erstattet werden')
+    if original['original_id'] is not None:
+        raise HTTPException(422, 'Eine Erstattung kann nicht selbst erstattet werden')
+    if original['storniert_am'] is not None:
+        raise HTTPException(409, 'Stornierte Buchung kann nicht erstattet werden')
+
+    zeile_ids = [z.original_zeile_id for z in body.zeilen]
+    if len(zeile_ids) != len(set(zeile_ids)):
+        raise HTTPException(422, 'Zeile darf nicht doppelt referenziert werden')
+
+    original_zeilen = {
+        row['id']: row for row in con.execute(
+            'SELECT id, kategorie_id, betrag_cent FROM buchungszeile WHERE buchung_id = ?',
+            (buchung_id,),
+        )
+    }
+
+    zielkategorien: dict[int, int] = {}
+    for z in body.zeilen:
+        oz = original_zeilen.get(z.original_zeile_id)
+        if oz is None:
+            raise HTTPException(422, f'Zeile {z.original_zeile_id} gehoert nicht zur Original-Buchung')
+        ziel_kategorie_id = z.kategorie_id if z.kategorie_id is not None else oz['kategorie_id']
+        pruefe_kategorie(con, ziel_kategorie_id, bereich)
+        krow = con.execute(
+            'SELECT richtung, sparte_id FROM kategorie WHERE id = ? AND aktiv = 1',
+            (ziel_kategorie_id,),
+        ).fetchone()
+        if not krow:
+            raise HTTPException(404, f'Kategorie {ziel_kategorie_id} nicht gefunden')
+        if krow['richtung'] != 'beides':
+            raise HTTPException(422, detail={
+                'detail': f'Kategorie {ziel_kategorie_id} erlaubt keine Erstattung (richtung muss "beides" sein)',
+                'kategorie_id': ziel_kategorie_id,
+            })
+        if krow['sparte_id'] != original['sparte_id']:
+            raise HTTPException(400, 'Kategorie gehoert nicht zur Sparte der Original-Buchung')
+        bereits_erstattet = con.execute(
+            "SELECT COALESCE(SUM(bz.betrag_cent), 0) FROM buchungszeile bz "
+            "JOIN buchung b ON b.id = bz.buchung_id "
+            "WHERE bz.original_zeile_id = ? AND b.storniert_am IS NULL",
+            (z.original_zeile_id,),
+        ).fetchone()[0]
+        rest = oz['betrag_cent'] - bereits_erstattet
+        if z.betrag_cent > rest:
+            raise HTTPException(422, detail={
+                'detail': f'Erstattung uebersteigt den offenen Rest der Zeile {z.original_zeile_id}',
+                'zeile_id': z.original_zeile_id,
+                'bereits_erstattet_cent': bereits_erstattet,
+                'rest_cent': rest,
+            })
+        zielkategorien[z.original_zeile_id] = ziel_kategorie_id
+
+    gegentyp = 'einnahme' if original['typ'] == 'ausgabe' else 'ausgabe'
+    positionen = [
+        ZeileIn(kategorie_id=zielkategorien[z.original_zeile_id], betrag_cent=z.betrag_cent, notiz=None)
+        for z in body.zeilen
+    ]
+
+    def nach_anlage(con_, neue_buchung_id):
+        # Laeuft innerhalb der Transaktion von erstelle_buchung: original_id und die
+        # Zeilen-Verknuepfung original_zeile_id werden nur gemeinsam mit der Buchung
+        # gespeichert. Die neuen Zeilen entstehen in derselben Reihenfolge wie
+        # body.zeilen (erstelle_buchung fuegt sie genau in dieser Reihenfolge ein).
+        con_.execute('UPDATE buchung SET original_id = ? WHERE id = ?', (buchung_id, neue_buchung_id))
+        neue_zeilen = con_.execute(
+            'SELECT id FROM buchungszeile WHERE buchung_id = ? ORDER BY id',
+            (neue_buchung_id,),
+        ).fetchall()
+        for zeile_row, z in zip(neue_zeilen, body.zeilen):
+            con_.execute('UPDATE buchungszeile SET original_zeile_id = ? WHERE id = ?',
+                        (z.original_zeile_id, zeile_row['id']))
+
+    try:
+        _antwort, neue_buchung_id = erstelle_buchung(
+            con, bereich, sparte_id=original['sparte_id'], datum=body.datum, typ=gegentyp,
+            zahlungsart=body.zahlungsart or 'bank', bezahlt_von_sparte_id=None,
+            positionen=positionen, client_request_id=None,
+            text=body.text or f'Erstattung zu Buchung {buchung_id}',
+            kontakt_id=body.kontakt_id, nach_anlage=nach_anlage,
+        )
+    except sqlite3.IntegrityError as exc:
+        raise HTTPException(400, f'Datenbankfehler: {exc}') from exc
+    return _buchung_detail(con, neue_buchung_id)
+
+
 def _buchung_detail(con: sqlite3.Connection, buchung_id: int) -> dict:
     row = con.execute(
         "SELECT b.id, b.sparte_id, s.name AS sparte_name, b.datum, b.typ, "
-        "b.version, b.betrag_cent, b.zahlungsart, b.belegstatus, b.buchungsstatus, b.text, b.notiz, b.kredit_id "
+        "b.version, b.betrag_cent, b.zahlungsart, b.belegstatus, b.buchungsstatus, b.text, b.notiz, b.kredit_id, "
+        "b.original_id, b.storniert_am "
         "FROM buchung b JOIN sparte s ON s.id = b.sparte_id WHERE b.id = ?",
         (buchung_id,),
     ).fetchone()
@@ -514,13 +775,37 @@ def _buchung_detail(con: sqlite3.Connection, buchung_id: int) -> dict:
     ergaenze_auslage(con, result)
     result["zeilen"] = [
         dict(z) for z in con.execute(
-            "SELECT z.id, z.kategorie_id, k.name AS kategorie_name, z.betrag_cent, z.notiz, z.neutral "
+            "SELECT z.id, z.kategorie_id, k.name AS kategorie_name, z.betrag_cent, z.notiz, z.neutral, "
+            "z.original_zeile_id "
             "FROM buchungszeile z JOIN kategorie k ON k.id = z.kategorie_id "
             "WHERE z.buchung_id = ? ORDER BY z.id",
             (buchung_id,),
         ).fetchall()
     ]
     result["neutral_cent"] = sum(z["betrag_cent"] for z in result["zeilen"] if z.get("neutral", 0))
+    # P51: offener Rest je Zeile fuers Vorbelegen des Erstattungs-Formulars im Frontend
+    # (nicht Teil der wörtlichen Karten-Antwort, aber ohne das laesst sich "Betrag
+    # vorbelegt mit dem offenen Rest" nicht ohne Zusatzabfragen je Erstattung umsetzen).
+    for z in result["zeilen"]:
+        bereits = con.execute(
+            "SELECT COALESCE(SUM(bz.betrag_cent), 0) FROM buchungszeile bz "
+            "JOIN buchung b ON b.id = bz.buchung_id "
+            "WHERE bz.original_zeile_id = ? AND b.storniert_am IS NULL",
+            (z["id"],),
+        ).fetchone()[0]
+        z["bereits_erstattet_cent"] = bereits
+        z["rest_cent"] = z["betrag_cent"] - bereits
+    # P51: Erstattungen und daraus abgeleiteter Netto-Betrag (Kopfbetrag minus
+    # Summe nicht stornierter Erstattungen).
+    result["erstattungen"] = [
+        dict(r) for r in con.execute(
+            "SELECT id, datum, betrag_cent, storniert_am FROM buchung WHERE original_id = ? "
+            "ORDER BY datum, id",
+            (buchung_id,),
+        ).fetchall()
+    ]
+    erstattet_netto = sum(e["betrag_cent"] for e in result["erstattungen"] if e["storniert_am"] is None)
+    result["netto_cent"] = result["betrag_cent"] - erstattet_netto
     return result
 
 
