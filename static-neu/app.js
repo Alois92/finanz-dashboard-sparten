@@ -1,6 +1,6 @@
 import {api} from './api.js';
 import {esc} from './format.js';
-import {toast,drill,closeSheet} from './ui.js';
+import {toast,drill,sheet,closeSheet} from './ui.js';
 
 const routes={uebersicht:['Übersicht','uebersicht'],sparte:['Sparte','sparte'],erfassen:['Erfassen','erfassen'],buchungen:['Buchungen','buchungen'],konten:['Konten','konten'],kredit:['Kredit','kredit'],kategorien:['Kategorien','kategorien'],belege:['Belege','belege'],bankimport:['Bankimport','bankimport'],export:['Export','export'],betrieb:['Betrieb','betrieb']};
 
@@ -143,7 +143,45 @@ async function render(){
   await drawKategorieFilter();
   const mod=await import(`./pages/${routes[state.route][1]}.js`);
   await mod.render(document.querySelector('#page'),state);
-  document.querySelectorAll('.mobile-nav [data-route]').forEach(b=>b.onclick=()=>go(b.dataset.route));
+  document.querySelectorAll('.mobile-nav [data-route]').forEach(b=>{
+    b.classList.toggle('active',b.dataset.route===state.route);
+    b.onclick=b.dataset.route==='mehr'?openMoreSheet:()=>go(b.dataset.route);
+  });
+}
+
+// QA5-02: Unter 760 px verschwindet die Sidebar komplett (siehe style.css), damit sind
+// Sparte/Konten/Kredit/Kategorien/Export/Betrieb sowie Bereichswechsel, Theme, Passwort
+// und Abmelden ohne dieses Sheet auf Mobil nicht erreichbar. Der sechste Bottom-Nav-Knopf
+// "Mehr" (data-route="mehr", siehe index.html) ist keine echte Seite und wird oben in
+// render() gesondert behandelt. Die Restrouten werden aus der routes-Map abzüglich der im
+// Markup vorhandenen Bottom-Nav-Einträge abgeleitet, nicht hart kodiert - eine künftige
+// zusätzliche Seite (weiterer routes-Eintrag) taucht dann automatisch im Sheet auf, ohne
+// dass dieser Code angefasst werden muss.
+function openMoreSheet(){
+  const bottomRouten=new Set(Array.from(document.querySelectorAll('.mobile-nav [data-route]')).map(b=>b.dataset.route));
+  const restRouten=Object.entries(routes).filter(([schluessel])=>!bottomRouten.has(schluessel));
+  const routenListe=restRouten.map(([schluessel,[label]])=>`<button type="button" class="nav-item ${state.route===schluessel?'active':''}" data-route="${schluessel}"><span aria-hidden="true">•</span>${esc(label)}</button>`).join('');
+  const bereichOptionen=state.bereiche.map(b=>`<option value="${b.id}" ${b.id===state.bereichId?'selected':''}>${esc(b.name)}</option>`).join('');
+  const node=sheet(`<div class="sheet-head"><h2>Mehr</h2><button type="button" class="dialog-close" id="sheet-close" aria-label="Schließen">×</button></div>
+    <nav class="nav-group" aria-label="Weitere Seiten">${routenListe}</nav>
+    <div class="nav-group"><label class="nav-label" for="sheet-bereich-select">Bereich</label><select id="sheet-bereich-select" class="scope-sel" aria-label="Bereich">${bereichOptionen}</select></div>
+    <div class="nav-group side-foot">
+      <a class="nav-item" href="/password-change.html">Passwort ändern</a>
+      <button type="button" class="nav-item" id="sheet-theme-toggle">${state.theme==='dark'?'☼':'☾'} Ansicht</button>
+      <button type="button" class="nav-item" id="sheet-logout">↪ Abmelden</button>
+    </div>`);
+  node.setAttribute('role','dialog');
+  node.setAttribute('aria-modal','true');
+  node.setAttribute('aria-label','Mehr');
+  node.querySelectorAll('[data-route]').forEach(b=>b.onclick=()=>{closeSheet();go(b.dataset.route)});
+  node.querySelector('#sheet-close').onclick=closeSheet;
+  node.querySelector('#sheet-bereich-select').onchange=async e=>{closeSheet();state.bereichId=Number(e.target.value);localStorage.setItem('neu-bereich',state.bereichId);await loadData();render()};
+  node.querySelector('#sheet-theme-toggle').onclick=()=>{setTheme(state.theme==='dark'?'light':'dark');closeSheet()};
+  node.querySelector('#sheet-logout').onclick=async()=>{await fetch('/api/auth/logout',{method:'POST',credentials:'same-origin'});location.assign('/login.html')};
+  // QA5-02: Fokus beim Öffnen auf das Sheet legen, damit Tastatur-/Screenreader-Nutzung
+  // sofort im Menü landet statt im zuvor fokussierten Bottom-Nav-Button.
+  node.tabIndex=-1;
+  node.focus();
 }
 
 function showGroupDialog(){drill('Auswertungsgruppe anlegen',`<form id="group-form"><label class="field">Name<input name="name" required maxlength="120"></label><p class="muted">Sparten können danach in der Gruppe verwaltet werden.</p><button class="btn primary" type="submit">Anlegen</button></form>`);document.querySelector('#group-form').onsubmit=async e=>{e.preventDefault();try{const name=new FormData(e.target).get('name');await api('/auswertungsgruppen',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,sparte_ids:[]})});document.querySelector('#drill').close();await loadData();render();toast('Gruppe angelegt.')}catch(error){toast(error.detail||error.message)}}}

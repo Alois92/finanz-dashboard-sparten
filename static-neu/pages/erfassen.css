@@ -1,4 +1,10 @@
 .erfassen-page .quick-card form{display:grid;gap:14px}
+/* QA5-01: Ohne min-width:0 blähen Grid-Items ihre Spur auf min-content der Inhalts-
+   Formularfelder auf (Standardverhalten von CSS-Grid), das lief bei 375 px 112 px
+   über den Viewport hinaus. Die Grid-Items selbst dürfen schrumpfen, die Felder darin
+   füllen die Spur stattdessen über width:100%. */
+.erfassen-page .quick-card form>*{min-width:0}
+.erfassen-page .field input,.erfassen-page .field select{width:100%}
 .ef-amount-row{display:grid;grid-template-columns:auto 1fr;gap:14px;align-items:end}
 .segmented{display:inline-flex;border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
 .seg-btn{border:0;background:var(--panel);color:var(--ink-2);padding:9px 16px;font-weight:600}
