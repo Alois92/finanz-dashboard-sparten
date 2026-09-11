@@ -37,7 +37,17 @@ function setTheme(theme){state.theme=theme;document.documentElement.dataset.them
 function setFilter(patch){
   Object.assign(state.filter,patch);
   if('jahr' in patch){state.year=patch.jahr||'';localStorage.setItem('neu-jahr',state.year)}
-  if('sparteId' in patch){state.sparteId=patch.sparteId||'';localStorage.setItem('neu-sparte',state.sparteId)}
+  if('sparteId' in patch){
+    state.sparteId=patch.sparteId||'';
+    localStorage.setItem('neu-sparte',state.sparteId);
+    // QA1-01: auf der Sparte-Seite die Wahl im Hash abbilden (Kopf-Dropdown/Sidebar setzten
+    // bisher nie eine ID in die URL), damit sie teilbar bleibt und die Zurueck-Taste zwischen
+    // Sparten wechseln kann. sparte.js liest die ID beim naechsten Render zurueck.
+    if(state.route==='sparte'){
+      const neuerHash=state.sparteId?`#/sparte/${state.sparteId}`:'#/sparte';
+      if(location.hash!==neuerHash){location.hash=neuerHash;return}
+    }
+  }
   if('kategorieId' in patch){localStorage.setItem('neu-kategorie',state.filter.kategorieId||'')}
   render();
 }

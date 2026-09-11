@@ -44,30 +44,32 @@ function parseGruppeId(suffix) {
   return m ? Number(m[1]) : null;
 }
 
-// Ein #/sparte/<id>-Hash setzt die Sparte wie ein Wechsel im Kopf-Select: state.filter.sparteId
-// (und die Alias-Felder state.sparteId/localStorage, siehe app.js aus P30b) nachziehen, dann den
-// Hash-Suffix wieder entfernen und die Seite über hashchange neu rendern lassen - so zeichnet
-// app.js Kopf-Select und Sidebar beim nächsten Durchlauf korrekt. app.js selbst bleibt
-// unverändert (Konfliktregel NACHTRAG Abschnitt 3, kein exportiertes setFilter() dort).
+// QA1-01: Ein #/sparte/<id>-Hash bildet die gewaehlte Sparte jetzt dauerhaft in der URL ab
+// (vorher wurde die ID sofort wieder auf bloss "#/sparte" normalisiert - Deep-Links waren
+// dadurch nicht teilbar/bookmarkbar und die Zurueck-Taste konnte nicht zwischen zuvor
+// besuchten Sparten wechseln). syncSparteAusHash gleicht nur noch state.sparteId (und die
+// Alias-Felder state.filter.sparteId/localStorage, siehe app.js aus P30b) aus dem Hash ab,
+// ohne den Hash selbst zu veraendern.
 function syncSparteAusHash(state, suffix) {
   if (!suffix || parseGruppeId(suffix) != null || !/^\d+$/.test(suffix)) return false;
   if (String(state.sparteId || '') === suffix) return false;
   state.sparteId = suffix;
   if (state.filter) state.filter.sparteId = suffix;
   localStorage.setItem('neu-sparte', suffix);
-  location.hash = '#/sparte';
   return true;
 }
 
-// Setzt die Sparte wie ein Wechsel im Kopf-Select und rendert die Seite direkt neu. Ein reines
-// location.hash='#/sparte' reicht hier nicht aus: von der Auswahlkachel aus ist der Hash bereits
-// '#/sparte' (keine ID im Suffix), eine Zuweisung desselben Werts löst also kein hashchange in
-// app.js aus - anders als goSparte() in uebersicht.js, das immer von einer anderen Route kommt.
+// Setzt die Sparte wie ein Wechsel im Kopf-Select und schreibt die ID in den Hash (QA1-01),
+// damit jeder Sparten-Wechsel einen eigenen Browser-Verlaufseintrag erzeugt. Ein reines
+// location.hash='#/sparte/<id>' kann bereits dem aktuellen Hash entsprechen (z. B. erneuter
+// Klick auf die schon gewaehlte Sparte) - dann loest die Zuweisung kein hashchange aus, daher
+// wird in diesem Fall manuell neu gerendert (gleiches Muster wie zuvor).
 function waehleSparte(root, state, id) {
+  const neuerHash = '#/sparte/' + id;
   state.sparteId = String(id);
   if (state.filter) state.filter.sparteId = state.sparteId;
   localStorage.setItem('neu-sparte', state.sparteId);
-  if (location.hash !== '#/sparte') { location.hash = '#/sparte'; return; }
+  if (location.hash !== neuerHash) { location.hash = neuerHash; return; }
   // Kopf-Nachzug: nicht nur die Seite, sondern ueber app.js auch Kopf-Select und Sidebar
   // neu zeichnen (gleiches Muster wie refresh() in uebersicht.js).
   window.dispatchEvent(new Event('hashchange'));
@@ -85,7 +87,9 @@ function sparteName(state, id) {
 export function render(root, state) {
   ensureCss();
   const suffix = hashSuffix();
-  if (syncSparteAusHash(state, suffix)) return;
+  // QA1-01: Zustand aus einem Sparten-Hash uebernehmen, der Hash selbst bleibt dabei
+  // unveraendert stehen (kein Rueck-Normalisieren mehr auf "#/sparte" ohne ID).
+  syncSparteAusHash(state, suffix);
   const gruppeId = parseGruppeId(suffix);
   if (gruppeId != null) {
     if (gruppenZustand.suffix !== suffix) {
@@ -107,6 +111,12 @@ export function render(root, state) {
   gruppenZustand.suffix = null;
   const sparteId = state.sparteId || (state.filter && state.filter.sparteId) || '';
   if (!sparteId) return renderAuswahl(root, state);
+  if (suffix !== String(sparteId)) {
+    // QA1-01: Sparte ist bekannt (z. B. aus localStorage oder Kopf-Auswahl auf einer
+    // anderen Seite), aber noch nicht im Hash abgebildet - jetzt nachziehen.
+    location.hash = '#/sparte/' + sparteId;
+    return;
+  }
   return renderEinzelsparte(root, state, sparteId);
 }
 

@@ -157,7 +157,9 @@ function goSparte(state, sparteId) {
   state.sparteId = String(sparteId);
   if (state.filter) state.filter.sparteId = state.sparteId;
   localStorage.setItem('neu-sparte', state.sparteId);
-  location.hash = '#/sparte';
+  // QA1-01: Sparte im Hash abbilden, damit die URL teilbar/bookmarkbar bleibt und
+  // die Zurueck-Taste zwischen Sparten wechseln kann (sparte.js liest die ID zurueck).
+  location.hash = '#/sparte/' + state.sparteId;
 }
 
 function renderHints(root, state, data, load) {
