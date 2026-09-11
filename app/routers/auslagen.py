@@ -19,7 +19,7 @@ class AusgleichIn(BaseModel):
     nach_sparte_id: int
     auslage_ids: list[int] = Field(min_length=1)
     datum: str
-    betrag_cent: int = Field(gt=0, strict=True)
+    betrag_cent: int = Field(gt=0, le=10_000_000_000, strict=True)
     zahlungsart: Literal['bar', 'bank']
     von_konto_id: int | None = None
     nach_konto_id: int | None = None

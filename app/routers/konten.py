@@ -57,7 +57,7 @@ class KontoPatch(BaseModel):
 class BewegungIn(BaseModel):
     konto_id: int
     datum: date
-    betrag_signed_cent: int = Field(strict=True)
+    betrag_signed_cent: int = Field(ge=-10_000_000_000, le=10_000_000_000, strict=True)
     text: str | None = None
     gegenpartei: str | None = None
     art: Literal['zahlung','transfer','gebuehr','zins','trade'] = 'zahlung'
@@ -68,13 +68,13 @@ class TransferIn(BaseModel):
     von_konto_id: int
     nach_konto_id: int
     datum: date
-    betrag_cent: int = Field(gt=0, strict=True)
+    betrag_cent: int = Field(gt=0, le=10_000_000_000, strict=True)
     notiz: str | None = None
 
 
 class AnkerIn(BaseModel):
     stichtag: date
-    saldo_cent: int = Field(strict=True)
+    saldo_cent: int = Field(ge=-10_000_000_000, le=10_000_000_000, strict=True)
     quelle: Literal['auszug', 'manuell', 'import']
     beleg_id: int | None = None
     notiz: str | None = None
@@ -82,7 +82,7 @@ class AnkerIn(BaseModel):
 
 class ZaehlungIn(BaseModel):
     datum: date
-    gezaehlt_cent: int = Field(strict=True)
+    gezaehlt_cent: int = Field(ge=-10_000_000_000, le=10_000_000_000, strict=True)
     notiz: str | None = None
 
 

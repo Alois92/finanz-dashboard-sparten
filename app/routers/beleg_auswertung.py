@@ -43,7 +43,7 @@ class AuswertungStatusIn(BaseModel):
 
 class UebernehmenPosition(BaseModel):
     text: str
-    betrag_cent: int = Field(gt=0)
+    betrag_cent: int = Field(gt=0, le=10_000_000_000)
     kategorie_id: int
     typ: Literal["einnahme", "ausgabe"] = "ausgabe"
 

@@ -18,7 +18,7 @@ class KreditIn(BaseModel):
     sparte_id: int
     konto_id: int | None = None
     name: str = Field(min_length=1)
-    monatsrate_cent: int = Field(gt=0, strict=True)
+    monatsrate_cent: int = Field(gt=0, le=10_000_000_000, strict=True)
     zinssatz: float | None = None
     beginn: date
     kategorie_zins_id: int
@@ -29,7 +29,7 @@ class KreditPatch(BaseModel):
     sparte_id: int | None = None
     konto_id: int | None = None
     name: str | None = Field(default=None, min_length=1)
-    monatsrate_cent: int | None = Field(default=None, gt=0, strict=True)
+    monatsrate_cent: int | None = Field(default=None, gt=0, le=10_000_000_000, strict=True)
     zinssatz: float | None = None
     beginn: date | None = None
     kategorie_zins_id: int | None = None
@@ -38,14 +38,14 @@ class KreditPatch(BaseModel):
 
 
 class JahreszinsIn(BaseModel):
-    zins_cent: int = Field(ge=0, strict=True)
-    restschuld_cent: int | None = Field(default=None, ge=0, strict=True)
+    zins_cent: int = Field(ge=0, le=10_000_000_000, strict=True)
+    restschuld_cent: int | None = Field(default=None, ge=0, le=10_000_000_000, strict=True)
     beleg_id: int | None = None
 
 
 class RateIn(BaseModel):
     datum: date
-    betrag_cent: int | None = Field(default=None, gt=0, strict=True)
+    betrag_cent: int | None = Field(default=None, gt=0, le=10_000_000_000, strict=True)
     bankumsatz_id: int | None = None
     client_request_id: str | None = None
 

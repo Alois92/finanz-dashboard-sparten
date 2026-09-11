@@ -48,7 +48,7 @@ class UmbuchungIn(BaseModel):
     von_sparte_id: int
     nach_sparte_id: int
     datum: str
-    betrag_cent: int = Field(gt=0)
+    betrag_cent: int = Field(gt=0, le=10_000_000_000)
     text: str | None = None
     zahlungsart: Literal['bank', 'bar'] = 'bank'
     von_konto_id: int | None = None
@@ -594,7 +594,7 @@ class StornoIn(BaseModel):
 
 class ErstattenZeileIn(BaseModel):
     original_zeile_id: int
-    betrag_cent: int = Field(gt=0)
+    betrag_cent: int = Field(gt=0, le=10_000_000_000)
     kategorie_id: int | None = None
 
 
