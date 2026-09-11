@@ -32,6 +32,9 @@ const M = {
   manuellSparte: false,
   manuellKategorie: false,
   letzterVorschlag: null,
+  kiTimer: null,       // P70: eigener Timer (1,5 s Textruhe), unabhaengig vom Parse-Timer
+  kiLetzterText: null, // Text, zu dem zuletzt die KI gefragt wurde (Dedupe: pro Text nur 1 Aufruf)
+  kiVorschlag: null,
 };
 
 function heute(){
@@ -60,6 +63,10 @@ export async function render(root, state){
   M.manuellSparte = false;
   M.manuellKategorie = false;
   M.letzterVorschlag = null;
+  clearTimeout(M.kiTimer);
+  M.kiTimer = null;
+  M.kiLetzterText = null;
+  M.kiVorschlag = null;
 
   const sparten = (state.sparten || []).slice();
   const privatSparten = sparten.filter(s => s.typ === 'privat');
@@ -95,6 +102,7 @@ export async function render(root, state){
                 <textarea id="ef-text" rows="2" placeholder="z. B. Mittagessen Gasthof 14,80"></textarea>
               </label>
               <div class="ef-sugg" id="ef-sugg" aria-live="polite" hidden></div>
+              <div class="ef-sugg" id="ef-ki-sugg" aria-live="polite" hidden></div>
               <div class="grid g2">
                 <label class="field">Zahlungsart
                   <select id="ef-zahlungsart">
@@ -162,6 +170,7 @@ export async function render(root, state){
   const sparteSelect = el('#ef-sparte');
   const textArea = el('#ef-text');
   const suggBox = el('#ef-sugg');
+  const kiBox = el('#ef-ki-sugg');
   const zahlungsartSelect = el('#ef-zahlungsart');
   const kontoField = el('#ef-konto-field');
   const kontoSelect = el('#ef-konto');
@@ -338,9 +347,73 @@ export async function render(root, state){
     }
   }
 
+  // P70: KI-Kategorievorschlag als Rueckfallebene. Wird NUR gerufen, wenn der
+  // normale (regelbasierte) Weg keine Kategorie liefert und der Text seit
+  // 1,5 s unveraendert ist (eigener Timer unten). Uebernahme ausschliesslich
+  // per Klick - nie automatisch gesetzt.
+  function zeigeKiVorschlag(v){
+    M.kiVorschlag = v;
+    if(!v){
+      kiBox.hidden = true;
+      kiBox.innerHTML = '';
+      return;
+    }
+    kiBox.hidden = false;
+    kiBox.innerHTML = `KI-Vorschlag: <b>${esc(v.sparte_name)}</b> · <b>${esc(v.kategorie_name)}</b> ` +
+      `(${esc(v.sicherheit)}) <button type="button" class="btn small" id="ef-ki-uebernehmen">übernehmen</button>`;
+    const btn = kiBox.querySelector('#ef-ki-uebernehmen');
+    if(btn) btn.addEventListener('click', async () => {
+      sparteSelect.value = String(v.sparte_id);
+      M.manuellSparte = true;
+      await ladeKategorieOptionen();
+      await aktualisiereKontoFeld();
+      aktualisiereAuslageSichtbarkeit();
+      aktualisiereVonOptionen();
+      if((await ladeKategorien(v.sparte_id).catch(() => [])).some(k => k.id === v.kategorie_id)){
+        kategorieSelect.value = String(v.kategorie_id);
+      }
+      M.manuellKategorie = true;
+      zeigeKiVorschlag(null);
+      await ladeZuletztErfasst();
+    });
+  }
+
+  async function versucheKiVorschlag(){
+    const text = textArea.value.trim();
+    if(!text || text.length < 3) return;
+    // Regulaerer Vorschlagsweg (Namensabgleich/Merkregel) hat schon eine
+    // Kategorie gefunden - die KI wird nur als Rueckfallebene gebraucht.
+    if(M.letzterVorschlag && M.letzterVorschlag.kategorie_id) return;
+    if(M.kiLetzterText === text) return; // pro Text nur ein Aufruf
+    M.kiLetzterText = text;
+    kiBox.hidden = false;
+    kiBox.innerHTML = 'KI fragt …';
+    const betrag = parseBetrag(betragInput.value);
+    let antwort;
+    try{
+      antwort = await api('/kategorie-vorschlag/ki', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          text, typ,
+          sparte_id: gewaehlteSparte() || undefined,
+          betrag_cent: betrag ? Math.round(betrag * 100) : undefined,
+        }),
+      });
+    }catch(error){
+      zeigeKiVorschlag(null);
+      return; // Vorschlag ist optional, Fehler hier nicht stoeren
+    }
+    // Text kann sich waehrend des (mehrsekuendigen) Aufrufs geaendert haben.
+    if(textArea.value.trim() !== text) return;
+    zeigeKiVorschlag(antwort.vorschlag || null);
+  }
+
   textArea.addEventListener('input', () => {
     clearTimeout(M.parseTimer);
     M.parseTimer = setTimeout(parseText, 300);
+    clearTimeout(M.kiTimer);
+    zeigeKiVorschlag(null);
+    M.kiTimer = setTimeout(versucheKiVorschlag, 1500);
   });
 
   root.querySelectorAll('.seg-btn').forEach(b => {
@@ -442,6 +515,9 @@ export async function render(root, state){
     datumInput.value = heute();
     M.manuellKategorie = false;
     M.letzterVorschlag = null;
+    clearTimeout(M.kiTimer);
+    M.kiLetzterText = null;
+    zeigeKiVorschlag(null);
     betragInput.focus();
   }
 

@@ -81,18 +81,25 @@ def _denkmodus_abschalten(modell: str) -> bool:
     return modell.lower().startswith("qwen3")
 
 
-def _ollama_aufruf(url: str, body: dict) -> dict:
+def _ollama_aufruf(url: str, body: dict, timeout: int | None = None) -> dict:
     """POST gegen die Ollama-API, synchron (im Async-Kontext ueber
     asyncio.to_thread aufrufen). Wirft urllib.error.URLError/OSError bei
     Verbindungsproblemen oder Timeout - das ist fuer den Aufrufer der Signal,
     den Auftrag wieder auf 'offen' zu setzen statt endgueltig fehlzuschlagen.
+
+    ``timeout`` optional in Sekunden fuer Aufrufer mit eigener Zeitsperre
+    (z. B. app/ki_vorschlag.py: Textaufrufe sind viel schneller als die
+    Foto-Auswertung und sollen nicht deren langes OLLAMA_TIMEOUT_SEKUNDEN
+    erben). Ohne Angabe gilt weiterhin OLLAMA_TIMEOUT_SEKUNDEN.
     """
     daten = json.dumps(body).encode("utf-8")
     request = urllib.request.Request(
         url, data=daten, method="POST",
         headers={"Content-Type": "application/json"},
     )
-    with urllib.request.urlopen(request, timeout=OLLAMA_TIMEOUT_SEKUNDEN) as resp:
+    with urllib.request.urlopen(
+        request, timeout=timeout if timeout is not None else OLLAMA_TIMEOUT_SEKUNDEN
+    ) as resp:
         return json.loads(resp.read().decode("utf-8"))
 
 

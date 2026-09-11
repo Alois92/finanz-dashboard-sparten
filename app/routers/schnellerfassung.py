@@ -7,12 +7,14 @@ Vorschlag und speichert anschliessend ueber ``POST /api/buchungen``.
 import datetime as dt
 import re
 import sqlite3
+from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from ..db import db_dep
-from ..bereiche import Bereich, BereichDep
+from ..bereiche import Bereich, BereichDep, pruefe_sparte
+from ..ki_vorschlag import ist_aktiv, kategorie_vorschlag
 from ..regeln import finde_regel
 
 router = APIRouter(tags=["schnellerfassung"])
@@ -20,6 +22,13 @@ router = APIRouter(tags=["schnellerfassung"])
 
 class ParseIn(BaseModel):
     text: str
+
+
+class KiVorschlagIn(BaseModel):
+    text: str
+    sparte_id: Optional[int] = None
+    typ: Optional[Literal["einnahme", "ausgabe", "umbuchung"]] = None
+    betrag_cent: Optional[int] = None
 
 
 # Signalwoerter fuer die Typ-Erkennung (auf Wortebene geprueft).
@@ -106,6 +115,30 @@ def parse_mehrere(payload: ParseIn, con: sqlite3.Connection = Depends(db_dep), b
     return {"eintraege": eintraege}
 
 
+@router.post("/kategorie-vorschlag/ki")
+def kategorie_vorschlag_ki(
+    payload: KiVorschlagIn, con: sqlite3.Connection = Depends(db_dep), bereich: BereichDep = Bereich(1),
+):
+    """P70: KI-Kategorievorschlag als Rueckfallebene - wird vom Frontend nur
+    gerufen, wenn der normale (regelbasierte) Vorschlagsweg leer blieb. Ruft
+    das Modell erst NACH der Bereichs-/Spartenpruefung auf, damit ein
+    ungueltiges sparte_id nicht erst einen (langsamen) Ollama-Aufruf ausloest."""
+    text = (payload.text or "").strip()
+    if len(text) < 3:
+        raise HTTPException(422, "Text zu kurz")
+    if payload.sparte_id is not None:
+        pruefe_sparte(con, payload.sparte_id, bereich)
+    if not ist_aktiv():
+        return {"vorschlag": None, "grund": "abgeschaltet"}
+    vorschlag = kategorie_vorschlag(
+        con, text=text, bereich_id=bereich.id, sparte_id=payload.sparte_id,
+        typ=payload.typ, betrag_cent=payload.betrag_cent,
+    )
+    if vorschlag is None:
+        return {"vorschlag": None, "grund": "kein_modell"}
+    return {"vorschlag": vorschlag, "grund": None}
+
+
 def _parse_einzeltext(text: str, con: sqlite3.Connection, bereich_id: int) -> dict:
     heute = dt.date.today()
 
@@ -188,6 +221,10 @@ def _parse_einzeltext(text: str, con: sqlite3.Connection, bereich_id: int) -> di
             sparte_name = s["name"] if s else None
     kategorie_id = kategorie["id"] if kategorie else None
     kategorie_name = kategorie["name"] if kategorie else None
+    # Herkunft der Kategorie (P70/P40b): "name" (Namensabgleich oben), "regel"
+    # (Merkregel unten) oder None (nichts gefunden - Frontend fragt ggf. die KI).
+    quelle = "name" if kategorie_id is not None else None
+    regel_name = None
 
     # ---- Merkregeln: greifen nur, wenn der Namensabgleich keine Kategorie fand ----
     if kategorie_id is None:
@@ -196,6 +233,8 @@ def _parse_einzeltext(text: str, con: sqlite3.Connection, bereich_id: int) -> di
             kategorie_id = regel["ziel_kategorie_id"]
             kat_row = next((k for k in kategorien if k["id"] == kategorie_id), None)
             kategorie_name = kat_row["name"] if kat_row else None
+            quelle = "regel"
+            regel_name = regel["name"]
             if regel["ziel_typ"]:
                 typ = regel["ziel_typ"]
             if sparte_id is None:
@@ -219,4 +258,6 @@ def _parse_einzeltext(text: str, con: sqlite3.Connection, bereich_id: int) -> di
         "sparte_name": sparte_name,
         "kategorie_id": kategorie_id,
         "kategorie_name": kategorie_name,
+        "quelle": quelle,
+        "regel_name": regel_name,
     }
