@@ -25,8 +25,6 @@ import os
 import sqlite3
 import urllib.error
 
-from . import auswertung
-
 log = logging.getLogger("finanz.ki_vorschlag")
 
 OLLAMA_TEXT_TIMEOUT_SEKUNDEN = int(os.environ.get("FINANZ_OLLAMA_TEXT_TIMEOUT", "60"))
@@ -117,6 +115,11 @@ def kategorie_vorschlag(
     kategorien, sparten_namen = _kandidaten(con, bereich_id, sparte_id, typ)
     if not kategorien:
         return None
+
+    # Spaeter Import: auswertung zieht schnellerfassung nach, und die importiert
+    # dieses Modul - ein Import auf Modulebene waere ein Zirkel (Abnahme P70).
+    # Der Zugriff ueber das Modulobjekt haelt Tests mit patch.object(auswertung, ...) gueltig.
+    from . import auswertung
 
     body = {
         "model": auswertung.OLLAMA_MODEL,
