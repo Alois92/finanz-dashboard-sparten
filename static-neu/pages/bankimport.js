@@ -197,9 +197,16 @@ function renderUmsaetzeKarte(state) {
 // ---------------------------------------------------------------------------
 
 function formularHtml(u, state, prefill) {
-  const sparteOptionen = state.sparten.map(s => `<option value="${s.id}" ${prefill?.sparte_id === s.id ? 'selected' : ''}>${esc(s.name)}</option>`).join('');
-  const ersteSparte = prefill?.sparte_id ?? state.sparten[0]?.id;
-  const kategorieOptionen = kategorienFuerSparte(ersteSparte).map(k => `<option value="${k.id}" ${prefill?.kategorie_id === k.id ? 'selected' : ''}>${esc(k.name)}</option>`).join('');
+  // Vorbelegung: Regel-Vorschlag > Sparte des Bankkontos. Ist keines von beidem
+  // vorhanden (Konto "gemischt genutzt", sparte_id = null), bleibt die Sparte
+  // bewusst leer — nie eine geratene Sparte stillschweigend vorauswählen (QA3-02).
+  const konto = M.konten.find(k => String(k.id) === String(u.bankkonto_id));
+  const ersteSparte = prefill?.sparte_id ?? konto?.sparte_id ?? null;
+  const sparteOptionen = (ersteSparte == null ? '<option value="" selected disabled>Sparte wählen …</option>' : '') +
+    state.sparten.map(s => `<option value="${s.id}" ${ersteSparte === s.id ? 'selected' : ''}>${esc(s.name)}</option>`).join('');
+  const kategorieOptionen = ersteSparte == null
+    ? '<option value="" selected disabled>zuerst Sparte wählen</option>'
+    : kategorienFuerSparte(ersteSparte).map(k => `<option value="${k.id}" ${prefill?.kategorie_id === k.id ? 'selected' : ''}>${esc(k.name)}</option>`).join('');
   const typ = prefill?.typ || (u.betrag_cent < 0 ? 'ausgabe' : 'einnahme');
   return `<form class="bi-form" id="bi-verbuchen-form" data-umsatz="${u.id}">` +
     `<p class="muted">${fmtDate(u.datum)} · ${esc(u.text || '(ohne Text)')} · <b class="${u.betrag_cent < 0 ? 'aus' : 'ein'}">${fmtEur(u.betrag_cent)}</b></p>` +
