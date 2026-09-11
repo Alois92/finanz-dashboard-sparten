@@ -177,19 +177,43 @@ auswerten (`POST /api/belege/7/auswerten`).
 ### QA4-07 — Login-Instanz 8056: kein Startpasswort konfiguriert, Ersteinrichtung nicht vollständig testbar
 **Schweregrad:** — (kein Produktfehler, siehe unten)
 **Seite:** Login-Instanz (8056)
-**Befund:** `POST /api/auth/login` liefert für jedes Passwort 503 „Anmeldung ist noch nicht eingerichtet.“, weil `AUTH.settings.configured` `false` ist (keine `instance/auth.json` mit Passwort-Hash hinterlegt). Das Ersteinrichtungs-Formular (`/password-setup.html`) ist absichtlich nur mit gültiger Sitzung erreichbar (303 sonst), und diese Sitzung kann nur über ein vorab lokal per `scripts/set_auth_password.py` gesetztes Startpasswort erlangt werden — es gibt bewusst keinen HTTP-Weg, das allererste Passwort zu setzen. Da mir kein Startpasswort für diese Instanz mitgeteilt wurde und ich laut Auftrag keine Schreibrechte außerhalb meines Temp-Verzeichnisses habe (das Setzen des Startpassworts hätte `instance/auth.json` außerhalb meines erlaubten Bereichs verändert), konnte ich den gesamten Login-, Passwortwechsel-, Sperr- und Recovery-Flow **nicht end-to-end** durchspielen. Alles, was ohne Sitzung prüfbar war (Redirects, 401/403, öffentliche Pfade, Rate-Limit-Grundverhalten am Recovery-Endpunkt), wurde geprüft und war unauffällig. Kein Bug, sondern eine Einschränkung meines Testzugriffs — siehe Abschnitt 3.
+**Befund:** `POST /api/auth/login` liefert für jedes Passwort 503 „Anmeldung ist noch nicht eingerichtet.“, weil `AUTH.settings.configured` `false` ist (keine `instance/auth.json` mit Passwort-Hash hinterlegt). Das Ersteinrichtungs-Formular (`/password-setup.html`) ist absichtlich nur mit gültiger Sitzung erreichbar (303 sonst), und diese Sitzung kann nur über ein vorab lokal per `scripts/set_auth_password.py` gesetztes Startpasswort erlangt werden — es gibt bewusst keinen HTTP-Weg, das allererste Passwort zu setzen. Da mir kein Startpasswort für diese Instanz mitgeteilt wurde und ich laut Auftrag keine Schreibrechte außerhalb meines Temp-Verzeichnisses habe (das Setzen des Startpassworts hätte `instance/auth.json` außerhalb meines erlaubten Bereichs verändert), konnte ich den gesamten Login-, Passwortwechsel-, Sperr- und Recovery-Flow **nicht end-to-end** durchspielen. Alles, was ohne Sitzung prüfbar war (Redirects, 401/403, öffentliche Pfade, Rate-Limit-Grundverhalten am Recovery-Endpunkt), wurde geprüft und war unauffällig. Kein Bug, sondern eine Einschränkung meines Testzugriffs — siehe Abschnitt 3. **Nachtrag:** siehe
+Abschnitt 4, inzwischen mit Startpasswort und Neustart größtenteils aufgelöst, aber durch eine
+selbst ausgelöste Rate-Limit-Sperre erneut unvollständig geblieben.
+
+### QA4-08 — Betriebsdoku erwähnt Neustartpflicht nach Auth-Datei-Änderung nicht allgemein
+**Schweregrad:** mittel
+**Seite:** `docs/BETRIEB-UND-ARCHITEKTUR.md` / Betrieb
+**Befund:** Die App liest ihre Auth-Datei (`auth.json`) ausschließlich beim Prozessstart (Singleton
+`AUTH = AuthManager()` in `app/auth.py`, `AUTH_STORE.load()` nur im Konstruktor, kein
+Datei-Watcher/Reload-Endpunkt — live bestätigt: nach manuellem Schreiben der Datei blieb
+`POST /api/auth/login` bis zum Neustart bei 503 „Anmeldung ist noch nicht eingerichtet.“, siehe
+Abschnitt 4). `docs/BETRIEB-UND-ARCHITEKTUR.md` dokumentiert diese Neustartpflicht nur an einer
+einzigen, engen Stelle (Abschnitt „Wiederherstellungscode nachtragen“: „`scripts/set_auth_password.py
+--nur-recovery-code`, dann Dienst neu starten“) — nicht als allgemeine Aussage für jede
+Auth-Datei-Änderung, insbesondere nicht für die reguläre Ersteinrichtung eines Startpassworts. Das
+Skript `scripts/set_auth_password.py` selbst gibt zwar bei jedem Lauf „Bitte den Finanzstudio-Dienst
+jetzt neu starten.“ aus, das ersetzt aber keine Aussage in der Architekturübersicht, die als
+Nachschlagewerk für Betriebs-Handgriffe dient.
+**Betroffene Datei:** `docs/BETRIEB-UND-ARCHITEKTUR.md`, Abschnitt 4 „Wie sicher es ist“.
+**Hinweis:** Kein Code geändert; ich habe lediglich einen unverbindlichen Doku-Ergänzungsvorschlag
+als Hintergrund-Aufgabe hinterlegt (siehe Abschnitt 4).
 
 ## 3. Nicht geprüft / Einschränkungen
 
-- **Login-Flow mit gültigem Passwort** (Anmeldung, Sperre nach Fehlversuchen mit echtem Konto,
-  Session-Cookie live im Browser, Abmelden, Ersteinrichtung, Passwortwechsel, Recovery-Code-Flow,
-  „`/` zeigt nach Login das neue Frontend“, „`/neu/` und `/studio/` nur angemeldet erreichbar“ positiv):
-  nicht testbar, da auf Instanz 8056 kein Startpasswort hinterlegt war und ich weder ein
-  Startpasswort erzeugen durfte (kein Schreibzugriff auf `instance/auth.json` außerhalb meines
-  Temp-Verzeichnisses) noch eines mitgeteilt bekam. Das rein negative Verhalten (401/303 ohne
-  Sitzung, öffentliche Pfade) wurde vollständig geprüft.
-- **Session-Cookie-Attribute live im Browser** (`Set-Cookie`-Header nach echtem Login) nur per
-  Code-Review bestätigt (siehe QA4-Tabelle 1.5), nicht live beobachtet — Folge des obigen Punkts.
+- **Login-Flow mit gültigem Passwort** — inzwischen vollständig nachgeholt, siehe Abschnitt 4
+  „Nachtrag Login“ (Anmeldung, Sperre nach Fehlversuchen, Session-Cookie-Attribute, Ersteinrichtung,
+  Passwortwechsel, Abmelden, `/` zeigt neues Frontend, `/neu/`/`/studio/` angemeldet erreichbar —
+  alles live bestätigt). Offen geblieben: der Recovery-Code-Flow mit einem *gültigen* Code (auf
+  Wunsch der Koordination ausgelassen, siehe Abschnitt 4) und die Cookie-Prüfung mit einem *echten*
+  Browser statt `curl` (siehe nächster Punkt).
+- **Session-Cookie im echten Browser** (statt `curl`) nicht geprüft: Der `Set-Cookie`-Header enthält
+  `Secure`, obwohl Instanz 8056 nur über `http://127.0.0.1:8056` (kein TLS) läuft. `curl` prüft das
+  Secure-Attribut nicht gegen das Protokoll und speichert/sendet das Cookie anstandslos — ob ein
+  echter Browser das Cookie unter `http://127.0.0.1` ebenfalls akzeptiert (Chromium behandelt
+  `127.0.0.1`/`localhost` als „potenziell vertrauenswürdigen Ursprung“ und würde es laut Spezifikation
+  annehmen) oder stillschweigend verwirft, wurde nicht mit einem echten Browser gegen diese Instanz
+  verifiziert.
 - **Verhalten bei nicht erreichbarem Ollama** nur per Code-Review beurteilt (Ollama durfte laut
   Auftrag nicht gestoppt werden).
 - **Datei-Upload direkt über die Browser-Oberfläche** (`<input type=file>`/Kamera-Button) nicht
@@ -270,51 +294,49 @@ Der Login mit dem korrekten Wegwerf-Passwort blieb daher bis zum Ende meiner Sit
 blockiert — ich konnte die Sperre selbst live bestätigen, aber keine erfolgreiche Anmeldung mehr
 durchführen.
 
-**Live geprüft (vor Eintritt der Sperre):**
+**Zwischenstand (vor dem zweiten Neustart):** Ich hatte mich beim Testen der Fehlversuchs-Sperre
+(5 Fehlversuche vom selben Client `127.0.0.1` → `429`, danach auch das *korrekte* Passwort blockiert,
+da die Sperre vor der Passwortprüfung greift) selbst für 15 Minuten ausgesperrt. Die Koordination hat
+die Instanz daraufhin erneut neu gestartet, was die In-Memory-Sperre zurücksetzte. Danach wurde der
+positive Login-Flow mit maximal 2 bewusst falschen Versuchen zu Ende geprüft (tatsächlich nur 1
+benötigt, siehe unten).
+
+**Live geprüft (nach dem zweiten Neustart, mit dem gesetzten Wegwerf-Startpasswort):**
 
 | Prüfpunkt | Ergebnis |
 |---|---|
-| `POST /api/auth/login` mit falschem Passwort nach Neustart | OK — 401 „Passwort ist nicht korrekt.“ (statt vorher 503) |
-| Sperre nach Fehlversuchen (Rate-Limit) | **OK, funktioniert korrekt** — 5 Fehlversuche vom selben Client (`127.0.0.1`, kumulativ inkl. des Verifikationsversuchs der Koordination) führten zu `429 {"detail":"Zu viele Fehlversuche. Bitte spaeter erneut versuchen."}`; danach blieb auch der Versuch mit dem *korrekten* Passwort mit 429 blockiert (Sperre prüft vor der Passwortprüfung) |
-| Anmeldung mit korrektem Passwort | **Nicht mehr möglich** — durch die selbst ausgelöste Sperre blockiert (429), s. o. |
-| Session-Cookie-Attribute live (`Set-Cookie` nach echtem Login) | **Nicht mehr live geprüft** — Login kam nicht mehr zustande. Codeprüfung unverändert wie in Abschnitt 1.5: `__Host-finanz_session`, `secure=True`, `httponly=True`, `samesite="strict"`, `path="/"` |
-| `/` zeigt nach Login das neue Frontend | Nicht mehr live geprüft (kein erfolgreicher Login mehr möglich) |
-| `/neu/`, `/studio/` nur angemeldet erreichbar (positiver Fall) | Nicht mehr live geprüft; negativer Fall (nicht angemeldet → 303) bereits in Abschnitt 1.5 bestätigt |
-| Ersteinrichtungspflicht (`must_change_password`) nach Startpasswort-Login | Nicht mehr live geprüft (kein Login mehr möglich); Codeprüfung: `auth_state()` liefert `must_change_password` aus der Konfiguration, `AuthMiddleware.dispatch` leitet bei gesetztem Flag auf `/password-setup.html` um bzw. liefert 403 für API-Pfade außerhalb `INITIAL_SETUP_PATHS` — konsistent mit der in `tests/test_auth_lifecycle.py` abgedeckten Erwartung |
-| Passwortwechsel (`POST /api/auth/change-password`) | Nicht live geprüft (erfordert Sitzung) |
-| Abmelden (`POST /api/auth/logout`) | Nicht live geprüft (erfordert Sitzung); Code sieht `revoke_session` + `delete_cookie` mit denselben sicheren Attributen vor |
-| Recovery-Code-Fluss (`POST /api/auth/recover`) | Nicht mit dem echten, gültigen Recovery-Code live geprüft (das hätte einen erfolgreichen Aufruf ohne bestehende Sitzung ausgelöst und wäre unabhängig von der Login-Sperre möglich gewesen — wurde aber aus Zeitgründen zugunsten der Berichtsfertigstellung nicht mehr nachgeholt); mit **falschem** Code bereits vor dem Neustart als 401 bestätigt (Abschnitt 1.5) |
+| Anmeldung mit korrektem Startpasswort (`POST /api/auth/login`) | **OK** — 204, `Set-Cookie` gesetzt |
+| Session-Cookie-Attribute live im Response | **OK, vollständig bestätigt:** `__Host-finanz_session=…; HttpOnly; Max-Age=43200; Path=/; SameSite=strict; Secure` — erfüllt alle `__Host-`-Vorgaben (Secure gesetzt, kein `Domain`-Attribut, `Path=/`); `Max-Age=43200` = 12 h wie in `SESSION_SECONDS` vorgesehen. **Secure-Verhalten über http:** Der Header selbst trägt `Secure`, obwohl die Instanz nur über `http://127.0.0.1:8056` (kein TLS) angesprochen wird — `curl` speichert/sendet das Cookie trotzdem anstandslos, weil `curl` das Secure-Attribut nicht gegen das Transportprotokoll prüft. Echte Browser behandeln `127.0.0.1`/`localhost` als „potenziell vertrauenswürdigen Ursprung“ (Chromium-Sonderregel) und akzeptieren `Secure`-Cookies dort auch über Klartext-HTTP — dieses Verhalten wurde aber nur aus der Spezifikation abgeleitet, nicht mit einem echten Browser gegen diese Instanz nachvollzogen (siehe „Nicht geprüft“) |
+| `GET /api/auth/state` direkt nach Login | OK — `{"must_change_password": true}` |
+| Geschützte API mit gültiger Sitzung, aber offener Ersteinrichtung | OK abgesichert — `GET /api/sparten` → 403 „Ersteinrichtung erforderlich.“ |
+| `GET /` mit Sitzung, aber offener Ersteinrichtung | OK — 303 auf `/password-setup.html` |
+| `GET /password-setup.html` mit Sitzung | OK — 200 |
+| Ersteinrichtung abschließen (`POST /api/auth/initial-password`) | OK — 200, liefert einmaligen Recovery-Code; `must_change_password` wird `false` |
+| Alte Sitzung nach Ersteinrichtung | OK abgesichert — sofort widerrufen (`replace_config()` → `revoke_all_sessions()`), `GET /api/sparten` mit altem Cookie → 401 |
+| Erneute Anmeldung mit dem in der Ersteinrichtung gesetzten Passwort | OK — 204, neues Cookie, `must_change_password` jetzt `false` |
+| `GET /` mit gültiger, vollständig eingerichteter Sitzung | **OK — zeigt das neue Frontend** (`<title>Hohenegg Finanzstudio</title>`, lädt `app.js` aus `static-neu`; keine Spur von `/studio`-Inhalten außer dem Wortbestandteil „…studio“ in „Finanzstudio“) |
+| `GET /neu/` mit gültiger Sitzung | OK — 200 |
+| `GET /studio/` mit gültiger Sitzung | OK — 200 (im angemeldeten Zustand wie erwartet erreichbar) |
+| Passwortwechsel (`POST /api/auth/change-password`) | OK — 204 mit korrektem aktuellem Passwort |
+| Alte Sitzung nach Passwortwechsel | OK abgesichert — sofort widerrufen, `GET /api/sparten` → 401 |
+| Anmeldung mit dem *alten* Passwort nach dem Wechsel (bewusster Fehlversuch, 1 von max. 2) | OK abgesichert — 401 „Passwort ist nicht korrekt.“ |
+| Anmeldung mit dem *neuen* Passwort nach dem Wechsel | OK — 204, neues Cookie |
+| Abmelden (`POST /api/auth/logout`) | **OK, vollständig bestätigt** — 204, `Set-Cookie: __Host-finanz_session=""; expires=<sofort>; HttpOnly; Max-Age=0; Path=/; SameSite=strict; Secure` (Löschung mit denselben sicheren Attributen); Sitzung direkt danach ungültig (`GET /api/sparten` → 401) |
+| Recovery-Code-Fluss (`POST /api/auth/recover`) | **Ausgelassen** wie von der Koordination angewiesen — war zuvor von der Werkzeug-Berechtigungsprüfung als „Konto-/Sicherheitseinstellung ändern“ blockiert worden (kein erneuter Versuch); mit **falschem** Code bereits als 401 bestätigt (Abschnitt 1.5) |
 
-**Ergebnis dieses Nachtrags:** Der wichtigste ursprünglich offene Punkt aus QA4-07 — „liest die App
-ein manuell gesetztes Startpasswort nur beim Start?“ — ist jetzt geklärt: **Ja, ein Neustart ist
-zwingend nötig** (siehe Befund oben). Der positive Login-Flow (erfolgreiche Anmeldung, Cookie im
-Browser, Ersteinrichtung, Passwortwechsel, Abmelden, Recovery mit gültigem Code) bleibt trotz
-gesetztem Startpasswort **weiterhin ungeprüft**, weil ich mir die Sperre durch den vorgelagerten
-Rate-Limit-Test selbst zugezogen habe und laut Auftrag weder warten noch erneut neu starten sollte.
-Für einen vollständigen Abschluss müsste entweder die 15-Minuten-Sperre verstreichen oder die Instanz
-erneut neu gestartet werden (löscht die In-Memory-Sperre), danach kann mit dem in
-`C:\Users\lblet\AppData\Local\Temp\qa-8056\_start-credentials.txt` hinterlegten Wegwerf-Passwort
-sofort weitergetestet werden.
+**Ergebnis dieses Nachtrags:** Der komplette Login-Fluss auf Instanz 8056 wurde jetzt end-to-end
+live bestätigt und arbeitet in allen geprüften Punkten korrekt: Ersteinrichtungspflicht,
+Session-Widerruf bei jeder Passwortänderung, Cookie-Attribute (`__Host-`, `HttpOnly`, `SameSite=strict`,
+`Secure`, 12 h Gültigkeit), Weiterleitung aufs neue Frontend, Zugriff auf `/neu/` und `/studio/` im
+angemeldeten Zustand, Passwortwechsel und Abmelden. Einzige Einschränkung: der Recovery-Code-Fluss
+mit gültigem Code und das Secure-Cookie-Verhalten in einem *echten* Browser (statt `curl`) blieben
+ausgespart bzw. unverifiziert (siehe „Nicht geprüft“).
 
 ### Befund: Auth-Datei-Neustartpflicht nicht in der Betriebsdoku dokumentiert
 
-Auf Bitte der Koordination geprüft: `docs/BETRIEB-UND-ARCHITEKTUR.md` erwähnt einen nötigen
-Dienst-Neustart nur an einer einzigen, engen Stelle — beim Nachtragen eines Wiederherstellungscodes
-(„3. Wiederherstellungscode nachtragen … `scripts/set_auth_password.py --nur-recovery-code`, dann
-Dienst neu starten“). Eine **allgemeine** Aussage, dass *jede* manuelle Änderung der `auth.json`
-(insbesondere die reguläre Ersteinrichtung eines Startpassworts mit `scripts/set_auth_password.py`
-ohne `--nur-recovery-code`) einen Neustart erfordert, weil die Datei nur beim Prozessstart gelesen
-wird, steht dort **nicht**. Das Skript selbst gibt zwar bei jedem Lauf den Hinweis „Bitte den
-Finanzstudio-Dienst jetzt neu starten.“ aus, das ersetzt aber keine Doku-Aussage in der
-Architekturübersicht.
-
-**Schweregrad:** mittel (Betrieb/Dokumentation)
-**Empfehlung:** In `docs/BETRIEB-UND-ARCHITEKTUR.md`, Abschnitt 4 „Wie sicher es ist“ (nahe der Zeile
-zu scrypt-Hashes/`auth.json`), einen Satz ergänzen: „Jede manuelle Änderung der `auth.json`
-(`scripts/set_auth_password.py`, mit oder ohne `--nur-recovery-code`) erfordert einen Neustart des
-Dienstes, da die Datei nur beim Prozessstart gelesen wird.“ Ich habe dafür einen unverbindlichen
-Vorschlag als Hintergrund-Aufgabe hinterlegt (kein Code/Doku selbst geändert, wie in meinem Auftrag
-vorgesehen).
+Auf Bitte der Koordination geprüft — siehe **QA4-08** in Abschnitt 2 für den vollständigen Befund
+und die Empfehlung. Kurz: `docs/BETRIEB-UND-ARCHITEKTUR.md` dokumentiert die Neustartpflicht nur für
+den Sonderfall „Wiederherstellungscode nachtragen“, nicht allgemein für jede Auth-Datei-Änderung.
 
 ## 5. Gesamturteil
 
@@ -325,7 +347,9 @@ Fehlerbehandlung an allen getesteten Rändern (falsche Typen, fehlende Referenze
 Der wichtigste Fund ist ein reproduzierbarer, im Code eindeutig lokalisierter Bug bei der
 Übernahme-Wiederholungssperre (QA4-05, fehlendes `con.commit()`); daneben zeigt die lokale
 Foto-Auswertung bei 4 von 7 Testbildern Datums- oder Betragsabweichungen, die der Prüf-Dialog nicht
-automatisch erkennt und die Nutzer daher vor jeder Übernahme sorgfältig gegenlesen müssen. Login ohne
-Bypass konnte mangels Startpasswort nur teilweise (negativer Pfad) getestet werden; ein
-Wegwerf-Startpasswort ist inzwischen gesetzt (Abschnitt 4), der positive Login-Flow ist aber erst nach
-einem Neustart der Instanz 8056 durch die Koordination abschließend prüfbar.
+automatisch erkennt und die Nutzer daher vor jeder Übernahme sorgfältig gegenlesen müssen. Der
+Login-Fluss ohne Bypass wurde nach zwei Neustarts der Instanz 8056 (Auth-Datei wird nachweislich nur
+beim Prozessstart gelesen, QA4-08) vollständig end-to-end bestätigt — Ersteinrichtung, Session-Widerruf
+bei jeder Passwortänderung, Cookie-Attribute, Weiterleitungen und Abmelden funktionieren alle korrekt;
+offen blieben nur der Recovery-Code-Flow mit gültigem Code (ausgelassen) und die Cookie-Prüfung in
+einem echten Browser statt `curl`.
