@@ -27,6 +27,7 @@ from ..db import db_dep
 from ..bewegungen import synchronisiere_buchung
 from ..bereiche import Bereich, BereichDep, pruefe_sparte
 from ..schemas import kategorie_name_gueltig
+from ..uploads import lies_upload
 
 router = APIRouter(tags=["import"])
 
@@ -295,7 +296,7 @@ def import_excel(
         raise HTTPException(400, "modus muss 'pruefen' oder 'einspielen' sein")
     pruefe_sparte(con, sparte_id, bereich)
 
-    rohdaten = datei.file.read()
+    rohdaten = lies_upload(datei)
     if not rohdaten:
         raise HTTPException(400, "Datei ist leer")
 

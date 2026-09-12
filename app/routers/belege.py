@@ -18,6 +18,7 @@ from pydantic import BaseModel
 from ..backup import sicherungs_lock
 from ..db import DB_PATH, db_dep
 from ..bereiche import Bereich, BereichDep, pruefe_sparte, pruefe_beleg, pruefe_buchung
+from ..uploads import lies_upload
 
 router = APIRouter(tags=["belege"])
 
@@ -125,7 +126,7 @@ def upload_beleg(
         )
 
 
-    inhalt = datei.file.read()
+    inhalt = lies_upload(datei)
     sha256 = hashlib.sha256(inhalt).hexdigest()
 
     # Dublettenschutz: existiert bereits ein Beleg mit gleichem Hash,
