@@ -751,6 +751,26 @@ def erstatten_buchung(buchung_id: int, body: ErstattenIn,
         for zeile_row, z in zip(neue_zeilen, body.zeilen):
             con_.execute('UPDATE buchungszeile SET original_zeile_id = ? WHERE id = ?',
                         (z.original_zeile_id, zeile_row['id']))
+        # F2: Rest-Pruefung hier wiederholen, innerhalb derselben Transaktion
+        # (con_ haelt den BEGIN-IMMEDIATE-Lock von erstelle_buchung). Die
+        # Pruefung oben (vor der Transaktion) verhindert nur den Normalfall;
+        # parallele Erstattungen wuerden sie beide bestehen und die Zeile in
+        # Summe ueber den Originalbetrag hinaus mindern. Eine Exception hier
+        # rollt die gesamte Buchung zurueck (kein zweites BEGIN IMMEDIATE noetig).
+        for z in body.zeilen:
+            oz = original_zeilen[z.original_zeile_id]
+            gesamt_erstattet = con_.execute(
+                "SELECT COALESCE(SUM(bz.betrag_cent), 0) FROM buchungszeile bz "
+                "JOIN buchung b ON b.id = bz.buchung_id "
+                "WHERE bz.original_zeile_id = ? AND b.storniert_am IS NULL",
+                (z.original_zeile_id,),
+            ).fetchone()[0]
+            if gesamt_erstattet > oz['betrag_cent']:
+                raise HTTPException(422, detail={
+                    'detail': f'Erstattung uebersteigt den offenen Rest der Zeile {z.original_zeile_id}',
+                    'zeile_id': z.original_zeile_id,
+                    'rest_cent': max(0, oz['betrag_cent'] - (gesamt_erstattet - z.betrag_cent)),
+                })
 
     try:
         _antwort, neue_buchung_id = erstelle_buchung(
