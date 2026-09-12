@@ -277,11 +277,21 @@ class BereicheTest(unittest.TestCase):
         with patch.object(app.state, "schreibgeschuetzt", True), patch.object(app.state, "migrationsfehler", "Migration 3 fehlgeschlagen"):
             asyncio.run(start())
             self.assertIsNone(self.con.execute("SELECT 1 FROM sqlite_master WHERE name='bereich'").fetchone())
-            for method, url in (("GET", "/api/sparten"), ("POST", "/api/buchungen")):
-                with self.subTest(url=url):
-                    status, result = self.request(method, url, self.payload() if method == "POST" else None)
-                    self.assertEqual(503, status)
-                    self.assertIn("Nachzug", result["detail"])
+            # GET /api/sparten: 503 kommt von BereichDep selbst (fehlendes
+            # Bereichsschema), nicht von der schreibschutz_middleware (die nur
+            # POST/PUT/PATCH/DELETE abfaengt) - Text bleibt unveraendert.
+            status, result = self.request("GET", "/api/sparten")
+            self.assertEqual(503, status)
+            self.assertIn("Nachzug", result["detail"])
+            # POST /api/buchungen: 503 kommt von der schreibschutz_middleware.
+            # F6: der Text ist generisch - Details gibt es nur ueber den
+            # angemeldeten /api/schema-Endpunkt.
+            status, result = self.request("POST", "/api/buchungen", self.payload())
+            self.assertEqual(503, status)
+            self.assertEqual("Datenbank derzeit schreibgeschuetzt", result["detail"])
+            schema_status, schema = self.request("GET", "/api/schema")
+            self.assertEqual(200, schema_status)
+            self.assertIn("Migration 3", schema["fehler"])
 
             from app import auth
             manager = auth.AuthManager(auth.AuthSettings(auth.hash_password("P10-Testpasswort-2026"), b"x" * 32))

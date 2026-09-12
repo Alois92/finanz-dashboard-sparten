@@ -447,7 +447,7 @@ def _bereinige_store(ordner: Path) -> None:
             manifest = json.loads(manifest_pfad.read_text(encoding="utf-8"))
             if manifest.get("version", 1) >= 2:
                 referenzen.update(
-                    (eintrag["sha256"], eintrag["dateiname"])
+                    _store_pfad(ordner, eintrag["sha256"], eintrag["dateiname"]).resolve()
                     for eintrag in manifest.get("belege", [])
                 )
         except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
@@ -456,7 +456,7 @@ def _bereinige_store(ordner: Path) -> None:
     if not store.is_dir():
         return
     for pfad in store.rglob("*"):
-        if pfad.is_file() and (pfad.stem, pfad.name[len(pfad.stem):]) not in referenzen:
+        if pfad.is_file() and pfad.resolve() not in referenzen:
             try:
                 pfad.unlink()
             except OSError:

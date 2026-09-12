@@ -26,6 +26,7 @@ from .. import abgleich
 
 from ..db import db_dep
 from ..bewegungen import import_bewegung, synchronisiere_buchung
+from ..uploads import lies_upload
 from ..bereiche import (
     Bereich, BereichDep, pruefe_sparte, pruefe_kategorie, pruefe_konto,
     pruefe_umsatz, pruefe_regel,
@@ -232,7 +233,7 @@ def import_csv(
     pruefe_konto(con, bankkonto_id, bereich)
     if con.execute("SELECT art FROM bankkonto WHERE id=?", (bankkonto_id,)).fetchone()[0] == 'kassa':
         raise HTTPException(422, 'Kassenkonten sind vom CSV-Import ausgeschlossen')
-    rohbytes = datei.file.read()
+    rohbytes = lies_upload(datei)
     if not rohbytes:
         raise HTTPException(400, "Datei ist leer")
     text, kodierung = dekodiere(rohbytes)

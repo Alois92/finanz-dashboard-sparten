@@ -302,6 +302,40 @@ Der Nutzer öffnet `https://192.168.1.254:8006`, meldet sich an und öffnet die
    pct exec 101 -- bash -lc "systemctl status finanz --no-pager | head -12; journalctl -u finanz -n 40 --no-pager"
    ```
 
+4b. **Prüfschritt aus Sicherheitsaudit run-1 (12.09.):** Der Gerätefilter
+   (`FINANZ_ALLOWED_CLIENT_IPS`, siehe `docs/SICHERHEIT.md`) liest die Adresse
+   des Aufrufers aus `request.client`, das uvicorn nur bei aktivierter
+   Proxy-Header-Auswertung korrekt aus `X-Forwarded-For` befüllt. Ohne diese
+   Flags ist der Filter wirkungslos (jeder Tailnet-Peer erscheint als
+   127.0.0.1) oder — bei `FORWARDED_ALLOW_IPS=*` — per Header spoofbar.
+
+   ```sh
+   pct exec 101 -- bash -lc "systemctl cat finanz.service | grep -i execstart"
+   ```
+
+   Erwartet: `ExecStart` enthält `--proxy-headers --forwarded-allow-ips=127.0.0.1`
+   (uvicorn ≥ 0.34 aktiviert `proxy_headers` zwar standardmäßig, das explizite
+   Flag bleibt trotzdem Pflicht — ein Update oder eine geänderte ExecStart-Zeile
+   darf sich nicht stillschweigend darauf verlassen). Fehlt es, in einem
+   Drop-in ergänzen, `daemon-reload` und `restart`.
+
+   Danach von einem **nicht freigegebenen** Tailnet-Gerät (nicht `nb-lois`,
+   nicht `s24-ultra-von-lois`, nicht `s24-ultra-von-theresia`) testen:
+
+   ```sh
+   curl -sk -o /dev/null -w '%{http_code}\n' https://finanz.tailb1b087.ts.net/api/health
+   ```
+
+   Erwartet: `403`. Zusätzlich mit gefälschtem Header von einem freigegebenen
+   Gerät aus prüfen, dass sich der Filter nicht per Header umgehen lässt:
+
+   ```sh
+   curl -sk -o /dev/null -w '%{http_code}\n' -H 'X-Forwarded-For: 100.105.4.18' https://finanz.tailb1b087.ts.net/api/health
+   ```
+
+   Erwartet: weiterhin `403`, wenn das eigene Gerät nicht in der Allowlist
+   steht (der echte, von uvicorn ermittelte Peer zählt, nicht der Header-Wert).
+
 5. **Oberfläche auf den Neubau umschalten.** Solange `FINANZ_FRONTEND` nicht
    gesetzt ist, liefert `/` weiterhin `static-studio`; die Anmeldung führt nach
    erfolgreichem Login auf `/` und damit ins alte Studio (Befund 2 der Abnahme

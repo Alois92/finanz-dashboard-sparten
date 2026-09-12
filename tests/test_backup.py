@@ -146,6 +146,59 @@ class BackupTest(unittest.TestCase):
         hashwert = hashlib.sha256(b"A").hexdigest()
         self.assertTrue((self.target.parent / "belege-store" / hashwert[:2] / f"{hashwert}.pdf").exists())
 
+    def _valide_leere_sqlite_datei(self, pfad):
+        pfad.parent.mkdir(parents=True, exist_ok=True)
+        con = sqlite3.connect(pfad)
+        con.execute("CREATE TABLE marker(wert TEXT)")
+        con.commit()
+        con.close()
+
+    def test_bereinigung_loescht_nur_unreferenzierte_store_dateien(self):
+        """F4: _bereinige_store verglich Referenzen als (sha256, Originalname)
+        gegen Store-Dateien als (sha256, Endung) - das passt nie, jede
+        Store-Datei wurde geloescht. Regressionstest mit mehr als
+        BACKUP_AUFBEWAHREN Tageskopien, echten Manifesten und befuelltem Store."""
+        belege = self._lege_belege_an(("a.pdf", b"A"), ("b.pdf", b"B"))
+        backup_dir = self.source.parent / "backup"
+        heute = dt.date.today()
+        # 32 Tageskopien: mehr als BACKUP_AUFBEWAHREN (30), damit rotiert wird.
+        tage = [(heute - dt.timedelta(days=offset)).isoformat() for offset in range(31, -1, -1)]
+        # Erst alle Manifeste schreiben (ohne Tageskopien auf der Platte, damit
+        # _sichere_belege's eigener _rotiere-Aufruf noch nichts tut), danach
+        # erst die Tageskopien anlegen und einmal gezielt rotieren.
+        for index, datum in enumerate(tage):
+            if index == 1:
+                # Beleg A aendert sich nach der aeltesten Tageskopie; der alte
+                # Hash ist danach nur noch im (bald rotierten) ersten Manifest
+                # referenziert.
+                (belege / "1" / "1_a.pdf").write_bytes(b"A-neu")
+            self._sichere_belege(datum)
+        for datum in tage:
+            self._valide_leere_sqlite_datei(backup_dir / f"finanz-{datum}.db")
+
+        alter_hash_a = hashlib.sha256(b"A").hexdigest()
+        neuer_hash_a = hashlib.sha256(b"A-neu").hexdigest()
+        hash_b = hashlib.sha256(b"B").hexdigest()
+        store = backup_dir / "belege-store"
+        self.assertTrue((store / alter_hash_a[:2] / f"{alter_hash_a}.pdf").is_file())
+
+        with patch.object(backup, "_bereinige_store", wraps=backup._bereinige_store) as bereinigen:
+            backup._rotiere(backup_dir)
+            bereinigen.assert_called()
+
+        # Alter Hash von A war nur im aeltesten (jetzt geloeschten) Manifest
+        # referenziert und darf jetzt weg sein.
+        self.assertFalse((store / alter_hash_a[:2] / f"{alter_hash_a}.pdf").exists())
+        # Aktueller Hash von A und der unveraenderte Beleg B bleiben erhalten,
+        # weil die 30 behaltenen Manifeste sie weiterhin referenzieren.
+        self.assertTrue((store / neuer_hash_a[:2] / f"{neuer_hash_a}.pdf").is_file())
+        self.assertTrue((store / hash_b[:2] / f"{hash_b}.pdf").is_file())
+
+        behaltener_tag = tage[-1]
+        with patch.object(backup, "DB_PATH", self.source):
+            pruefung = backup.pruefe_sicherung(behaltener_tag)
+        self.assertEqual(0, pruefung["belege_fehlend"])
+
     def test_altes_manifest_bleibt_pruefbar(self):
         self._lege_belege_an(("rechnung.pdf", b"A"))
         self._sichere()

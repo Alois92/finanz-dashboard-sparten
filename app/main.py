@@ -9,6 +9,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from .auswertung import auswertung_schleife
@@ -64,6 +65,29 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Finanz-Dashboard Sparten", version="0.1.0", lifespan=lifespan)
 app.state.schreibgeschuetzt = False
 app.state.migrationsfehler = None
+
+
+async def schreibschutz_middleware(request: Request, call_next):
+    if (
+        request.method in {"POST", "PUT", "PATCH", "DELETE"}
+        and not request.url.path.startswith("/api/auth/")
+        and getattr(request.app.state, "schreibgeschuetzt", False)
+    ):
+        # F6: generischer Text - Details (Migrationsnummer, SQL-Fehler, ggf.
+        # Pfade) nur ueber den angemeldeten /api/schema-Endpunkt.
+        return JSONResponse(
+            {"detail": "Datenbank derzeit schreibgeschuetzt"},
+            status_code=503,
+        )
+    return await call_next(request)
+
+
+# F6: Schreibschutz muss die INNERSTE Middleware sein (zuerst registriert),
+# damit Geraetefilter (TrustedHost) und Anmeldung (Auth) vorher laufen - sonst
+# antwortet ein nicht freigegebenes, nicht angemeldetes Geraet im
+# schreibgeschuetzten Zustand mit 503 statt 403/401 (Starlette baut den Stack
+# umgekehrt: zuletzt hinzugefuegt = aussen).
+app.add_middleware(BaseHTTPMiddleware, dispatch=schreibschutz_middleware)
 app.add_middleware(AuthMiddleware)
 app.add_middleware(
     TrustedHostMiddleware,
@@ -93,21 +117,6 @@ app.include_router(import_excel.router, prefix="/api")
 app.include_router(kredite.router, prefix="/api")
 app.include_router(kennzahlen.router, prefix="/api")
 app.include_router(betrieb.router, prefix="/api")
-
-
-@app.middleware("http")
-async def schreibschutz_middleware(request: Request, call_next):
-    if (
-        request.method in {"POST", "PUT", "PATCH", "DELETE"}
-        and not request.url.path.startswith("/api/auth/")
-        and getattr(request.app.state, "schreibgeschuetzt", False)
-    ):
-        fehler = getattr(request.app.state, "migrationsfehler", None) or "unbekannt"
-        return JSONResponse(
-            {"detail": f"Datenbank-Nachzug fehlgeschlagen: {fehler}"},
-            status_code=503,
-        )
-    return await call_next(request)
 
 
 def _saubere_validierungswert(wert):

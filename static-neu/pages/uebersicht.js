@@ -170,7 +170,7 @@ function renderHints(root, state, data, load) {
     return;
   }
   el.innerHTML = hints.map((h, i) => `<div class="hint-row">
-      <div>${h.text}</div>
+      <div>${esc(h.text)}</div>
       <button type="button" class="btn small go" data-i="${i}">Buchungen zeigen</button>
       <button type="button" class="x" data-i="${i}" title="ausblenden, bis sich die Zahl ändert" aria-label="Hinweis ausblenden">×</button>
     </div>`).join('');

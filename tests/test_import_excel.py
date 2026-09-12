@@ -149,6 +149,42 @@ class ImportExcelApiTest(unittest.TestCase):
 
         self.assertEqual(bericht["neue_kategorien"], ["Lebensmittel", "Sonstiges"])
 
+    def test_boesartiger_spaltenkopf_erzeugt_warnung_und_keine_kategorie(self):
+        """F1: ein Spaltenkopf mit XSS-Payload darf keine Kategorie werden
+        (die landet ungefiltert im Hinweistext der Uebersicht) - stattdessen
+        Warnung und die Spalte wird ignoriert."""
+        con = get_connection()
+        self.addCleanup(con.close)
+
+        payload = '<img src=x onerror=alert(1)>'
+        kopfzeile = [
+            "Dat.", "Beleg", "Text", "Einnahmen", "Ausgaben",
+            None, None, None, None, None, None,
+            payload, "Sonstiges",
+        ]
+        kassabuch = _xlsx({
+            "Jaenner": [
+                kopfzeile,
+                SUBHEADER,
+                [dt.date(2026, 1, 5), "B1", "Wocheneinkauf", None, 45.50,
+                 None, None, None, None, None, None, 45.50, None],
+            ]
+        })
+
+        bericht = self._import(kassabuch, "pruefen", con)
+
+        self.assertNotIn(payload, bericht["neue_kategorien"])
+        self.assertTrue(
+            any("ungueltig" in w.lower() or "Spaltenkopf" in w for w in bericht["warnungen"]),
+            bericht["warnungen"],
+        )
+
+        self._import(kassabuch, "einspielen", con)
+        vorhanden = con.execute(
+            "SELECT COUNT(*) AS n FROM kategorie WHERE name = ?", (payload,)
+        ).fetchone()["n"]
+        self.assertEqual(0, vorhanden)
+
     def test_leere_vorlage_erzeugt_warnung(self):
         """Aufgabe 1: eine Datei ohne jede Betragszeile darf nicht stillschweigend
         0 Buchungen und 0 Warnungen liefern."""

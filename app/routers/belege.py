@@ -8,6 +8,7 @@ temporaeren Test-DB ebenfalls ephemer.
 import hashlib
 import mimetypes
 import pathlib
+import re
 import sqlite3
 
 from fastapi import (APIRouter, Depends, File, Form, HTTPException, UploadFile)
@@ -17,6 +18,7 @@ from pydantic import BaseModel
 from ..backup import sicherungs_lock
 from ..db import DB_PATH, db_dep
 from ..bereiche import Bereich, BereichDep, pruefe_sparte, pruefe_beleg, pruefe_buchung
+from ..uploads import lies_upload
 
 router = APIRouter(tags=["belege"])
 
@@ -48,6 +50,27 @@ def _belege_verzeichnis(sparte_id: int | None) -> pathlib.Path:
 
 def _endung(dateiname: str) -> str:
     return pathlib.Path(dateiname).suffix.lower().lstrip(".")
+
+
+# F5: Dateiname kommt roh vom Client; ".."-Segmente wuerden unter Windows aus
+# dem Belegordner ausbrechen (lexikalische Pfadnormalisierung). .name kappt
+# alle Verzeichnisanteile, danach werden Steuerzeichen entfernt und die Laenge
+# begrenzt.
+_STEUERZEICHEN = re.compile(r"[\x00-\x1f\x7f]")
+
+
+def _sichere_dateiname(roh: str, maximal: int = 120) -> str:
+    pfad = pathlib.Path(roh or "unbenannt")
+    name = _STEUERZEICHEN.sub("", pfad.name).strip()
+    if not name:
+        name = "unbenannt"
+    if len(name) > maximal:
+        # Endung erhalten (fuer die Endungspruefung/den Medientyp), nur den
+        # Namensteil kuerzen.
+        endung = pathlib.Path(name).suffix
+        stamm = name[: max(1, maximal - len(endung))]
+        name = stamm + endung
+    return name[:maximal]
 
 
 def _medientyp(dateiname: str) -> str:
@@ -93,7 +116,7 @@ def upload_beleg(
 ):
     if sparte_id is not None:
         pruefe_sparte(con, sparte_id, bereich)
-    original = datei.filename or "unbenannt"
+    original = _sichere_dateiname(datei.filename or "unbenannt")
     endung = _endung(original)
     if endung not in ERLAUBTE_ENDUNGEN:
         raise HTTPException(
@@ -103,7 +126,7 @@ def upload_beleg(
         )
 
 
-    inhalt = datei.file.read()
+    inhalt = lies_upload(datei)
     sha256 = hashlib.sha256(inhalt).hexdigest()
 
     # Dublettenschutz: existiert bereits ein Beleg mit gleichem Hash,
@@ -128,8 +151,18 @@ def upload_beleg(
         )
         beleg_id = cur.lastrowid
 
-        ziel = _belege_verzeichnis(sparte_id) / f"{beleg_id}_{original}"
-        ziel.write_bytes(inhalt)
+        basis = _belege_verzeichnis(sparte_id).resolve()
+        ziel = basis / f"{beleg_id}_{original}"
+        try:
+            ziel.resolve().relative_to(basis)
+        except ValueError:
+            con.rollback()
+            raise HTTPException(400, "Ungueltiger Dateiname")
+        try:
+            ziel.write_bytes(inhalt)
+        except OSError:
+            con.rollback()
+            raise HTTPException(400, "Datei konnte nicht gespeichert werden")
 
         con.execute(
             "UPDATE beleg SET pfad = ? WHERE id = ?", (str(ziel), beleg_id)

@@ -35,6 +35,13 @@ class MigrationsprotokollApiTest(unittest.TestCase):
     request = bereiche_tests.BereicheTest.request
 
     def test_endpunkt_liefert_protokoll_mit_bereichsdependency(self):
+        # F8: 'umbuchungsgruppe:'-Eintraege werden ueber die Buchungen der
+        # Gruppe gefiltert - hier eine Umbuchung mit dieser Gruppen-ID im
+        # Haupt-Bereich anlegen, damit der Eintrag dort sichtbar bleibt.
+        self.con.execute(
+            "INSERT INTO buchung(sparte_id, datum, typ, transfer_gruppe_id) "
+            "VALUES(?, '2026-01-01', 'umbuchung', 'offen')", (self.haupt,)
+        )
         self.con.execute(
             "INSERT INTO migrationsprotokoll(version, art, objektkennung, hinweis) "
             "VALUES(4, 'umbuchung_ungeklaert', 'umbuchungsgruppe:offen', "
@@ -46,6 +53,41 @@ class MigrationsprotokollApiTest(unittest.TestCase):
         self.assertEqual("umbuchung_ungeklaert", result[0]["art"])
         self.assertIn("nicht eindeutig", result[0]["hinweis"])
         self.assertEqual(404, self.request("GET", "/api/betrieb/migrationsprotokoll?bereich_id=999")[0])
+
+    def test_eintraege_anderer_bereiche_sind_nicht_sichtbar(self):
+        """F8: 'buchung:<id>'-Eintraege werden ueber buchung->sparte->bereich_id
+        gefiltert - eine Buchung in Bereich 2 (Verein) darf im Protokoll von
+        Bereich 1 (Haupt) nicht auftauchen, und umgekehrt."""
+        haupt_buchung = self.buchungen[self.haupt]
+        verein_buchung = self.buchungen[self.verein]
+        self.con.execute(
+            "INSERT INTO migrationsprotokoll(version, art, objektkennung, hinweis) VALUES"
+            "(4, 'barbuchung_ungeklaert', ?, 'Haupt-Hinweis'),"
+            "(4, 'barbuchung_ungeklaert', ?, 'Verein-Hinweis')",
+            (f"buchung:{haupt_buchung}", f"buchung:{verein_buchung}"),
+        )
+        self.con.commit()
+
+        status, haupt_ergebnis = self.request("GET", "/api/betrieb/migrationsprotokoll?bereich_id=1")
+        self.assertEqual(200, status)
+        self.assertEqual(["Haupt-Hinweis"], [r["hinweis"] for r in haupt_ergebnis])
+
+        status, verein_ergebnis = self.request("GET", "/api/betrieb/migrationsprotokoll?bereich_id=2")
+        self.assertEqual(200, status)
+        self.assertEqual(["Verein-Hinweis"], [r["hinweis"] for r in verein_ergebnis])
+
+    def test_eintraege_ohne_buchungsbezug_bleiben_sichtbar(self):
+        self.con.execute(
+            "INSERT INTO migrationsprotokoll(version, art, objektkennung, hinweis) "
+            "VALUES(4, 'sonstiges', 'sonstiges:1', 'Ohne Buchungsbezug')"
+        )
+        self.con.commit()
+        status, result = self.request("GET", "/api/betrieb/migrationsprotokoll?bereich_id=1")
+        self.assertEqual(200, status)
+        self.assertIn("Ohne Buchungsbezug", [r["hinweis"] for r in result])
+        status, result = self.request("GET", "/api/betrieb/migrationsprotokoll?bereich_id=2")
+        self.assertEqual(200, status)
+        self.assertIn("Ohne Buchungsbezug", [r["hinweis"] for r in result])
 
 
 if __name__ == "__main__":
