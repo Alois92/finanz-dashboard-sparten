@@ -78,10 +78,21 @@ Vorerst dürfen nur diese drei persönlichen Geräte auf die Finanz-App zugreife
 - Handy `s24-ultra-von-theresia`
 
 Die Tailscale-Zugriffsregel muss HTTPS-Zugriff auf den Knoten `finanz` nur von
-diesen Geräten erlauben. Zusätzlich prüft die Anwendung die von Tailscale Serve
-übergebene Geräteadresse selbst. Standardmäßig sind die IPv4- und IPv6-Adressen
-genau dieser drei Geräte sowie die lokale Serveradresse freigegeben. Ein anderes
-Tailnet-Gerät erhält bereits vor der Passwortabfrage HTTP 403.
+diesen Geräten erlauben. Zusätzlich prüft die Anwendung selbst die
+Geräteadresse - **nicht** durch eigene Auswertung von Tailscale-/Proxy-Headern,
+sondern über `request.client`, das uvicorn aus dem `X-Forwarded-For`-Header
+befüllt, wenn es mit `--proxy-headers --forwarded-allow-ips=127.0.0.1`
+gestartet wird (uvicorn ≥ 0.34 setzt `proxy_headers=True` standardmäßig; das
+explizite Flag in `ExecStart` bleibt trotzdem Pflicht, siehe
+`docs/BETRIEB-UND-ARCHITEKTUR.md` Abschnitt 11). Läuft der Dienst ohne
+Proxy-Header-Auswertung oder mit `FORWARDED_ALLOW_IPS=*`, ist der Gerätefilter
+wirkungslos bzw. per Header spoofbar. Standardmäßig sind die IPv4- und
+IPv6-Adressen genau dieser drei Geräte sowie die lokale Serveradresse
+freigegeben. Ein anderes Tailnet-Gerät erhält bereits vor der Passwortabfrage
+HTTP 403 - vorausgesetzt, die Middleware-Reihenfolge stimmt: Gerätefilter und
+Anmeldung laufen vor jeder anderen Anwendungslogik (auch vor dem
+Schreibschutz nach einem fehlgeschlagenen Datenbank-Nachzug, siehe
+Sicherheitsaudit run-1 Befund F6 in `docs/neubau/SCHULDEN.md`).
 
 Falls ein Gerät in Tailscale neu angelegt wird und dadurch eine neue Adresse
 erhält, muss `FINANZ_ALLOWED_CLIENT_IPS` am Dienst aktualisiert werden. Vor einer

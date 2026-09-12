@@ -182,3 +182,39 @@ verlässlicher Messung (`clientWidth`), Bericht `berichte/QA-5-handy-375px.md`.
 **P73 Mobil-Navigation** gemergt (12.09. nachts, Abnahme `P73.md`): QA5-01 bis QA5-04 erledigt. Offen bleibt nur die
 Umstellung auf CT 101 (Abschnitt 11 der Betriebsdoku, mit dem Nutzer) inklusive P43c und der CPU-Laufzeit des
 KI-Vorschlags; danach die Handy-Prüfung der Dialoge „Zuordnen“, „Beleg prüfen“, „Jahr bestätigen“ mit echten Daten.
+
+## Sicherheitsaudit run-1 (12.09.)
+
+Erster Lauf im neuen Audit-Format (`docs/neubau/berichte/SECURITY-AUDIT-run1.md`,
+`SECURITY-AUDIT-run1-findings.json`), acht Befunde F1–F8, alle in
+`docs/neubau/berichte/SECURITY-fix-run1.md` mit Test-vorher-rot/Fix/Test-nachher-grün
+dokumentiert, Branch `fix/security-audit-run1`, je Befund ein Commit.
+
+| Nr. | Schwere | Titel | Status |
+|---|---|---|---|
+| F1 | HOCH | Gespeicherte XSS über Kategorienamen im Hinweise-Widget | behoben |
+| F2 | HOCH | Wettlauf bei Rückerstattungen (parallele Aufrufe über den Originalbetrag hinaus) | behoben |
+| F3 | HOCH | Wettlauf bei „Beleg-Auswertung übernehmen“ (mehrfache Verbuchung) | behoben |
+| F4 | HOCH | Backup-Rotation löschte den gesamten Belege-Store | behoben |
+| F5 | MITTEL | Pfadausbruch beim Beleg-Upload über den Dateinamen (nur Windows) | behoben |
+| F6 | NIEDRIG | Schreibschutz-Middleware vor Gerätefilter/Anmeldung, Migrationsfehler im 503-Text | behoben |
+| F7 | NIEDRIG | Kein Größenlimit für Uploads/Importe | behoben |
+| F8 | NIEDRIG | Migrationsprotokoll ohne Bereichsfilter | behoben |
+
+CSP (`Content-Security-Policy`-Header in `app/auth.py`) ist mit F1 erledigt. Aus den
+Härtungsnotizen des Audits bleiben offen (kein eigener Befund, aber vor der
+Umstellung auf CT 101 bzw. in einem der nächsten Kleinkram-Pakete zu entscheiden):
+
+| Nr. | Befund | Fällig |
+|---|---|---|
+| — | Mindestpasswortlänge 6 ohne Komplexität; 10–12 Zeichen sinnvoll. `AuthSettings.from_config` prüft zudem nicht die Mindestlänge des `session_secret`. | klein |
+| — | Recovery-Race: zwei gleichzeitige gültige Recovery-Aufrufe zeigen zwei Codes, nur einer wird gespeichert; Timing-Unterschied (4 ms vs. 80 ms) verrät, ob ein Code hinterlegt ist. | klein |
+| — | `/docs`, `/redoc`, `/openapi.json` sind angemeldet erreichbar; für eine Ein-Nutzer-App abschalten. | klein |
+| — | Auswertungswarteschlange ohne Obergrenze; Cap von z. B. 5 offenen Aufträgen sinnvoll. | klein |
+| — | `POST /api/betrieb/sicherung` ohne Rate-Limit; SQLite ohne `busy_timeout`/WAL lokal; `request_wiederholung`/`client_request_id` unbegrenzt. | klein |
+| — | `.gitignore` deckt `backup/` (Singular) und `belege-store/` nicht ab (bisher nie ein Geheimnis committet, Historie geprüft). | klein |
+| — | `scripts/umstellung_pruefung.py` akzeptiert `http://` und sendet den Cookie dann im Klartext; auf https-only umstellen. | klein |
+| — | `FINANZ_TEST_AUTH_BYPASS` ist über `TMPDIR` steuerbar; im Produktionsartefakt entfernen oder an `FINANZ_INSTANZ=test` koppeln. | klein |
+| — | IPv6-Adressen werden in `app/auth.py` als Strings verglichen; `ipaddress`-Modul verwenden. | klein |
+| — | starlette 0.41.3 hat eine Multipart-Spooling-DoS (behoben in 0.47.2), nur durch den angemeldeten Nutzer erreichbar; gegen aktuelle Advisories prüfen und aktualisieren. | klein |
+| — | Gerätefilter/Rate-Limit hängen an `request.client.host`: `--proxy-headers --forwarded-allow-ips=127.0.0.1` muss im `ExecStart` auf CT 101 stehen (Prüfschritt jetzt in Abschnitt 11 der Betriebsdoku). | Umstellung |

