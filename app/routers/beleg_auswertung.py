@@ -248,15 +248,23 @@ def auswertung_uebernehmen(
         # Laeuft innerhalb der Transaktion von erstelle_buchung: Buchung, Beleg-Verknuepfung
         # und Statuswechsel werden nur gemeinsam gespeichert (sonst koennte eine Buchung ohne
         # Beleg entstehen und die Auswertung bliebe 'fertig' - zweites Uebernehmen = Doppelbuchung).
+        # F3: die Statuspruefung oben (status != 'fertig' -> 409) laeuft ausserhalb
+        # jeder Transaktion; parallele Aufrufe koennten sie beide bestehen. Der
+        # Status wird deshalb hier atomar reserviert (con_ haelt den
+        # BEGIN-IMMEDIATE-Lock von erstelle_buchung) - nur der erste rowcount==1
+        # gewinnt, alle anderen bekommen 409 und ihre Buchung wird zurueckgerollt.
+        cur = con_.execute(
+            "UPDATE beleg_auswertung SET status = 'verbucht', aktualisiert = datetime('now') "
+            "WHERE id = ? AND status = 'fertig'",
+            (auswertung_id,),
+        )
+        if cur.rowcount != 1:
+            raise HTTPException(409, "Auswertung wurde bereits uebernommen")
         con_.execute(
             "INSERT OR IGNORE INTO buchung_beleg(buchung_id, beleg_id) VALUES(?, ?)",
             (buchung_id_, auftrag["beleg_id"]),
         )
         _aktualisiere_belegstatus(con_, buchung_id_)
-        con_.execute(
-            "UPDATE beleg_auswertung SET status = 'verbucht', aktualisiert = datetime('now') WHERE id = ?",
-            (auswertung_id,),
-        )
 
     buchung_antwort, buchung_id = erstelle_buchung(
         con, bereich, sparte_id=body.sparte_id, datum=datum, typ=typ,
