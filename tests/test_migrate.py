@@ -180,11 +180,15 @@ class MigrationTest(unittest.TestCase):
         )
         get = _asgi_request("GET", "/api/sparten")
 
+        # F6: der 503-Text ist generisch - Details (Migrationsnummer, SQL-Fehler,
+        # ggf. Pfade) gibt es nur ueber den angemeldeten /api/schema-Endpunkt.
         self.assertEqual(503, post.status_code)
         self.assertEqual(
-            {"detail": "Datenbank-Nachzug fehlgeschlagen: kaputt"},
+            {"detail": "Datenbank derzeit schreibgeschuetzt"},
             post.json(),
         )
+        schema = _asgi_request("GET", "/api/schema")
+        self.assertEqual("kaputt", schema.json()["fehler"])
         self.assertEqual(200, get.status_code)
 
     def test_schreibschutz_blockiert_auth_login_nicht(self):

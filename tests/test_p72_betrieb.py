@@ -161,17 +161,17 @@ class BetriebSicherungTest(unittest.TestCase):
             backup.sicherungs_lock.release()
 
 
-def _asgi_request(app, method, path, schreibgeschuetzt=True):
-    """Minimaler ASGI-Aufruf (Muster tests/test_bereiche.py::request), hier nur fuer
-    den Nachweis, dass die schreibschutz_middleware POST /api/betrieb/sicherung schon
-    vor der Route mit 503 abweist - ganz ohne Login/Session noetig, weil diese
-    Middleware (Registrierungsreihenfolge in app/main.py) vor der Auth-Pruefung laeuft."""
+def _asgi_request(app, method, path, client_ip="127.0.0.1"):
+    """Minimaler ASGI-Aufruf (Muster tests/test_bereiche.py::request). F6: die
+    schreibschutz_middleware ist die innerste Middleware und laeuft nach
+    Geraetefilter/Anmeldung (Registrierungsreihenfolge in app/main.py) - ein
+    Aufruf erreicht sie also nur mit erlaubtem client_ip und (Bypass-)Session."""
     parts = urlsplit(path)
     scope = {
         "type": "http", "asgi": {"version": "3.0", "spec_version": "2.4"},
         "http_version": "1.1", "method": method, "scheme": "http",
         "path": parts.path, "raw_path": parts.path.encode(), "query_string": parts.query.encode(),
-        "headers": [(b"host", b"localhost")], "client": ("127.0.0.1", 50000),
+        "headers": [(b"host", b"localhost")], "client": (client_ip, 50000),
         "server": ("localhost", 80), "root_path": "",
     }
     messages = []
@@ -207,17 +207,44 @@ def _asgi_request(app, method, path, schreibgeschuetzt=True):
 class BetriebSicherungSchreibschutzTest(unittest.TestCase):
     """503, wenn app.state.schreibgeschuetzt gesetzt ist - ueber die echte Middleware,
     nicht ueber einen eigenen Pruefpfad im Router (Auftrag P72: keine zweite
-    Implementierung neben der bereits vorhandenen schreibschutz_middleware)."""
+    Implementierung neben der bereits vorhandenen schreibschutz_middleware).
+
+    F6: schreibschutz_middleware ist jetzt die innerste Middleware und laeuft
+    NACH Geraetefilter/Anmeldung (vorher war es umgekehrt - siehe Sicherheitsaudit
+    run1, Befund F6). Dieser eine Test braucht deshalb eine gueltige (Bypass-)
+    Session, um die Middleware ueberhaupt zu erreichen; die restliche Datei bleibt
+    bewusst ohne Bypass (siehe Moduldocstring)."""
 
     def test_503_bei_schreibgeschuetzter_datenbank(self):
+        from app.main import app
+        tempdir = tempfile.TemporaryDirectory(prefix="finanz-p72-schreibschutz-")
+        self.addCleanup(tempdir.cleanup)
+        with (
+            patch.object(app.state, "schreibgeschuetzt", True),
+            patch.object(app.state, "migrationsfehler", "Test-Nachzugsfehler"),
+            patch.dict(os.environ, {
+                "FINANZ_TEST_AUTH_BYPASS": "1",
+                "FINANZ_DB": str(Path(tempdir.name) / "test.db"),
+            }),
+        ):
+            status, body = _asgi_request(app, "POST", "/api/betrieb/sicherung")
+        self.assertEqual(503, status)
+        # F6: generischer Text, keine Details (die gibt es nur ueber /api/schema).
+        self.assertEqual("Datenbank derzeit schreibgeschuetzt", body["detail"])
+
+    def test_nicht_freigegebenes_geraet_bekommt_403_nicht_503(self):
+        """F6: ein Geraet ausserhalb der Allowlist bekommt 403 vom Geraetefilter,
+        bevor die schreibschutz_middleware ueberhaupt greift."""
         from app.main import app
         with (
             patch.object(app.state, "schreibgeschuetzt", True),
             patch.object(app.state, "migrationsfehler", "Test-Nachzugsfehler"),
         ):
-            status, body = _asgi_request(app, "POST", "/api/betrieb/sicherung")
-        self.assertEqual(503, status)
-        self.assertIn("Nachzug", body["detail"])
+            status, body = _asgi_request(
+                app, "POST", "/api/betrieb/sicherung", client_ip="100.72.201.96",
+            )
+        self.assertEqual(403, status)
+        self.assertNotIn("Nachzug", json.dumps(body))
 
 
 class BetriebJsSyntaxTest(unittest.TestCase):
