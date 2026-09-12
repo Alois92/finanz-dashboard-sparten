@@ -1,4 +1,5 @@
 """Pydantic-Modelle fuer die API. Betraege durchgaengig in Cent (int)."""
+import re
 from datetime import date
 from typing import List, Optional
 
@@ -13,12 +14,33 @@ ZAHLUNGSARTEN = {"bar", "bank", "karte", "sonstiges"}
 # gespeichert und verzerrten sofort alle Summen in Uebersicht/Buchungsliste.
 BETRAG_CENT_MAX = 10_000_000_000
 
+# F1: Kategorienamen kommen aus API-Aufrufen und aus Excel-Spaltenkoepfen und
+# landen ungefiltert in Hinweistexten (rechenbasis.hinweise). Enges Zeichenset
+# als serverseitige zweite Bremse neben dem esc() im Frontend.
+KATEGORIE_NAME_MAX = 80
+_KATEGORIE_NAME_VERBOTEN = re.compile(r"[<>\x00-\x1f\x7f]")
+
+
+def kategorie_name_gueltig(name: str) -> bool:
+    """Max. Laenge, keine Winkelklammern, keine Steuerzeichen."""
+    return bool(name) and len(name) <= KATEGORIE_NAME_MAX and not _KATEGORIE_NAME_VERBOTEN.search(name)
+
 
 class KategorieIn(BaseModel):
     sparte_id: int
     name: str
     richtung: str
     parent_id: Optional[int] = None
+
+    @field_validator("name")
+    @classmethod
+    def _name(cls, v: str) -> str:
+        v = v.strip()
+        if not kategorie_name_gueltig(v):
+            raise ValueError(
+                f"Name ungueltig (max. {KATEGORIE_NAME_MAX} Zeichen, keine Steuerzeichen oder <>)"
+            )
+        return v
 
     @field_validator("richtung")
     @classmethod

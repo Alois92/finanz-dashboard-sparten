@@ -532,4 +532,11 @@ class AuthMiddleware(BaseHTTPMiddleware):
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "no-referrer"
+        # F1: zweite Bremse gegen gespeicherte XSS (z.B. ueber importierte
+        # Kategorienamen); keine Inline-Skripte, keine externen Quellen.
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data:; font-src 'self'; object-src 'none'; base-uri 'none'; "
+            "frame-ancestors 'none'"
+        )
         return response

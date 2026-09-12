@@ -26,6 +26,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from ..db import db_dep
 from ..bewegungen import synchronisiere_buchung
 from ..bereiche import Bereich, BereichDep, pruefe_sparte
+from ..schemas import kategorie_name_gueltig
 
 router = APIRouter(tags=["import"])
 
@@ -176,8 +177,16 @@ def _parse_kassabuch(blaetter: list[tuple[str, list[list]]]) -> dict:
         kategorien: list[tuple[int, str]] = []
         for c in range(KATEGORIE_SPALTE_AB, len(kopf)):
             name = _text(kopf[c])
-            if name:
-                kategorien.append((c, name))
+            if not name:
+                continue
+            # F1: Spaltenkopf wird ungefiltert zum Kategorienamen; ein
+            # unzulaessiger Kopf (zu lang, Steuerzeichen/<>) wird nicht als
+            # Kategorie uebernommen, sondern uebersprungen.
+            if not kategorie_name_gueltig(name):
+                warne(f"{blattname}: Spaltenkopf '{name[:40]}...' ungueltig "
+                      "(zu lang oder unzulaessige Zeichen) - keine Kategorie angelegt")
+                continue
+            kategorien.append((c, name))
 
         # Jahr aus Kopfbereich (Zelle 'Jahr:' daneben) - nur als Fallback
         datei_jahr = None

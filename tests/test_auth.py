@@ -201,6 +201,19 @@ class AuthIntegrationTest(unittest.TestCase):
             urllib.request.urlopen(wiederverwendung, timeout=2)
         self.assertEqual(raised.exception.code, 401)
 
+    def test_content_security_policy_wird_gesetzt(self):
+        """F1: CSP als zweite Bremse gegen gespeicherte XSS."""
+        request = urllib.request.Request(
+            f"{self.base_url}/api/health",
+            headers={"X-Forwarded-For": "100.105.4.18"},
+        )
+        with urllib.request.urlopen(request, timeout=2) as response:
+            csp = response.headers["Content-Security-Policy"]
+        self.assertIn("default-src 'self'", csp)
+        self.assertIn("script-src 'self'", csp)
+        self.assertIn("object-src 'none'", csp)
+        self.assertIn("frame-ancestors 'none'", csp)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 from ..db import db_dep
 from ..bereiche import Bereich, BereichDep, pruefe_sparte, pruefe_kategorie
-from ..schemas import KategorieIn
+from ..schemas import KategorieIn, KATEGORIE_NAME_MAX, kategorie_name_gueltig
 
 router = APIRouter(tags=["stammdaten"])
 
@@ -75,6 +75,11 @@ def patch_kategorie(kategorie_id: int, body: KategoriePatchIn | dict,
         daten["name"] = str(daten["name"]).strip()
         if not daten["name"]:
             raise HTTPException(400, "Name darf nicht leer sein")
+        if not kategorie_name_gueltig(daten["name"]):
+            raise HTTPException(
+                422,
+                f"Name ungueltig (max. {KATEGORIE_NAME_MAX} Zeichen, keine Steuerzeichen oder <>)",
+            )
         vorhanden = con.execute(
             "SELECT sparte_id, parent_id FROM kategorie WHERE id = ?", (kategorie_id,)
         ).fetchone()
