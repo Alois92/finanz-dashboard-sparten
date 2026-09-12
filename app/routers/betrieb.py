@@ -23,10 +23,38 @@ router = APIRouter(prefix="/betrieb", tags=["betrieb"])
 
 @router.get("/migrationsprotokoll")
 def migrationsprotokoll(con: sqlite3.Connection = Depends(db_dep), bereich: BereichDep = Bereich(1)):
-    return [dict(row) for row in con.execute(
+    """F8: die Tabelle hat keine Bereichsspalte; Eintraege mit Buchungsbezug
+    (objektkennung 'buchung:<id>' bzw. 'umbuchungsgruppe:<transfer_gruppe_id>',
+    siehe db/migrations/004_konten_bewegungen.py und 012_migrationsprotokoll.py)
+    werden ueber buchung->sparte->bereich_id gefiltert. Eintraege ohne
+    Buchungsbezug (anderes/unbekanntes objektkennung-Format) bleiben sichtbar."""
+    rows = con.execute(
         "SELECT id, version, zeitpunkt, art, objektkennung, hinweis "
         "FROM migrationsprotokoll ORDER BY zeitpunkt, id"
-    )]
+    ).fetchall()
+    ergebnis = []
+    for row in rows:
+        kennung = row["objektkennung"]
+        if kennung.startswith("buchung:"):
+            buchung_id = kennung.split(":", 1)[1]
+            treffer = con.execute(
+                "SELECT 1 FROM buchung b JOIN sparte s ON s.id = b.sparte_id "
+                "WHERE b.id = ? AND s.bereich_id = ?",
+                (buchung_id, bereich.id),
+            ).fetchone()
+            if treffer is None:
+                continue
+        elif kennung.startswith("umbuchungsgruppe:"):
+            gruppe = kennung.split(":", 1)[1]
+            treffer = con.execute(
+                "SELECT 1 FROM buchung b JOIN sparte s ON s.id = b.sparte_id "
+                "WHERE b.transfer_gruppe_id = ? AND s.bereich_id = ? LIMIT 1",
+                (gruppe, bereich.id),
+            ).fetchone()
+            if treffer is None:
+                continue
+        ergebnis.append(dict(row))
+    return ergebnis
 
 
 def baue_sicherung_und_schema_status(schema: dict, schreibgeschuetzt: bool) -> dict:
