@@ -15,6 +15,7 @@ Befund: Regressionstest zuerst rot, dann Fix, dann grün, eigener Commit.
 | F7 | `826b2a8` |
 | F6 | `70cbaf6` |
 | F8 | `c91ccec` |
+| Doku + Nachtrag F6 (test_bereiche.py) | `0b89967` |
 
 Reihenfolge folgt der Empfehlung des Audits (F4/F1 zuerst, dann F2/F3, dann
 F5/F6/F7, F8 zuletzt).
@@ -232,4 +233,14 @@ Befunde sind behoben.
 `tests/test_p42_bankimport.py`, `tests/test_f6_middleware_reihenfolge.py`,
 `tests/test_migrate.py`, `tests/test_p72_betrieb.py`,
 `tests/test_migrationsprotokoll.py` wurden einzeln nach jedem Fix grün
-verifiziert. Gesamtsuite-Ergebnis: siehe `docs/neubau/berichte/SECURITY-fix-tests.txt`.
+verifiziert.
+
+Gesamtsuite im Worktree (`FINANZ_DB=%TEMP%\sec-suite.db`, vorher gelöscht):
+`<venv-python> -m unittest discover -s tests`, Ausgabe in
+`docs/neubau/berichte/SECURITY-fix-tests.txt`.
+
+**Ergebnis: `Ran 657 tests ... OK (skipped=1)`** (der eine übersprungene Test war
+bereits vor diesem Auftrag übersprungen, unabhängig von den Befunden). Ein
+erster Gesamtlauf zeigte 7 Fehlschläge in einem von `test_bereiche.py`
+geerbten Testfall (siehe Nachtrag zu F6 oben); nach dessen Anpassung lief die
+Suite ohne einen einzigen Fehlschlag durch.
